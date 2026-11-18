@@ -1,0 +1,13 @@
+node_modules/
+build/
+dist/
+server.js
+app.js
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+src/server/data/*.enc.json
+src/server/data/.mysql_key
+

@@ -1,0 +1,200 @@
+{
+  "categories": [
+    {
+      "id": "men",
+      "name": "Men",
+      "slug": "men",
+      "description": "Timeless masculine leathercraft engineered for longevity and patina.",
+      "productTypes": ["Leather Belts", "Wallets"]
+    },
+    {
+      "id": "women",
+      "name": "Women",
+      "slug": "women",
+      "description": "Hand-stitched sculptural silhouettes, fine full-grain leather, and solid brass accents.",
+      "productTypes": ["Belts", "Wallets", "Purses"]
+    },
+    {
+      "id": "travell",
+      "name": "Travell",
+      "slug": "travell",
+      "description": "Rugged yet refined transit companions designed for transatlantic journeys and everyday commutes.",
+      "productTypes": ["Backpacks", "Briefcases"]
+    }
+  ],
+  "products": [
+    {
+      "id": "prod-m-belt-01",
+      "category": "men",
+      "productType": "Leather Belts",
+      "name": "The Rajputana Bridle Belt",
+      "sku": "BVL-MEN-BLT-01",
+      "price": 4200,
+      "currency": "INR",
+      "description": "Cut from 4mm thick full-grain vegetable-tanned harness leather from Kanpur tanneries, finished with hand-burnished edges and a sand-cast solid antique brass roller buckle. Built to mold to your waistline and develop a rich amber patina over decades.",
+      "features": [
+        "Full-grain harness leather 10-12 oz weight",
+        "Hand-stitched English bridle loop",
+        "Hand-burnished with natural beeswax and gum tragacanth",
+        "Solid brass teardrop buckle hardware with 2-year warranty"
+      ],
+      "images": [
+        "/assets/images/product_men_belt_wallet_1794461808951.jpg",
+        "/assets/images/hero_leathercraft_workshop_1794461808596.jpg"
+      ],
+      "hsnCode": "4203",
+      "solutionEngine": "EVERYDAY_CARRY",
+      "inStock": true,
+      "allowCustomization": true,
+      "careKitIncluded": true
+    },
+    {
+      "id": "prod-m-wal-01",
+      "category": "men",
+      "productType": "Wallets",
+      "name": "The Bifold Heirloom Folio",
+      "sku": "BVL-MEN-WAL-01",
+      "price": 3800,
+      "currency": "INR",
+      "description": "A classic 6-card bifold crafted from saddle-stitched Tuscan vegetable-tanned steer hide. Features dual hidden slip pockets, full-length billfold lined with raw sueded pigskin, and reinforced corner bevels.",
+      "features": [
+        "6 precision card slots with hand-cut thumb tapers",
+        "Two interior receipt pockets and currency compartment",
+        "Bonded nylon saddle stitching for fray-proof seams",
+        "Complimentary hot-stamping personalization in 24k gold foil"
+      ],
+      "images": [
+        "/assets/images/product_men_belt_wallet_1794461808951.jpg",
+        "/assets/images/custom_debossing_monogram_1794461810572.jpg"
+      ],
+      "hsnCode": "4202",
+      "solutionEngine": "EVERYDAY_CARRY",
+      "inStock": true,
+      "allowCustomization": true,
+      "careKitIncluded": true
+    },
+    {
+      "id": "prod-w-purse-01",
+      "category": "women",
+      "productType": "Purses",
+      "name": "The Meera Structured Flap Purse",
+      "sku": "BVL-WOM-PRS-01",
+      "price": 14500,
+      "currency": "INR",
+      "description": "Architectural elegance meets traditional leathercraft. The Meera purse features a sculptured front flap, custom brass lock mechanism, and an interior divider with an invisible magnetic closure. Carried by the rolled leather top handle or detachable shoulder sling.",
+      "features": [
+        "Saddle cognac pull-up full-grain leather with soft sheen",
+        "Micro-suede lining with zippered divider compartment",
+        "Protective brass base feet to elevate leather off surfaces",
+        "Includes organic balm conditioning care kit"
+      ],
+      "images": [
+        "/assets/images/product_women_purse_bag_1794461810441.jpg",
+        "/assets/images/hero_leathercraft_workshop_1794461808596.jpg"
+      ],
+      "hsnCode": "4202",
+      "solutionEngine": "LIFETIME_HEIRLOOM_CARE",
+      "inStock": true,
+      "allowCustomization": true,
+      "careKitIncluded": true
+    },
+    {
+      "id": "prod-w-wal-01",
+      "category": "women",
+      "productType": "Wallets",
+      "name": "The Devika Zip-Around Continental",
+      "sku": "BVL-WOM-WAL-01",
+      "price": 6200,
+      "currency": "INR",
+      "description": "Generously proportioned continental wallet fitted with an ultra-smooth Swiss RiRi brass zipper. Hosts 12 card slots, two accordion bill compartments, and a zippered coin pocket.",
+      "features": [
+        "12 card slots with RFID blocking shield layer",
+        "RiRi solid brass teeth with hand-stitched leather pull tab",
+        "Calfskin interior lining",
+        "Custom gold or blind deboss personalization available"
+      ],
+      "images": [
+        "/assets/images/product_women_purse_bag_1794461810441.jpg",
+        "/assets/images/custom_debossing_monogram_1794461810572.jpg"
+      ],
+      "hsnCode": "4202",
+      "solutionEngine": "EVERYDAY_CARRY",
+      "inStock": true,
+      "allowCustomization": true,
+      "careKitIncluded": true
+    },
+    {
+      "id": "prod-w-blt-01",
+      "category": "women",
+      "productType": "Belts",
+      "name": "The Padmavati Cinch Belt",
+      "sku": "BVL-WOM-BLT-01",
+      "price": 3600,
+      "currency": "INR",
+      "description": "A graceful 30mm waist belt designed to pair with tailored blazers and flowy linens. Hand-creased feathered edges with a rounded sculptural brass buckle.",
+      "features": [
+        "Curved silhouette designed for high-waisted wear",
+        "Solid brass round buckle in satin gold finish",
+        "Vegetable-tanned calfskin with supple temper"
+      ],
+      "images": [
+        "/assets/images/product_men_belt_wallet_1794461808951.jpg"
+      ],
+      "hsnCode": "4203",
+      "solutionEngine": "EVERYDAY_CARRY",
+      "inStock": true,
+      "allowCustomization": true,
+      "careKitIncluded": false
+    },
+    {
+      "id": "prod-t-bpk-01",
+      "category": "travell",
+      "productType": "Backpacks",
+      "name": "The Himalayan Transit Rucksack",
+      "sku": "BVL-TRV-BPK-01",
+      "price": 24800,
+      "currency": "INR",
+      "description": "Engineered for intrepid modern explorers. Constructed from water-resistant wax-tempered heavy buffalo leather with padded ergonomic shoulder straps, a dedicated 16-inch padded laptop sleeve, and dual brass buckle quick-release storm flaps.",
+      "features": [
+        "Padded 16-inch laptop compartment with waterproof YKK zip",
+        "Luggage trolley pass-through strap for seamless transit",
+        "Solid brass rivet reinforcement at all stress points",
+        "Complimentary 2-year hardware warranty registration included"
+      ],
+      "images": [
+        "/assets/images/product_travel_backpack_folio_1794461810700.jpg",
+        "/assets/images/hero_leathercraft_workshop_1794461808596.jpg"
+      ],
+      "hsnCode": "4202",
+      "solutionEngine": "TRANSIT_FOLIOS",
+      "inStock": true,
+      "allowCustomization": true,
+      "careKitIncluded": true
+    },
+    {
+      "id": "prod-t-brf-01",
+      "category": "travell",
+      "productType": "Briefcases",
+      "name": "The Viceroy Diplomat Briefcase",
+      "sku": "BVL-TRV-BRF-01",
+      "price": 28900,
+      "currency": "INR",
+      "description": "An imposing heritage briefcase inspired by colonial era state archives. Triple gusset structure with dual combination brass push locks, reinforced leather carry handle, and organized interior sleeves for contracts and digital tablets.",
+      "features": [
+        "Triple bellows expanding interior with suede divider",
+        "Dual German precision key-locking push latches",
+        "Detachable full-leather shoulder strap with ergonomic pad",
+        "Eligible for lifetime complimentary leather reconditioning"
+      ],
+      "images": [
+        "/assets/images/product_travel_backpack_folio_1794461810700.jpg",
+        "/assets/images/custom_debossing_monogram_1794461810572.jpg"
+      ],
+      "hsnCode": "4202",
+      "solutionEngine": "TRANSIT_FOLIOS",
+      "inStock": true,
+      "allowCustomization": true,
+      "careKitIncluded": true
+    }
+  ]
+}
