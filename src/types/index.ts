@@ -118,6 +118,12 @@ export interface Order {
   courierPartner?: 'SHIPROCKET' | 'DELHIVERY';
   courierStatus?: 'IN_TRANSIT' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'RTO';
   estimatedDeliveryDate?: string;
+  deliveredAt?: string;
+  returnRequestStatus?: 'REQUESTED' | 'APPROVED' | 'REJECTED' | 'PROCESSED';
+  returnReason?: 'COLOR_MISMATCH' | 'TEXTURE_DEFECT' | 'HARDWARE_DAMAGE' | 'INCORRECT_SIZE';
+  returnNotes?: string;
+  returnRequestedAt?: string;
+  returnTicketId?: string;
   createdAt: string;
   updatedAt: string;
   invoiceNumber?: string;
@@ -412,6 +418,28 @@ export interface StoreManagementConfig {
   promoCodes: PromoCodeRule[];
   updatedAt: string;
   lastUpdatedBy: string;
+}
+
+export interface KnowledgeBaseSlide {
+  title: string;
+  subtitle?: string;
+  points: string[];
+}
+
+export interface KnowledgeBaseEntry {
+  id: string;
+  title: string;
+  description: string;
+  category: 'LEATHER_GUIDE' | 'CARE_MANUAL' | 'CRAFT_DECK' | 'SUSTAINABILITY';
+  fileUrl?: string;
+  fileName?: string;
+  fileType: 'PDF' | 'PPTX' | 'PPT' | 'DECK';
+  mimeType?: string;
+  sizeBytes?: number;
+  uploadedBy: string;
+  uploadedAt: string;
+  updatedAt?: string;
+  slides?: KnowledgeBaseSlide[];
 }
 
 export interface GatewayWebhookPayload {

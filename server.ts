@@ -41,13 +41,17 @@ async function startServer() {
   );
   app.use(express.urlencoded({ extended: true, limit: '75mb' }));
 
-  // Ensure persistent media upload directory exists in source (public/) and production (dist/ when present)
+  // Ensure persistent media & knowledge-base upload directories exist in source (public/) and production (dist/ when present)
   const publicImagesDir = path.resolve(__dirname, 'public', 'assets', 'images');
+  const publicKnowledgeBaseDir = path.resolve(__dirname, 'public', 'assets', 'knowledge-base');
   const distDir = path.resolve(__dirname, 'dist');
   const distImagesDir = path.resolve(distDir, 'assets', 'images');
+  const distKnowledgeBaseDir = path.resolve(distDir, 'assets', 'knowledge-base');
   fs.mkdirSync(publicImagesDir, { recursive: true });
+  fs.mkdirSync(publicKnowledgeBaseDir, { recursive: true });
   if (fs.existsSync(distDir)) {
     fs.mkdirSync(distImagesDir, { recursive: true });
+    fs.mkdirSync(distKnowledgeBaseDir, { recursive: true });
   }
 
   // Health check endpoint responds immediately once HTTP server binds
@@ -69,15 +73,17 @@ async function startServer() {
   // Mount API Router
   app.use('/api', apiRouter);
 
-  // Serve dynamically uploaded & packaged product media cleanly at /assets/images/* (and legacy /src/assets/images/*)
+  // Serve dynamically uploaded & packaged product media cleanly at /assets/images/* and /assets/knowledge-base/*
   if (isProduction) {
     app.use('/assets/images', express.static(distImagesDir));
     app.use('/assets/images', express.static(publicImagesDir));
+    app.use('/assets/knowledge-base', express.static(distKnowledgeBaseDir));
+    app.use('/assets/knowledge-base', express.static(publicKnowledgeBaseDir));
     app.use('/src/assets/images', express.static(distImagesDir));
     app.use('/src/assets/images', express.static(publicImagesDir));
   } else {
     app.use('/assets/images', express.static(publicImagesDir));
-    app.use('/src/assets/images', express.static(publicImagesDir));
+    app.use('/assets/knowledge-base', express.static(publicKnowledgeBaseDir));
   }
 
   // Start background abandoned cart detection worker (every 60s)

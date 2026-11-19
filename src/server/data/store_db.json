@@ -239,7 +239,7 @@
       "isDefault": true,
       "addressType": "SHIPPING",
       "createdAt": "2026-11-18T17:24:39.254Z",
-      "updatedAt": "2026-11-19T04:55:19.424Z"
+      "updatedAt": "2026-11-19T14:22:26.646Z"
     },
     {
       "id": "addr_1795022679265_itqx",
@@ -254,10 +254,238 @@
       "isDefault": true,
       "addressType": "SHIPPING",
       "createdAt": "2026-11-18T17:24:39.265Z",
-      "updatedAt": "2026-11-19T04:55:19.447Z"
+      "updatedAt": "2026-11-19T14:22:26.671Z"
     }
   ],
   "orders": [
+    {
+      "customerId": "cust_quote_test",
+      "customerName": "Enterprise Client",
+      "customerEmail": "corp@client.com",
+      "customerPhone": "",
+      "status": "PROCESSING",
+      "currency": "INR",
+      "subtotal": 28900,
+      "discountAmount": 0,
+      "taxAmount": 5202,
+      "shippingFee": 0,
+      "totalAmount": 34102,
+      "paymentGateway": "RAZORPAY",
+      "paymentId": "quote_pay_1795098146668",
+      "paymentStatus": "PAID",
+      "items": [
+        {
+          "id": "item_quote_1795098146668_0",
+          "orderId": "",
+          "productId": "prod-t-brf-01",
+          "productName": "The Viceroy Diplomat Briefcase",
+          "sku": "BVL-TRV-BRF-01",
+          "category": "travell",
+          "quantity": 1,
+          "unitPrice": 28900,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "hsnCode": "4202",
+          "gstRate": 0.18,
+          "taxAmount": 5202,
+          "lineTotal": 34102
+        }
+      ],
+      "shippingAddress": {
+        "id": "addr_quote_1795098146668",
+        "customerId": "cust_quote_test",
+        "street": "Consolidated Commercial Dock, Pune Primary Hub",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "SHIPPING"
+      },
+      "billingAddress": {
+        "id": "addr_quote_b_1795098146668",
+        "customerId": "cust_quote_test",
+        "street": "Consolidated Commercial Dock, Pune Primary Hub",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "BILLING"
+      },
+      "id": "ord_1795098146670_pn2",
+      "orderNumber": "BVL-2026-1068",
+      "createdAt": "2026-11-19T14:22:26.670Z",
+      "updatedAt": "2026-11-19T14:22:26.670Z",
+      "isGstInvoiceGenerated": true,
+      "invoiceNumber": "BVL/INV/26-27/0158",
+      "awbNumber": "SR-PNQ-67177874",
+      "courierPartner": "SHIPROCKET",
+      "courierStatus": "IN_TRANSIT"
+    },
+    {
+      "customerId": "cust_guest",
+      "customerName": "Test Patron",
+      "customerEmail": "test.patron@domain.com",
+      "customerPhone": "",
+      "status": "PROCESSING",
+      "currency": "INR",
+      "subtotal": 10000,
+      "discountAmount": 0,
+      "taxAmount": 1800,
+      "shippingFee": 0,
+      "totalAmount": 11800,
+      "paymentGateway": "RAZORPAY",
+      "paymentId": "pay_rzp_1795098146641",
+      "paymentStatus": "PAID",
+      "items": [
+        {
+          "productId": "prod-m-belt-01",
+          "productName": "The Rajputana Bridle Belt",
+          "sku": "BVL-MEN-BLT-01",
+          "category": "men",
+          "quantity": 1,
+          "unitPrice": 10000,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "hsnCode": "4203",
+          "gstRate": 0.18,
+          "taxAmount": 1800,
+          "lineTotal": 11800
+        }
+      ],
+      "shippingAddress": {
+        "id": "addr_temp",
+        "street": "Koregaon Park Boulevard",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "SHIPPING"
+      },
+      "id": "ord_1795098146645_tyw",
+      "orderNumber": "BVL-2026-1067",
+      "createdAt": "2026-11-19T14:22:26.645Z",
+      "updatedAt": "2026-11-19T14:22:26.645Z",
+      "isGstInvoiceGenerated": true,
+      "invoiceNumber": "BVL/INV/26-27/0157",
+      "awbNumber": "SR-PNQ-34669850",
+      "courierPartner": "SHIPROCKET",
+      "courierStatus": "IN_TRANSIT"
+    },
+    {
+      "customerId": "cust_quote_test",
+      "customerName": "Enterprise Client",
+      "customerEmail": "corp@client.com",
+      "customerPhone": "",
+      "status": "PROCESSING",
+      "currency": "INR",
+      "subtotal": 28900,
+      "discountAmount": 0,
+      "taxAmount": 5202,
+      "shippingFee": 0,
+      "totalAmount": 34102,
+      "paymentGateway": "RAZORPAY",
+      "paymentId": "quote_pay_1795091740807",
+      "paymentStatus": "PAID",
+      "items": [
+        {
+          "id": "item_quote_1795091740807_0",
+          "orderId": "",
+          "productId": "prod-t-brf-01",
+          "productName": "The Viceroy Diplomat Briefcase",
+          "sku": "BVL-TRV-BRF-01",
+          "category": "travell",
+          "quantity": 1,
+          "unitPrice": 28900,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "hsnCode": "4202",
+          "gstRate": 0.18,
+          "taxAmount": 5202,
+          "lineTotal": 34102
+        }
+      ],
+      "shippingAddress": {
+        "id": "addr_quote_1795091740807",
+        "customerId": "cust_quote_test",
+        "street": "Consolidated Commercial Dock, Pune Primary Hub",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "SHIPPING"
+      },
+      "billingAddress": {
+        "id": "addr_quote_b_1795091740807",
+        "customerId": "cust_quote_test",
+        "street": "Consolidated Commercial Dock, Pune Primary Hub",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "BILLING"
+      },
+      "id": "ord_1795091740809_clx",
+      "orderNumber": "BVL-2026-1066",
+      "createdAt": "2026-11-19T12:35:40.809Z",
+      "updatedAt": "2026-11-19T12:35:40.809Z",
+      "isGstInvoiceGenerated": true,
+      "invoiceNumber": "BVL/INV/26-27/0156",
+      "awbNumber": "SR-PNQ-52640199",
+      "courierPartner": "SHIPROCKET",
+      "courierStatus": "IN_TRANSIT"
+    },
+    {
+      "customerId": "cust_guest",
+      "customerName": "Test Patron",
+      "customerEmail": "test.patron@domain.com",
+      "customerPhone": "",
+      "status": "PROCESSING",
+      "currency": "INR",
+      "subtotal": 10000,
+      "discountAmount": 0,
+      "taxAmount": 1800,
+      "shippingFee": 0,
+      "totalAmount": 11800,
+      "paymentGateway": "RAZORPAY",
+      "paymentId": "pay_rzp_1795091740779",
+      "paymentStatus": "PAID",
+      "items": [
+        {
+          "productId": "prod-m-belt-01",
+          "productName": "The Rajputana Bridle Belt",
+          "sku": "BVL-MEN-BLT-01",
+          "category": "men",
+          "quantity": 1,
+          "unitPrice": 10000,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "hsnCode": "4203",
+          "gstRate": 0.18,
+          "taxAmount": 1800,
+          "lineTotal": 11800
+        }
+      ],
+      "shippingAddress": {
+        "id": "addr_temp",
+        "street": "Koregaon Park Boulevard",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "SHIPPING"
+      },
+      "id": "ord_1795091740783_wc7",
+      "orderNumber": "BVL-2026-1065",
+      "createdAt": "2026-11-19T12:35:40.783Z",
+      "updatedAt": "2026-11-19T12:35:40.783Z",
+      "isGstInvoiceGenerated": true,
+      "invoiceNumber": "BVL/INV/26-27/0155",
+      "awbNumber": "SR-PNQ-62835853",
+      "courierPartner": "SHIPROCKET",
+      "courierStatus": "IN_TRANSIT"
+    },
     {
       "customerId": "cust_quote_test",
       "customerName": "Enterprise Client",
@@ -4937,6 +5165,66 @@
       "status": "ACTIVE",
       "claimCount": 0,
       "createdAt": "2026-11-19T04:55:19.447Z"
+    },
+    {
+      "id": "war_1795091740783_io5",
+      "customerId": "cust_guest",
+      "customerName": "Test Patron",
+      "orderId": "ord_1795091740783_wc7",
+      "productId": "prod-m-belt-01",
+      "productName": "The Rajputana Bridle Belt",
+      "hardwareSerial": "BVL-BRASS-32611",
+      "warrantyPeriodYears": 2,
+      "startDate": "2026-11-19T12:35:40.783Z",
+      "expiryDate": "2028-11-18T12:35:40.783Z",
+      "status": "ACTIVE",
+      "claimCount": 0,
+      "createdAt": "2026-11-19T12:35:40.783Z"
+    },
+    {
+      "id": "war_1795091740809_rvm",
+      "customerId": "cust_quote_test",
+      "customerName": "Enterprise Client",
+      "orderId": "ord_1795091740809_clx",
+      "productId": "prod-t-brf-01",
+      "productName": "The Viceroy Diplomat Briefcase",
+      "hardwareSerial": "BVL-BRASS-27016",
+      "warrantyPeriodYears": 2,
+      "startDate": "2026-11-19T12:35:40.810Z",
+      "expiryDate": "2028-11-18T12:35:40.810Z",
+      "status": "ACTIVE",
+      "claimCount": 0,
+      "createdAt": "2026-11-19T12:35:40.810Z"
+    },
+    {
+      "id": "war_1795098146645_cg0",
+      "customerId": "cust_guest",
+      "customerName": "Test Patron",
+      "orderId": "ord_1795098146645_tyw",
+      "productId": "prod-m-belt-01",
+      "productName": "The Rajputana Bridle Belt",
+      "hardwareSerial": "BVL-BRASS-90485",
+      "warrantyPeriodYears": 2,
+      "startDate": "2026-11-19T14:22:26.645Z",
+      "expiryDate": "2028-11-18T14:22:26.645Z",
+      "status": "ACTIVE",
+      "claimCount": 0,
+      "createdAt": "2026-11-19T14:22:26.645Z"
+    },
+    {
+      "id": "war_1795098146670_nmi",
+      "customerId": "cust_quote_test",
+      "customerName": "Enterprise Client",
+      "orderId": "ord_1795098146670_pn2",
+      "productId": "prod-t-brf-01",
+      "productName": "The Viceroy Diplomat Briefcase",
+      "hardwareSerial": "BVL-BRASS-65360",
+      "warrantyPeriodYears": 2,
+      "startDate": "2026-11-19T14:22:26.670Z",
+      "expiryDate": "2028-11-18T14:22:26.670Z",
+      "status": "ACTIVE",
+      "claimCount": 0,
+      "createdAt": "2026-11-19T14:22:26.670Z"
     }
   ],
   "careKitDispatches": [
@@ -5640,6 +5928,50 @@
       "kitType": "ORGANIC_BEESWAX_BALM_BRUSH",
       "dispatchDate": "2026-11-19T04:55:19.447Z",
       "awbNumber": "SR-PNQ-CARE-311484",
+      "courier": "SHIPROCKET",
+      "status": "DISPATCHED",
+      "digitalGuideSent": true
+    },
+    {
+      "id": "ck_1795091740783_6b0",
+      "customerId": "cust_guest",
+      "orderId": "ord_1795091740783_wc7",
+      "kitType": "ORGANIC_BEESWAX_BALM_BRUSH",
+      "dispatchDate": "2026-11-19T12:35:40.783Z",
+      "awbNumber": "SR-PNQ-CARE-254391",
+      "courier": "SHIPROCKET",
+      "status": "DISPATCHED",
+      "digitalGuideSent": true
+    },
+    {
+      "id": "ck_1795091740810_6pz",
+      "customerId": "cust_quote_test",
+      "orderId": "ord_1795091740809_clx",
+      "kitType": "ORGANIC_BEESWAX_BALM_BRUSH",
+      "dispatchDate": "2026-11-19T12:35:40.810Z",
+      "awbNumber": "SR-PNQ-CARE-244256",
+      "courier": "SHIPROCKET",
+      "status": "DISPATCHED",
+      "digitalGuideSent": true
+    },
+    {
+      "id": "ck_1795098146645_lix",
+      "customerId": "cust_guest",
+      "orderId": "ord_1795098146645_tyw",
+      "kitType": "ORGANIC_BEESWAX_BALM_BRUSH",
+      "dispatchDate": "2026-11-19T14:22:26.645Z",
+      "awbNumber": "SR-PNQ-CARE-895055",
+      "courier": "SHIPROCKET",
+      "status": "DISPATCHED",
+      "digitalGuideSent": true
+    },
+    {
+      "id": "ck_1795098146671_dei",
+      "customerId": "cust_quote_test",
+      "orderId": "ord_1795098146670_pn2",
+      "kitType": "ORGANIC_BEESWAX_BALM_BRUSH",
+      "dispatchDate": "2026-11-19T14:22:26.671Z",
+      "awbNumber": "SR-PNQ-CARE-442092",
       "courier": "SHIPROCKET",
       "status": "DISPATCHED",
       "digitalGuideSent": true
@@ -6534,6 +6866,54 @@
       "lastActiveAt": "2026-11-19T04:35:19.523Z",
       "abandonedAt": "2026-11-19T04:55:19.523Z",
       "lastRecoveryTriggerAt": "2026-11-19T04:55:19.531Z"
+    },
+    {
+      "id": "cart_1795091740872_vj7g",
+      "email": "idle.shopper@test.com",
+      "items": [
+        {
+          "productId": "prod-m-wal-01",
+          "productName": "The Bifold Heirloom Folio",
+          "sku": "BVL-MEN-WAL-01",
+          "unitPrice": 3800,
+          "quantity": 1,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "imageUrl": ""
+        }
+      ],
+      "subtotal": 3800,
+      "currency": "INR",
+      "isAbandoned": true,
+      "recoveryStage": "EMAIL_SENT",
+      "recoveryAttempts": 1,
+      "checkoutUrl": "/?resume=cart_1795091740872_vj7g&token=Zgv-EaOpUF2pjeOUPk-seOqGat3ZBdXh1eOFk57amOc",
+      "lastActiveAt": "2026-11-19T12:15:40.879Z",
+      "abandonedAt": "2026-11-19T12:35:40.879Z",
+      "lastRecoveryTriggerAt": "2026-11-19T12:35:40.886Z"
+    },
+    {
+      "id": "cart_1795098146741_g65m",
+      "email": "idle.shopper@test.com",
+      "items": [
+        {
+          "productId": "prod-m-wal-01",
+          "productName": "The Bifold Heirloom Folio",
+          "sku": "BVL-MEN-WAL-01",
+          "unitPrice": 3800,
+          "quantity": 1,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "imageUrl": ""
+        }
+      ],
+      "subtotal": 3800,
+      "currency": "INR",
+      "isAbandoned": true,
+      "recoveryStage": "EMAIL_SENT",
+      "recoveryAttempts": 1,
+      "checkoutUrl": "/?resume=cart_1795098146741_g65m&token=6SDnXCOe58JQBkpHFFnBGPEBxPxKoz2mxp9g6nvugoo",
+      "lastActiveAt": "2026-11-19T14:02:26.749Z",
+      "abandonedAt": "2026-11-19T14:22:26.750Z",
+      "lastRecoveryTriggerAt": "2026-11-19T14:22:26.758Z"
     }
   ],
   "inventory": [
@@ -6674,7 +7054,7 @@
       "materialName": "Sand-Cast Solid Antique Brass Push Locks & Rivets",
       "quantityPerUnit": 2,
       "unit": "PIECES",
-      "inventoryOnHand": 32,
+      "inventoryOnHand": 28,
       "vendorName": "Aligarh Precision Hardware Guild",
       "safetyStock": 20
     },
@@ -6684,7 +7064,7 @@
       "materialName": "Bonded Heavy Nylon Thread (Fil-Au-Chinois match)",
       "quantityPerUnit": 45,
       "unit": "METERS",
-      "inventoryOnHand": 630,
+      "inventoryOnHand": 540,
       "vendorName": "Vardhman Specialty Yarns",
       "safetyStock": 100
     },
@@ -6694,7 +7074,7 @@
       "materialName": "Organic Beeswax & Jojoba Conditioning Balm (50g jar)",
       "quantityPerUnit": 1,
       "unit": "GRAMS",
-      "inventoryOnHand": 268,
+      "inventoryOnHand": 264,
       "vendorName": "Himalayan Organic Apiaries",
       "safetyStock": 100
     }
@@ -7851,10 +8231,770 @@
       "totalInvoiceAmount": 34102,
       "status": "ISSUED",
       "pdfUrl": "/api/erp/invoices/BVL-INV-26-27-0154.pdf"
+    },
+    {
+      "id": "inv_1795091740783_tj5",
+      "invoiceNumber": "BVL/INV/26-27/0155",
+      "orderId": "ord_1795091740783_wc7",
+      "customerId": "cust_guest",
+      "supplierGstin": "27AABCB1234F1Z8",
+      "invoiceDate": "2026-11-19T12:35:40.783Z",
+      "supplyState": "Maharashtra (Pune Primary Hub)",
+      "placeOfSupply": "Maharashtra",
+      "isInterState": false,
+      "taxableValue": 10000,
+      "cgstAmount": 900,
+      "sgstAmount": 900,
+      "igstAmount": 0,
+      "totalInvoiceAmount": 11800,
+      "status": "ISSUED",
+      "pdfUrl": "/api/erp/invoices/BVL-INV-26-27-0155.pdf"
+    },
+    {
+      "id": "inv_1795091740810_vrm",
+      "invoiceNumber": "BVL/INV/26-27/0156",
+      "orderId": "ord_1795091740809_clx",
+      "customerId": "cust_quote_test",
+      "supplierGstin": "27AABCB1234F1Z8",
+      "invoiceDate": "2026-11-19T12:35:40.810Z",
+      "supplyState": "Maharashtra (Pune Primary Hub)",
+      "placeOfSupply": "Maharashtra",
+      "isInterState": false,
+      "taxableValue": 28900,
+      "cgstAmount": 2601,
+      "sgstAmount": 2601,
+      "igstAmount": 0,
+      "totalInvoiceAmount": 34102,
+      "status": "ISSUED",
+      "pdfUrl": "/api/erp/invoices/BVL-INV-26-27-0156.pdf"
+    },
+    {
+      "id": "inv_1795098146645_eah",
+      "invoiceNumber": "BVL/INV/26-27/0157",
+      "orderId": "ord_1795098146645_tyw",
+      "customerId": "cust_guest",
+      "supplierGstin": "27AABCB1234F1Z8",
+      "invoiceDate": "2026-11-19T14:22:26.645Z",
+      "supplyState": "Maharashtra (Pune Primary Hub)",
+      "placeOfSupply": "Maharashtra",
+      "isInterState": false,
+      "taxableValue": 10000,
+      "cgstAmount": 900,
+      "sgstAmount": 900,
+      "igstAmount": 0,
+      "totalInvoiceAmount": 11800,
+      "status": "ISSUED",
+      "pdfUrl": "/api/erp/invoices/BVL-INV-26-27-0157.pdf"
+    },
+    {
+      "id": "inv_1795098146671_xcj",
+      "invoiceNumber": "BVL/INV/26-27/0158",
+      "orderId": "ord_1795098146670_pn2",
+      "customerId": "cust_quote_test",
+      "supplierGstin": "27AABCB1234F1Z8",
+      "invoiceDate": "2026-11-19T14:22:26.671Z",
+      "supplyState": "Maharashtra (Pune Primary Hub)",
+      "placeOfSupply": "Maharashtra",
+      "isInterState": false,
+      "taxableValue": 28900,
+      "cgstAmount": 2601,
+      "sgstAmount": 2601,
+      "igstAmount": 0,
+      "totalInvoiceAmount": 34102,
+      "status": "ISSUED",
+      "pdfUrl": "/api/erp/invoices/BVL-INV-26-27-0158.pdf"
     }
   ],
   "gstCreditNotes": [],
   "auditLogs": [
+    {
+      "id": "audit_1795098149395_o4y7m",
+      "actorEmail": "anonymous",
+      "action": "RECAPTCHA_BLOCKED",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked CHECKOUT: action mismatch (got LOGIN)",
+      "timestamp": "2026-11-19T14:22:29.395Z"
+    },
+    {
+      "id": "audit_1795098149390_30fxg",
+      "actorEmail": "anonymous",
+      "action": "RECAPTCHA_BLOCKED",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked CHECKOUT: missing reCAPTCHA Enterprise token",
+      "timestamp": "2026-11-19T14:22:29.390Z"
+    },
+    {
+      "id": "audit_1795098146827_1qrv4",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at mumbaiWarehouse: 0 -> 22 (Total: 41)",
+      "timestamp": "2026-11-19T14:22:26.827Z"
+    },
+    {
+      "id": "audit_1795098146822_xkp8p",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at punePrimaryHub: 0 -> 19 (Total: 19)",
+      "timestamp": "2026-11-19T14:22:26.822Z"
+    },
+    {
+      "id": "audit_1795098146816_65500",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at mumbaiWarehouse: 22 -> 0 (Total: 0 - PRODUCT DEACTIVATED / OUT OF STOCK)",
+      "timestamp": "2026-11-19T14:22:26.816Z"
+    },
+    {
+      "id": "audit_1795098146806_ckjr8",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at punePrimaryHub: 19 -> 0 (Total: 22)",
+      "timestamp": "2026-11-19T14:22:26.807Z"
+    },
+    {
+      "id": "audit_1795098146794_oiqnd",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "REMOVE_PERMITTED_MANAGER",
+      "category": "AUTH_PERMISSION",
+      "details": "Removed User ID \"artisan.manager@bharatvarshcrafts.com\" from authorized Admin access list",
+      "timestamp": "2026-11-19T14:22:26.794Z"
+    },
+    {
+      "id": "audit_1795098146781_bjra9",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADD_PERMITTED_MANAGER",
+      "category": "AUTH_PERMISSION",
+      "details": "Added/updated staff User ID \"artisan.manager@bharatvarshcrafts.com\" with role STORE_MANAGER",
+      "timestamp": "2026-11-19T14:22:26.781Z"
+    },
+    {
+      "id": "audit_1795098146758_rupel",
+      "actorEmail": "marketing_agent",
+      "action": "TRIGGER_CART_RECOVERY",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sent EMAIL cart recovery with 10% bespoke incentive to idle.shopper@test.com (Attempt #1)",
+      "timestamp": "2026-11-19T14:22:26.758Z"
+    },
+    {
+      "id": "audit_1795098146750_8iyv1",
+      "actorEmail": "system",
+      "action": "CHECKOUT_ABANDONED",
+      "category": "WEBHOOK_EVENT",
+      "details": "Abandoned checkout detected for idle.shopper@test.com (₹3800)",
+      "timestamp": "2026-11-19T14:22:26.750Z"
+    },
+    {
+      "id": "audit_1795098146736_yatu3",
+      "actorEmail": "integrations",
+      "action": "ORDER_NOTIFICATION_DISPATCHED",
+      "category": "STORE_MANAGEMENT",
+      "details": "ERP Order BVL-2026-1068 notifications -> PatronEmail:SANDBOX_FALLBACK, SupportInvoice:SANDBOX_FALLBACK, WhatsApp:SANDBOX_FALLBACK",
+      "timestamp": "2026-11-19T14:22:26.736Z"
+    },
+    {
+      "id": "audit_1795098146730_obtgw",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Viceroy Diplomat Briefcase (BVL-TRV-BRF-01) at punePrimaryHub: 3 -> 4 (Total: 10)",
+      "timestamp": "2026-11-19T14:22:26.730Z"
+    },
+    {
+      "id": "audit_1795098146677_v29f2",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ERP_SALES_ORDER_PUSH",
+      "category": "STORE_MANAGEMENT",
+      "details": "CRM quote converted into ERP Sales Order BVL-2026-1068 (Deal: WHOLESALE_BULK, Amount: ₹34102)",
+      "timestamp": "2026-11-19T14:22:26.677Z"
+    },
+    {
+      "id": "audit_1795098146671_4g4ab",
+      "actorEmail": "system",
+      "action": "ORDER_CREATED",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sales order BVL-2026-1068 placed for ₹34102",
+      "timestamp": "2026-11-19T14:22:26.671Z"
+    },
+    {
+      "id": "audit_1795098146663_pknff",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Rajputana Bridle Belt (BVL-MEN-BLT-01) at punePrimaryHub: 23 -> 24 (Total: 72)",
+      "timestamp": "2026-11-19T14:22:26.663Z"
+    },
+    {
+      "id": "audit_1795098146657_mkuy2",
+      "actorEmail": "webhook_gateway",
+      "action": "WEBHOOK_ORDER_PLACED",
+      "category": "WEBHOOK_EVENT",
+      "details": "Order BVL-2026-1067 ingested and pushed to ERP",
+      "timestamp": "2026-11-19T14:22:26.657Z"
+    },
+    {
+      "id": "audit_1795098146646_l380p",
+      "actorEmail": "system",
+      "action": "ORDER_CREATED",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sales order BVL-2026-1067 placed for ₹11800",
+      "timestamp": "2026-11-19T14:22:26.646Z"
+    },
+    {
+      "id": "audit_1795098097049_dgo0o",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:21:37.049Z"
+    },
+    {
+      "id": "audit_1795098037045_ch7q4",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:20:37.045Z"
+    },
+    {
+      "id": "audit_1795097977073_hnfye",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:19:37.073Z"
+    },
+    {
+      "id": "audit_1795097917045_bdr1p",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:18:37.045Z"
+    },
+    {
+      "id": "audit_1795097857044_frrw9",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:17:37.044Z"
+    },
+    {
+      "id": "audit_1795097797040_rjub7",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:16:37.040Z"
+    },
+    {
+      "id": "audit_1795097737041_rn6vp",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:15:37.041Z"
+    },
+    {
+      "id": "audit_1795097677042_t1re7",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:14:37.042Z"
+    },
+    {
+      "id": "audit_1795097617069_kvgba",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:13:37.069Z"
+    },
+    {
+      "id": "audit_1795097557040_o5bzb",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:12:37.040Z"
+    },
+    {
+      "id": "audit_1795097497041_j837l",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:11:37.041Z"
+    },
+    {
+      "id": "audit_1795097437045_73g4o",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:10:37.045Z"
+    },
+    {
+      "id": "audit_1795097377045_gzxpf",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:09:37.045Z"
+    },
+    {
+      "id": "audit_1795097317042_w3ri3",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:08:37.042Z"
+    },
+    {
+      "id": "audit_1795097257093_w7czo",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:07:37.093Z"
+    },
+    {
+      "id": "audit_1795097197037_zt8av",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:06:37.037Z"
+    },
+    {
+      "id": "audit_1795097137047_ovs3x",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:05:37.047Z"
+    },
+    {
+      "id": "audit_1795097077043_rbrd7",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:04:37.043Z"
+    },
+    {
+      "id": "audit_1795097017044_o0ijr",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:03:37.044Z"
+    },
+    {
+      "id": "audit_1795096957047_3c8a4",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:02:37.047Z"
+    },
+    {
+      "id": "audit_1795096902082_wu4gu",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T14:01:42.082Z"
+    },
+    {
+      "id": "audit_1795091743197_7f7i6",
+      "actorEmail": "anonymous",
+      "action": "RECAPTCHA_BLOCKED",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked CHECKOUT: action mismatch (got LOGIN)",
+      "timestamp": "2026-11-19T12:35:43.197Z"
+    },
+    {
+      "id": "audit_1795091743193_zng04",
+      "actorEmail": "anonymous",
+      "action": "RECAPTCHA_BLOCKED",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked CHECKOUT: missing reCAPTCHA Enterprise token",
+      "timestamp": "2026-11-19T12:35:43.193Z"
+    },
+    {
+      "id": "audit_1795091740931_3v178",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at mumbaiWarehouse: 0 -> 22 (Total: 41)",
+      "timestamp": "2026-11-19T12:35:40.931Z"
+    },
+    {
+      "id": "audit_1795091740928_mwt38",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at punePrimaryHub: 0 -> 19 (Total: 19)",
+      "timestamp": "2026-11-19T12:35:40.928Z"
+    },
+    {
+      "id": "audit_1795091740924_mik7i",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at mumbaiWarehouse: 22 -> 0 (Total: 0 - PRODUCT DEACTIVATED / OUT OF STOCK)",
+      "timestamp": "2026-11-19T12:35:40.924Z"
+    },
+    {
+      "id": "audit_1795091740921_zfjnq",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at punePrimaryHub: 19 -> 0 (Total: 22)",
+      "timestamp": "2026-11-19T12:35:40.921Z"
+    },
+    {
+      "id": "audit_1795091740910_ugy3b",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "REMOVE_PERMITTED_MANAGER",
+      "category": "AUTH_PERMISSION",
+      "details": "Removed User ID \"artisan.manager@bharatvarshcrafts.com\" from authorized Admin access list",
+      "timestamp": "2026-11-19T12:35:40.910Z"
+    },
+    {
+      "id": "audit_1795091740902_2jspv",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADD_PERMITTED_MANAGER",
+      "category": "AUTH_PERMISSION",
+      "details": "Added/updated staff User ID \"artisan.manager@bharatvarshcrafts.com\" with role STORE_MANAGER",
+      "timestamp": "2026-11-19T12:35:40.902Z"
+    },
+    {
+      "id": "audit_1795091740886_oglj3",
+      "actorEmail": "marketing_agent",
+      "action": "TRIGGER_CART_RECOVERY",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sent EMAIL cart recovery with 10% bespoke incentive to idle.shopper@test.com (Attempt #1)",
+      "timestamp": "2026-11-19T12:35:40.886Z"
+    },
+    {
+      "id": "audit_1795091740879_s7wwb",
+      "actorEmail": "system",
+      "action": "CHECKOUT_ABANDONED",
+      "category": "WEBHOOK_EVENT",
+      "details": "Abandoned checkout detected for idle.shopper@test.com (₹3800)",
+      "timestamp": "2026-11-19T12:35:40.879Z"
+    },
+    {
+      "id": "audit_1795091740868_j9qzz",
+      "actorEmail": "integrations",
+      "action": "ORDER_NOTIFICATION_DISPATCHED",
+      "category": "STORE_MANAGEMENT",
+      "details": "ERP Order BVL-2026-1066 notifications -> PatronEmail:SANDBOX_FALLBACK, SupportInvoice:SANDBOX_FALLBACK, WhatsApp:SANDBOX_FALLBACK",
+      "timestamp": "2026-11-19T12:35:40.868Z"
+    },
+    {
+      "id": "audit_1795091740863_dk70r",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Viceroy Diplomat Briefcase (BVL-TRV-BRF-01) at punePrimaryHub: 3 -> 4 (Total: 10)",
+      "timestamp": "2026-11-19T12:35:40.863Z"
+    },
+    {
+      "id": "audit_1795091740818_egh9y",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ERP_SALES_ORDER_PUSH",
+      "category": "STORE_MANAGEMENT",
+      "details": "CRM quote converted into ERP Sales Order BVL-2026-1066 (Deal: WHOLESALE_BULK, Amount: ₹34102)",
+      "timestamp": "2026-11-19T12:35:40.818Z"
+    },
+    {
+      "id": "audit_1795091740810_ttfkx",
+      "actorEmail": "system",
+      "action": "ORDER_CREATED",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sales order BVL-2026-1066 placed for ₹34102",
+      "timestamp": "2026-11-19T12:35:40.810Z"
+    },
+    {
+      "id": "audit_1795091740802_zm93z",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Rajputana Bridle Belt (BVL-MEN-BLT-01) at punePrimaryHub: 23 -> 24 (Total: 72)",
+      "timestamp": "2026-11-19T12:35:40.802Z"
+    },
+    {
+      "id": "audit_1795091740794_n5089",
+      "actorEmail": "webhook_gateway",
+      "action": "WEBHOOK_ORDER_PLACED",
+      "category": "WEBHOOK_EVENT",
+      "details": "Order BVL-2026-1065 ingested and pushed to ERP",
+      "timestamp": "2026-11-19T12:35:40.794Z"
+    },
+    {
+      "id": "audit_1795091740784_1znye",
+      "actorEmail": "system",
+      "action": "ORDER_CREATED",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sales order BVL-2026-1065 placed for ₹11800",
+      "timestamp": "2026-11-19T12:35:40.784Z"
+    },
+    {
+      "id": "audit_1795091695420_28lkm",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:34:55.420Z"
+    },
+    {
+      "id": "audit_1795091635382_aok20",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:33:55.382Z"
+    },
+    {
+      "id": "audit_1795091575380_keb98",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:32:55.380Z"
+    },
+    {
+      "id": "audit_1795091515382_6ejz3",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:31:55.382Z"
+    },
+    {
+      "id": "audit_1795091455381_yzb67",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:30:55.381Z"
+    },
+    {
+      "id": "audit_1795091395378_g0ptm",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:29:55.378Z"
+    },
+    {
+      "id": "audit_1795091335394_0lymm",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:28:55.394Z"
+    },
+    {
+      "id": "audit_1795091275379_nrwe0",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:27:55.379Z"
+    },
+    {
+      "id": "audit_1795091215379_04mvg",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:26:55.379Z"
+    },
+    {
+      "id": "audit_1795091155375_7izui",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:25:55.375Z"
+    },
+    {
+      "id": "audit_1795091095375_1fnhw",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:24:55.375Z"
+    },
+    {
+      "id": "audit_1795091035374_h6b7g",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:23:55.374Z"
+    },
+    {
+      "id": "audit_1795090975425_pvblc",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:22:55.425Z"
+    },
+    {
+      "id": "audit_1795090915366_5eppl",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:21:55.366Z"
+    },
+    {
+      "id": "audit_1795090855366_8vqwu",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:20:55.366Z"
+    },
+    {
+      "id": "audit_1795090795363_5h0fq",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:19:55.363Z"
+    },
+    {
+      "id": "audit_1795090735363_dfv32",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:18:55.363Z"
+    },
+    {
+      "id": "audit_1795090675362_qnbvd",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:17:55.362Z"
+    },
+    {
+      "id": "audit_1795090615388_s4c1c",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:16:55.388Z"
+    },
+    {
+      "id": "audit_1795090555363_v39cn",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:15:55.363Z"
+    },
+    {
+      "id": "audit_1795090495363_7t6to",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:14:55.363Z"
+    },
+    {
+      "id": "audit_1795090435363_1iv3y",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:13:55.363Z"
+    },
+    {
+      "id": "audit_1795090375364_1xzkd",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:12:55.364Z"
+    },
+    {
+      "id": "audit_1795090315362_8me26",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:11:55.362Z"
+    },
+    {
+      "id": "audit_1795090255395_z80jz",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:10:55.395Z"
+    },
+    {
+      "id": "audit_1795090195366_b07ly",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:09:55.366Z"
+    },
+    {
+      "id": "audit_1795090135361_rf4do",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:08:55.361Z"
+    },
+    {
+      "id": "audit_1795090075356_c9o5g",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:07:55.356Z"
+    },
+    {
+      "id": "audit_1795090015362_oc5yf",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:06:55.362Z"
+    },
+    {
+      "id": "audit_1795089955362_spdr1",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:05:55.362Z"
+    },
+    {
+      "id": "audit_1795089900407_ta5i1",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_ERROR",
+      "category": "STORE_MANAGEMENT",
+      "details": "Failed live SMTP dispatch of Orders_2026-11-18.xlsx to support@bharatvarshcrafts.com: SMTP transport error: Greeting never received",
+      "timestamp": "2026-11-19T12:05:00.407Z"
+    },
     {
       "id": "audit_1795064122154_q5ms7",
       "actorEmail": "anonymous",
@@ -11506,7 +12646,7 @@
     ],
     "abandonmentThresholdMinutes": 15,
     "primaryHubCity": "Pune",
-    "updatedAt": "2026-11-19T04:55:19.553Z",
+    "updatedAt": "2026-11-19T14:22:26.794Z",
     "lastUpdatedBy": "sunilchain@gmail.com",
     "supplierGstin": "27AABCB1234F1Z8",
     "gstRatePercent": 18,
@@ -11550,7 +12690,105 @@
     "evt_test_1795047574233",
     "evt_test_1795047604327",
     "evt_test_1795047632005",
-    "evt_test_1795064119419"
+    "evt_test_1795064119419",
+    "evt_test_1795091740779",
+    "evt_test_1795098146640"
   ],
-  "patronCredentials": {}
+  "patronCredentials": {},
+  "knowledgeBase": [
+    {
+      "id": "kb_hide_anatomy_01",
+      "title": "Full-Grain Vegetable-Tanned Leather & Hide Anatomy",
+      "description": "How to distinguish full-grain heirloom hides from corrected-grain and split leathers, why natural bark tannins age into rich amber patina, and how we select every cut.",
+      "category": "LEATHER_GUIDE",
+      "fileType": "DECK",
+      "uploadedBy": "support@bharatvarshcrafts.com",
+      "uploadedAt": "2026-11-01T00:00:00Z",
+      "slides": [
+        {
+          "title": "01 · Full-Grain vs Top-Grain vs Split Leather",
+          "subtitle": "Why Bharatvarsh exclusively works with unbuffed full-grain hides and bio-substitutes",
+          "points": [
+            "Full-Grain retains the outermost, tightest fiber layer of the hide — resisting stretching, tearing, and peeling for decades.",
+            "Top-Grain (corrected) sands away the surface to hide blemishes, sacrificing breathability and natural patina development.",
+            "Genuine / Split leather uses weaker lower layers bonded with polyurethane coatings that crack within 12–24 months."
+          ]
+        },
+        {
+          "title": "02 · The 45-Day Vegetable Tanning Ritual",
+          "subtitle": "Slow botanical pit tanning using natural bark extracts (Mimosa, Myrobalan & Babul)",
+          "points": [
+            "Zero chromium salts or harsh heavy-metal runoffs — gentle on skin and safe for the artisans crafting every piece.",
+            "Rich natural oils stay locked inside the fiber network, creating a warm, earthy aroma unmistakable to connoisseurs.",
+            "Sunlight, hand oils, and daily travel gradually deepen the tone into a one-of-a-kind burnished patina."
+          ]
+        },
+        {
+          "title": "03 · Conscious Cactus Bio-Substitute Craft",
+          "subtitle": "Plant-derived structural leather for patrons seeking zero-animal luxury",
+          "points": [
+            "Crafted from mature Nopal cactus leaves harvested sustainably without uprooting the plant.",
+            "Engineered for high abrasion resistance, water repellency, and supple hand-feel across everyday carry silhouettes.",
+            "Paired with the same solid cast-brass fittings and hand-waxed saddle stitching as our heritage leather line."
+          ]
+        },
+        {
+          "title": "04 · Hand Saddle-Stitching & Solid Brass Hardware",
+          "subtitle": "Built to be repaired and passed down, never discarded",
+          "points": [
+            "Twin-needle hand saddle stitches lock independently — if a single thread ever abrades, the seam will never unravel.",
+            "Edges are bevelled, hand-dyed, and burnished with pure beeswax across multiple passes for a glass-smooth seal.",
+            "Sand-cast solid brass buckles, push-locks, and D-rings never flake or rust, mellowing alongside the hide."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kb_heirloom_care_02",
+      "title": "Heirloom Conditioning, Monsoon Care & Patina Manual",
+      "description": "Step-by-step preservation ritual for vegetable-tanned hides, seasonal humidity protection, ink & water mark recovery, and long-term archival storage.",
+      "category": "CARE_MANUAL",
+      "fileType": "DECK",
+      "uploadedBy": "support@bharatvarshcrafts.com",
+      "uploadedAt": "2026-11-05T00:00:00Z",
+      "slides": [
+        {
+          "title": "01 · Everyday Dusting & Horsehair Brushing",
+          "subtitle": "Two minutes once a fortnight keeps natural pores breathing",
+          "points": [
+            "Sweep seams, gussets, and brass clasps with a soft horsehair brush or dry unbleached cotton cloth.",
+            "Avoid wet wipes, alcohol sanitizers, or household detergents that strip natural vegetable tannins.",
+            "Allow your piece to rest empty overnight occasionally so the structural temper rebounds naturally."
+          ]
+        },
+        {
+          "title": "02 · Conditioning with Organic Beeswax Balm",
+          "subtitle": "Nourish every 4–6 months or after prolonged dry air-conditioning exposure",
+          "points": [
+            "Warm a pea-sized dab of Bharatvarsh Organic Beeswax & Jojoba Balm between clean fingertips.",
+            "Massage in light circular motions across stress bends (straps, fold creases, corners) and rest for 30 minutes.",
+            "Buff gently with a dry lint-free cloth to restore satin lustre without clogging the grain."
+          ]
+        },
+        {
+          "title": "03 · Monsoon & Moisture Protocol",
+          "subtitle": "How to rescue heirloom leather after unexpected rain",
+          "points": [
+            "Blot moisture immediately with a clean absorbent cotton towel — never rub vigorously while wet.",
+            "Stuff bags loosely with acid-free tissue paper to hold shape and dry naturally away from direct sunlight or hair dryers.",
+            "Once completely dry (24–36 hours), apply a thin coat of beeswax balm to replenish displaced oils."
+          ]
+        },
+        {
+          "title": "04 · Archival Storage & Lifetime Atelier Support",
+          "subtitle": "Preserving silhouette and brass finish between journeys",
+          "points": [
+            "Always store inside your breathable unbleached cotton dust bag — never seal leather inside plastic covers.",
+            "Keep silica sachets nearby during high-humidity months to prevent surface bloom.",
+            "Every Bharatvarsh piece qualifies for complimentary artisan inspection and re-burnishing through My Atelier."
+          ]
+        }
+      ]
+    }
+  ]
 }

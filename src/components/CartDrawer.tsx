@@ -8,6 +8,7 @@ import {
   validateIndianCheckoutFields
 } from '../lib/indianValidation.ts';
 import { executeRecaptchaEnterprise } from '../lib/recaptcha.ts';
+import type { LegalPolicyTab } from './LegalPoliciesModal.tsx';
 
 interface CatalogStockProduct {
   id: string;
@@ -31,6 +32,7 @@ interface CartDrawerProps {
   resumedEmail?: string;
   resumedCartId?: string;
   onStockLimitNotice?: (message: string) => void;
+  onOpenPolicy?: (tab: LegalPolicyTab) => void;
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
@@ -46,7 +48,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   authToken = '',
   resumedEmail = '',
   resumedCartId,
-  onStockLimitNotice
+  onStockLimitNotice,
+  onOpenPolicy
 }) => {
   const [email, setEmail] = useState(patronEmail || resumedEmail || '');
   const [phone, setPhone] = useState('+91 ');
@@ -388,7 +391,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 <CheckCircle2 className="w-12 h-12 text-[#1B332A] mx-auto" />
                 <h3 className="font-display text-2xl font-bold text-[#16120E]">Order Confirmed</h3>
                 <p className="text-sm text-[#5C4D3E]">
-                  Invoice <strong className="font-mono text-[#16120E]">{orderSuccess.invoiceNumber || orderSuccess.orderNumber}</strong> has been generated and dispatched to the Pune Primary Hub workshop bench.
+                  Invoice <strong className="font-mono text-[#16120E]">{orderSuccess.invoiceNumber || orderSuccess.orderNumber}</strong> has been generated and dispatched to our master atelier workbench.
                 </p>
                 <div className="p-3 bg-[#FAF7F2] rounded border text-left text-xs font-mono space-y-1">
                   <div><strong>AWB Tracking:</strong> {orderSuccess.awbNumber}</div>
@@ -845,6 +848,44 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     <span>{isSubmitting ? 'Authorizing Payment...' : `Complete Order · ₹${total.toLocaleString('en-IN')}`}</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
+
+                  {onOpenPolicy && (
+                    <div className="text-[11px] text-[#5C4D3E] text-center leading-relaxed pt-1">
+                      By completing this order, you agree to our{' '}
+                      <button
+                        type="button"
+                        onClick={() => onOpenPolicy('TERMS')}
+                        className="underline hover:text-[#8B4513]"
+                      >
+                        Terms &amp; Conditions
+                      </button>
+                      ,{' '}
+                      <button
+                        type="button"
+                        onClick={() => onOpenPolicy('RETURNS')}
+                        className="underline hover:text-[#8B4513]"
+                      >
+                        10-Day Return &amp; Exchange Policy
+                      </button>
+                      ,{' '}
+                      <button
+                        type="button"
+                        onClick={() => onOpenPolicy('SHIPPING')}
+                        className="underline hover:text-[#8B4513]"
+                      >
+                        Shipping Policy
+                      </button>
+                      , and{' '}
+                      <button
+                        type="button"
+                        onClick={() => onOpenPolicy('PRIVACY')}
+                        className="underline hover:text-[#8B4513]"
+                      >
+                        Privacy Policy
+                      </button>
+                      .
+                    </div>
+                  )}
 
                   {/* Abandonment Simulator Button */}
                   <button

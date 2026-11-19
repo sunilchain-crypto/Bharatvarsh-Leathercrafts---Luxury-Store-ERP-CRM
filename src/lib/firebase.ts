@@ -5,6 +5,7 @@
  */
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider, AppCheck } from 'firebase/app-check';
 import {
   getAuth,
   GoogleAuthProvider,
@@ -33,7 +34,26 @@ const firebaseConfig = {
     : {})
 };
 
+const RECAPTCHA_ENTERPRISE_SITE_KEY =
+  (viteEnv.VITE_RECAPTCHA_ENTERPRISE_SITE_KEY
+    ? String(viteEnv.VITE_RECAPTCHA_ENTERPRISE_SITE_KEY).trim()
+    : '') || '6Le3mCcuAAAAAJCQBRIMvqTGd4RadX5JvnNubovL';
+
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+
+// Initialize Firebase App Check with reCAPTCHA Enterprise BEFORE initializing Auth or other Firebase services
+export let appCheck: AppCheck | null = null;
+if (typeof window !== 'undefined') {
+  try {
+    appCheck = initializeAppCheck(app, {
+      provider: new ReCaptchaEnterpriseProvider(RECAPTCHA_ENTERPRISE_SITE_KEY),
+      isTokenAutoRefreshEnabled: true
+    });
+  } catch (err) {
+    console.warn('[Firebase AppCheck] Initialization skipped or already active:', err);
+  }
+}
+
 export const auth = getAuth(app);
 
 export const googleProvider = new GoogleAuthProvider();

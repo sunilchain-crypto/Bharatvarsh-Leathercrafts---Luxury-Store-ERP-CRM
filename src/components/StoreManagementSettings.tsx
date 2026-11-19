@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Lock, Database, CheckCircle2, Server, Sliders, Plus, Trash2, Radio, FileSpreadsheet } from 'lucide-react';
-import { StoreManagementConfig, AuditLogEntry, AuthUser, PromoCodeRule } from '../types/index.ts';
+import { AlertTriangle, Lock, Database, CheckCircle2, Server, Sliders, Plus, Trash2, Radio, FileSpreadsheet, BookOpen, Upload, Download } from 'lucide-react';
+import { StoreManagementConfig, AuditLogEntry, AuthUser, PromoCodeRule, KnowledgeBaseEntry } from '../types/index.ts';
 
 interface MySQLStatus {
   connected: boolean;
@@ -63,6 +63,15 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
   const [lastDailyReportDate, setLastDailyReportDate] = useState<string | null>(null);
   const [isSendingDailyReport, setIsSendingDailyReport] = useState(false);
 
+  // Leather Knowledge Base Presentations State
+  const [kbEntries, setKbEntries] = useState<KnowledgeBaseEntry[]>([]);
+  const [kbEditingId, setKbEditingId] = useState<string>('');
+  const [kbTitle, setKbTitle] = useState('');
+  const [kbDescription, setKbDescription] = useState('');
+  const [kbCategory, setKbCategory] = useState<KnowledgeBaseEntry['category']>('LEATHER_GUIDE');
+  const [kbFile, setKbFile] = useState<File | null>(null);
+  const [isUploadingKb, setIsUploadingKb] = useState(false);
+
   const tokenHeader = `Bearer ${authToken}`;
 
   const fetchConfig = async () => {
@@ -108,9 +117,22 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
     }
   };
 
+  const fetchKnowledgeBase = async () => {
+    try {
+      const res = await fetch('/api/knowledge-base');
+      const data = await res.json();
+      if (res.ok && data.success && Array.isArray(data.entries)) {
+        setKbEntries(data.entries);
+      }
+    } catch {
+      // non-fatal
+    }
+  };
+
   useEffect(() => {
     if (authToken) {
       fetchConfig();
+      fetchKnowledgeBase();
     }
   }, [currentUser, authToken]);
 
@@ -157,23 +179,52 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
         setLastDailyReportDate(data.dateKey || lastDailyReportDate);
         setFeedback({
           type: 'success',
-          message: `Daily Excel report ${data.filename} (${data.orderCount} orders, ₹${Math.round(
+          message: `Consolidated Excel report ${data.filename} (${data.orderCount} orders, ₹${Math.round(
             data.grossRevenue || 0
           ).toLocaleString('en-IN')}) dispatched via ${data.deliveryMode}${
-            data.fallbackReason ? ` (${data.fallbackReason})` : ''
-          }.`
+            data.transportUsed ? ` (${data.transportUsed})` : ''
+          }${data.fallbackReason ? ` — ${data.fallbackReason}` : ''}.`
         });
         fetchConfig();
       } else {
         setFeedback({
           type: 'error',
-          message: data.error || data.message || 'Failed to dispatch daily order report.'
+          message: data.fallbackReason || data.error || data.message || 'Failed to dispatch yesterday consolidated order report.'
         });
+        fetchConfig();
       }
     } catch (e: any) {
       setFeedback({ type: 'error', message: e.message });
     } finally {
       setIsSendingDailyReport(false);
+    }
+  };
+
+  const handleDownloadYesterdayExcel = async () => {
+    try {
+      const res = await fetch('/api/admin/reports/daily-orders-excel', {
+        headers: { Authorization: tokenHeader }
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        setFeedback({ type: 'error', message: errData.error || 'Failed to download Excel report.' });
+        return;
+      }
+      const blob = await res.blob();
+      const disp = res.headers.get('content-disposition') || '';
+      const match = disp.match(/filename="?([^"]+)"?/i);
+      const filename = match?.[1] || 'Orders_Yesterday.xlsx';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setFeedback({ type: 'success', message: `Downloaded ${filename} successfully.` });
+    } catch (e: any) {
+      setFeedback({ type: 'error', message: e.message });
     }
   };
 
@@ -324,6 +375,76 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
       setFeedback({ type: 'error', message: e.message });
     } finally {
       setIsConnectingMysql(false);
+    }
+  };
+
+  const handleUploadKnowledgeBase = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!kbTitle.trim()) {
+      setFeedback({ type: 'error', message: 'Presentation title is required.' });
+      return;
+    }
+    if (!kbEditingId && !kbFile) {
+      setFeedback({ type: 'error', message: 'Select a .pdf, .pptx, or .ppt presentation file to upload.' });
+      return;
+    }
+
+    setIsUploadingKb(true);
+    try {
+      const formData = new FormData();
+      if (kbEditingId) formData.append('id', kbEditingId);
+      formData.append('title', kbTitle.trim());
+      formData.append('description', kbDescription.trim());
+      formData.append('category', kbCategory);
+      if (kbFile) formData.append('file', kbFile);
+
+      const res = await fetch('/api/store-management/knowledge-base', {
+        method: 'POST',
+        headers: { Authorization: tokenHeader },
+        body: formData
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setKbEntries(Array.isArray(data.entries) ? data.entries : kbEntries);
+        setKbEditingId('');
+        setKbTitle('');
+        setKbDescription('');
+        setKbCategory('LEATHER_GUIDE');
+        setKbFile(null);
+        setFeedback({ type: 'success', message: data.message || 'Knowledge Base presentation published.' });
+        fetchConfig();
+      } else {
+        setFeedback({ type: 'error', message: data.error || 'Knowledge Base upload failed.' });
+      }
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err?.message || 'Knowledge Base upload failed.' });
+    } finally {
+      setIsUploadingKb(false);
+    }
+  };
+
+  const handleDeleteKnowledgeBase = async (id: string) => {
+    try {
+      const res = await fetch(`/api/store-management/knowledge-base/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: tokenHeader }
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setKbEntries(Array.isArray(data.entries) ? data.entries : kbEntries.filter(k => k.id !== id));
+        if (kbEditingId === id) {
+          setKbEditingId('');
+          setKbTitle('');
+          setKbDescription('');
+          setKbFile(null);
+        }
+        setFeedback({ type: 'success', message: data.message || 'Presentation removed.' });
+        fetchConfig();
+      } else {
+        setFeedback({ type: 'error', message: data.error || 'Failed to delete presentation.' });
+      }
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err?.message || 'Failed to delete presentation.' });
     }
   };
 
@@ -873,15 +994,177 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
                     </span>
                   </div>
                 </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleDownloadYesterdayExcel}
+                    className="px-3 py-2 text-xs font-semibold bg-[#FAF7F2] text-[#16120E] border border-[#221C16]/20 rounded hover:bg-[#EBE4D5] inline-flex items-center gap-1.5"
+                    title="Download yesterday's consolidated Excel (.xlsx) workbook directly"
+                  >
+                    <Download className="w-3.5 h-3.5 text-[#8B4513]" />
+                    <span>Download .xlsx</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!isMasterSuperAdmin || isSendingDailyReport}
+                    onClick={handleSendDailyOrderReportNow}
+                    title={!isMasterSuperAdmin ? 'Master Super-Admin access required' : undefined}
+                    className="px-3.5 py-2 text-xs font-semibold bg-[#221C16] text-[#FAF7F2] rounded hover:bg-[#342B22] disabled:opacity-50"
+                  >
+                    {isSendingDailyReport ? 'Sending Email...' : "Email Yesterday's Report Now"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Leather Knowledge Base Presentations Manager */}
+            <div className="p-6 bg-white rounded-xl border border-[#221C16]/10 shadow-sm space-y-4">
+              <div>
+                <h3 className="font-display text-lg font-bold text-[#16120E] flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-[#8B4513]" />
+                  <span>Leather Knowledge Base Presentations</span>
+                </h3>
+                <p className="text-xs text-[#5C4D3E] mt-1">
+                  Upload or update patron-facing leathercraft decks (.pdf, .pptx, .ppt up to 30MB). Published files appear immediately in the public Knowledge Base tab.
+                </p>
+              </div>
+
+              <form onSubmit={handleUploadKnowledgeBase} className="space-y-3 text-xs p-4 rounded-lg bg-[#FAF7F2] border border-[#221C16]/10">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-[#8B4513] font-semibold">
+                    {kbEditingId ? 'Update / Replace Existing Presentation' : 'Publish New Presentation'}
+                  </span>
+                  {kbEditingId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setKbEditingId('');
+                        setKbTitle('');
+                        setKbDescription('');
+                        setKbFile(null);
+                      }}
+                      className="text-[11px] underline text-[#5C4D3E]"
+                    >
+                      Cancel Edit
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] text-[#5C4D3E] mb-1">Presentation Title *</label>
+                    <input
+                      type="text"
+                      required
+                      value={kbTitle}
+                      onChange={(e) => setKbTitle(e.target.value)}
+                      placeholder="e.g. Full-Grain Patina & Hide Selection Deck"
+                      className="w-full px-3 py-1.5 bg-white border rounded text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-[#5C4D3E] mb-1">Category</label>
+                    <select
+                      value={kbCategory}
+                      onChange={(e) => setKbCategory(e.target.value as KnowledgeBaseEntry['category'])}
+                      className="w-full px-2.5 py-1.5 bg-white border rounded text-xs"
+                    >
+                      <option value="LEATHER_GUIDE">Leather Guide</option>
+                      <option value="CARE_MANUAL">Care Manual</option>
+                      <option value="CRAFT_DECK">Atelier Craft Deck</option>
+                      <option value="SUSTAINABILITY">Sustainability</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] text-[#5C4D3E] mb-1">Summary Description</label>
+                  <textarea
+                    rows={2}
+                    value={kbDescription}
+                    onChange={(e) => setKbDescription(e.target.value)}
+                    placeholder="Briefly describe what patrons will learn from this presentation..."
+                    className="w-full px-3 py-1.5 bg-white border rounded text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] text-[#5C4D3E] mb-1">
+                    Presentation File (.pdf, .pptx, .ppt · max 30MB){kbEditingId ? ' — optional when keeping current file' : ' *'}
+                  </label>
+                  <input
+                    type="file"
+                    accept=".pdf,.pptx,.ppt,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                    onChange={(e) => setKbFile(e.target.files?.[0] || null)}
+                    className="w-full text-xs text-[#5C4D3E] file:mr-3 file:rounded file:border-0 file:bg-[#221C16] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[#FAF7F2] hover:file:bg-[#8B4513]"
+                  />
+                </div>
+
                 <button
-                  type="button"
-                  disabled={!isMasterSuperAdmin || isSendingDailyReport}
-                  onClick={handleSendDailyOrderReportNow}
-                  title={!isMasterSuperAdmin ? 'Master Super-Admin access required' : undefined}
-                  className="px-3.5 py-2 text-xs font-semibold bg-[#221C16] text-[#FAF7F2] rounded hover:bg-[#342B22] disabled:opacity-50 shrink-0"
+                  type="submit"
+                  disabled={isUploadingKb}
+                  className="w-full py-2 text-xs font-semibold bg-[#221C16] text-[#FAF7F2] rounded hover:bg-[#342B22] disabled:opacity-60 flex items-center justify-center gap-1.5"
                 >
-                  {isSendingDailyReport ? 'Generating Excel...' : "Send Yesterday's Excel Report Now"}
+                  <Upload className="w-3.5 h-3.5 text-[#C5A059]" />
+                  <span>
+                    {isUploadingKb
+                      ? 'Uploading Presentation...'
+                      : kbEditingId
+                      ? 'Save Changes to Presentation'
+                      : 'Upload & Publish to Knowledge Base'}
+                  </span>
                 </button>
+              </form>
+
+              <div className="space-y-2 text-xs">
+                <div className="font-mono text-[11px] uppercase tracking-wider text-[#5C4D3E]">
+                  Published Decks ({kbEntries.length})
+                </div>
+                {kbEntries.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="p-3 rounded-lg bg-[#FAF7F2] border border-[#221C16]/10 flex items-start justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-semibold text-[#16120E] truncate">{entry.title}</div>
+                      <div className="font-mono text-[10px] text-[#8B4513] mt-0.5">
+                        {entry.fileType} · {entry.category.replace(/_/g, ' ')} · Updated {entry.uploadedAt?.slice(0, 10)}
+                      </div>
+                      {entry.fileUrl && (
+                        <a
+                          href={entry.fileUrl}
+                          download={entry.fileName || true}
+                          className="text-[11px] underline text-[#5C4D3E] hover:text-[#8B4513] mt-1 inline-block"
+                        >
+                          {entry.fileName || entry.fileUrl}
+                        </a>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setKbEditingId(entry.id);
+                          setKbTitle(entry.title);
+                          setKbDescription(entry.description);
+                          setKbCategory(entry.category);
+                          setKbFile(null);
+                        }}
+                        className="text-[11px] underline text-[#221C16] hover:text-[#8B4513]"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteKnowledgeBase(entry.id)}
+                        className="p-1 text-red-700 hover:bg-red-50 rounded"
+                        title="Delete presentation"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 

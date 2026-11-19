@@ -52,6 +52,28 @@ export const Navbar: React.FC<NavbarProps> = ({
             Collections
           </button>
 
+          <button
+            onClick={() => onSelectTab('our-story')}
+            className={`whitespace-nowrap shrink-0 transition-colors ${
+              currentTab === 'our-story'
+                ? 'text-[#8B4513] font-semibold border-b border-[#8B4513] pb-0.5'
+                : 'text-[#5C4D3E] hover:text-[#16120E]'
+            }`}
+          >
+            Our Story
+          </button>
+
+          <button
+            onClick={() => onSelectTab('knowledge-base')}
+            className={`whitespace-nowrap shrink-0 transition-colors ${
+              currentTab === 'knowledge-base'
+                ? 'text-[#8B4513] font-semibold border-b border-[#8B4513] pb-0.5'
+                : 'text-[#5C4D3E] hover:text-[#16120E]'
+            }`}
+          >
+            Knowledge Base
+          </button>
+
           {currentUser && (
             <button
               onClick={() => onSelectTab('my-atelier')}
@@ -174,37 +196,52 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       {/* Responsive Mobile Navigation Sub-bar */}
-      {(currentUser || isStaff) && (
-        <div className="lg:hidden flex items-center gap-4 overflow-x-auto pt-2.5 mt-2.5 border-t border-[#221C16]/10 text-[11px] font-medium uppercase tracking-wider">
-          <button onClick={() => onSelectTab('storefront')} className="whitespace-nowrap shrink-0 text-[#5C4D3E]">Collections</button>
-          {currentUser && (
-            <button
-              onClick={() => onSelectTab('my-atelier')}
-              className={`whitespace-nowrap shrink-0 ${currentTab === 'my-atelier' ? 'text-[#8B4513] font-semibold' : 'text-[#5C4D3E]'}`}
-            >
-              My Atelier
-            </button>
-          )}
-          {canViewCrm && (
-            <>
-              <button onClick={() => onSelectTab('crm')} className="whitespace-nowrap shrink-0 text-[#5C4D3E]">Customer 360</button>
-              <button onClick={() => onSelectTab('inbox')} className="whitespace-nowrap shrink-0 text-[#5C4D3E]">Inbox</button>
-            </>
-          )}
-          {canViewErp && (
-            <button onClick={() => onSelectTab('erp')} className="whitespace-nowrap shrink-0 text-[#5C4D3E]">ERP & Inventory</button>
-          )}
-          {canViewCrm && (
-            <button onClick={() => onSelectTab('kanban')} className="whitespace-nowrap shrink-0 text-[#5C4D3E]">Pipeline</button>
-          )}
-          {canViewAnalytics && (
-            <button onClick={() => onSelectTab('analytics')} className="whitespace-nowrap shrink-0 text-[#5C4D3E]">Analytics</button>
-          )}
-          {canViewAdminConsole && (
-            <button onClick={() => onSelectTab('store-management')} className="whitespace-nowrap shrink-0 text-[#8B4513] font-semibold">Admin Console</button>
-          )}
-        </div>
-      )}
+      <div className="lg:hidden flex items-center gap-4 overflow-x-auto pt-2.5 mt-2.5 border-t border-[#221C16]/10 text-[11px] font-medium uppercase tracking-wider">
+        <button
+          onClick={() => onSelectTab('storefront')}
+          className={`whitespace-nowrap shrink-0 ${currentTab === 'storefront' ? 'text-[#8B4513] font-semibold' : 'text-[#5C4D3E]'}`}
+        >
+          Collections
+        </button>
+        <button
+          onClick={() => onSelectTab('our-story')}
+          className={`whitespace-nowrap shrink-0 ${currentTab === 'our-story' ? 'text-[#8B4513] font-semibold' : 'text-[#5C4D3E]'}`}
+        >
+          Our Story
+        </button>
+        <button
+          onClick={() => onSelectTab('knowledge-base')}
+          className={`whitespace-nowrap shrink-0 ${currentTab === 'knowledge-base' ? 'text-[#8B4513] font-semibold' : 'text-[#5C4D3E]'}`}
+        >
+          Knowledge Base
+        </button>
+        {currentUser && (
+          <button
+            onClick={() => onSelectTab('my-atelier')}
+            className={`whitespace-nowrap shrink-0 ${currentTab === 'my-atelier' ? 'text-[#8B4513] font-semibold' : 'text-[#5C4D3E]'}`}
+          >
+            My Atelier
+          </button>
+        )}
+        {canViewCrm && (
+          <>
+            <button onClick={() => onSelectTab('crm')} className="whitespace-nowrap shrink-0 text-[#5C4D3E]">Customer 360</button>
+            <button onClick={() => onSelectTab('inbox')} className="whitespace-nowrap shrink-0 text-[#5C4D3E]">Inbox</button>
+          </>
+        )}
+        {canViewErp && (
+          <button onClick={() => onSelectTab('erp')} className="whitespace-nowrap shrink-0 text-[#5C4D3E]">ERP &amp; Inventory</button>
+        )}
+        {canViewCrm && (
+          <button onClick={() => onSelectTab('kanban')} className="whitespace-nowrap shrink-0 text-[#5C4D3E]">Pipeline</button>
+        )}
+        {canViewAnalytics && (
+          <button onClick={() => onSelectTab('analytics')} className="whitespace-nowrap shrink-0 text-[#5C4D3E]">Analytics</button>
+        )}
+        {canViewAdminConsole && (
+          <button onClick={() => onSelectTab('store-management')} className="whitespace-nowrap shrink-0 text-[#8B4513] font-semibold">Admin Console</button>
+        )}
+      </div>
     </header>
   );
 };

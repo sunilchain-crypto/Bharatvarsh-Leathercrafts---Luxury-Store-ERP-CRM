@@ -49,10 +49,11 @@ export function getIntegrationsReadiness(): ProviderReadiness[] {
     (isConfiguredCredential(process.env.SHIPROCKET_EMAIL) &&
       isConfiguredCredential(process.env.SHIPROCKET_PASSWORD));
   const delhiveryConfigured = isConfiguredCredential(process.env.DELHIVERY_API_KEY);
+  const smtpHostClean = normalizeEnvValue(process.env.SMTP_HOST);
   const smtpConfigured =
-    isConfiguredCredential(process.env.SMTP_HOST) &&
-    isConfiguredCredential(process.env.SMTP_USER) &&
-    isConfiguredCredential(process.env.SMTP_PASS);
+    isConfiguredCredential(smtpHostClean) &&
+    isConfiguredCredential(normalizeEnvValue(process.env.SMTP_USER)) &&
+    isConfiguredCredential(normalizeEnvValue(process.env.SMTP_PASS));
   const whatsappConfigured =
     isConfiguredCredential(process.env.WHATSAPP_BUSINESS_PHONE_NUMBER_ID) &&
     isConfiguredCredential(process.env.WHATSAPP_ACCESS_TOKEN);
@@ -100,7 +101,9 @@ export function getIntegrationsReadiness(): ProviderReadiness[] {
       configured: smtpConfigured,
       mode: smtpConfigured ? 'LIVE' : 'SANDBOX_FALLBACK',
       summary: smtpConfigured
-        ? `Live SMTP relay configured (${process.env.SMTP_HOST})`
+        ? `Live SMTP relay configured (${smtpHostClean}, auto 465/587 TLS)${
+            isPerOrderEmailDisabled() ? ' · Daily consolidated mode' : ''
+          }`
         : 'Missing SMTP_HOST / SMTP_USER / SMTP_PASS — logging email dispatches locally'
     },
     {
@@ -541,19 +544,136 @@ export interface EmailAttachment {
   contentType?: string;
 }
 
+export function normalizeEnvValue(raw?: string): string {
+  if (!raw) return '';
+  let val = raw.trim();
+  if (
+    (val.startsWith('"') && val.endsWith('"') && val.length >= 2) ||
+    (val.startsWith("'") && val.endsWith("'") && val.length >= 2)
+  ) {
+    val = val.slice(1, -1).trim();
+  }
+  return val;
+}
+
+export interface SmtpTransportAttempt {
+  host: string;
+  port: number;
+  secure: boolean;
+  requireTLS?: boolean;
+  label: string;
+}
+
+/**
+ * Resolves canonical SMTP transport attempts so port/TLS mismatches (e.g. port 465 with secure=false
+ * or port 587 with secure=true) can never trigger "Greeting never received" or SSL version errors,
+ * and automatically falls back between 465 (SMTPS) and 587 (STARTTLS) if the primary port times out.
+ */
+export function buildSmtpTransportAttempts(env: NodeJS.ProcessEnv = process.env): SmtpTransportAttempt[] {
+  const host = normalizeEnvValue(env.SMTP_HOST);
+  if (!host) return [];
+
+  const parsedPort = parseInt(normalizeEnvValue(env.SMTP_PORT), 10);
+  const primaryPort = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 465;
+
+  const rawSecure = normalizeEnvValue(env.SMTP_SECURE).toLowerCase();
+  const parseBoolSecure = (fallback: boolean) => {
+    if (['true', '1', 'yes', 'ssl', 'tls'].includes(rawSecure)) return true;
+    if (['false', '0', 'no', 'starttls'].includes(rawSecure)) return false;
+    return fallback;
+  };
+
+  // Standard SMTP ports have strict TLS semantics:
+  // - 465 is ALWAYS implicit TLS (SMTPS -> secure: true)
+  // - 587 is ALWAYS explicit STARTTLS (secure: false, requireTLS: true)
+  let primarySecure: boolean;
+  let primaryRequireTls = false;
+  if (primaryPort === 465) {
+    primarySecure = true;
+  } else if (primaryPort === 587) {
+    primarySecure = false;
+    primaryRequireTls = true;
+  } else if (primaryPort === 25 || primaryPort === 2525) {
+    primarySecure = false;
+  } else {
+    primarySecure = parseBoolSecure(false);
+  }
+
+  const attempts: SmtpTransportAttempt[] = [
+    {
+      host,
+      port: primaryPort,
+      secure: primarySecure,
+      ...(primaryRequireTls ? { requireTLS: true } : {}),
+      label: `${host}:${primaryPort} (${primarySecure ? 'SMTPS' : primaryRequireTls ? 'STARTTLS' : 'SMTP'})`
+    }
+  ];
+
+  // Add automatic fallback between 465 (SMTPS) and 587 (STARTTLS) in case one port is blocked/stalled
+  if (primaryPort === 465) {
+    attempts.push({
+      host,
+      port: 587,
+      secure: false,
+      requireTLS: true,
+      label: `${host}:587 (STARTTLS fallback)`
+    });
+  } else if (primaryPort === 587) {
+    attempts.push({
+      host,
+      port: 465,
+      secure: true,
+      label: `${host}:465 (SMTPS fallback)`
+    });
+  }
+
+  return attempts;
+}
+
+function isRetryableSmtpTransportError(err: any): boolean {
+  const code = String(err?.code || '').toUpperCase();
+  const msg = String(err?.message || '').toLowerCase();
+  // Never retry authentication rejections on another port
+  if (code === 'EAUTH' || msg.includes('535') || msg.includes('invalid login') || msg.includes('authentication failed')) {
+    return false;
+  }
+  return (
+    code === 'ETIMEDOUT' ||
+    code === 'ESOCKET' ||
+    code === 'ECONNECTION' ||
+    code === 'ECONNREFUSED' ||
+    code === 'ECONNRESET' ||
+    code === 'EHOSTUNREACH' ||
+    msg.includes('greeting never received') ||
+    msg.includes('wrong version number') ||
+    msg.includes('timeout') ||
+    msg.includes('socket close') ||
+    msg.includes('connection closed')
+  );
+}
+
+export function isPerOrderEmailDisabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const disableFlag = normalizeEnvValue(env.DISABLE_PER_ORDER_EMAILS).toLowerCase();
+  if (['true', '1', 'yes'].includes(disableFlag)) return true;
+  const enableFlag = normalizeEnvValue(env.ENABLE_PER_ORDER_EMAILS).toLowerCase();
+  if (['false', '0', 'no'].includes(enableFlag)) return true;
+  return false;
+}
+
 export function getSupportOrderEmailRecipient(): string {
-  const configured = process.env.SUPPORT_ORDER_EMAIL || process.env.SMTP_SUPPORT_EMAIL;
+  const configured =
+    normalizeEnvValue(process.env.SUPPORT_ORDER_EMAIL) || normalizeEnvValue(process.env.SMTP_SUPPORT_EMAIL);
   if (configured && isConfiguredCredential(configured)) {
-    return configured.trim();
+    return configured;
   }
   return 'Support@bharatvarshcrafts.com';
 }
 
 export function getMissingSmtpReason(): string {
   const missing: string[] = [];
-  if (!isConfiguredCredential(process.env.SMTP_HOST)) missing.push('SMTP_HOST');
-  if (!isConfiguredCredential(process.env.SMTP_USER)) missing.push('SMTP_USER');
-  if (!isConfiguredCredential(process.env.SMTP_PASS)) missing.push('SMTP_PASS');
+  if (!isConfiguredCredential(normalizeEnvValue(process.env.SMTP_HOST))) missing.push('SMTP_HOST');
+  if (!isConfiguredCredential(normalizeEnvValue(process.env.SMTP_USER))) missing.push('SMTP_USER');
+  if (!isConfiguredCredential(normalizeEnvValue(process.env.SMTP_PASS))) missing.push('SMTP_PASS');
   if (missing.length === 0) return '';
   return `Missing ${missing.join(', ')} in server environment`;
 }
@@ -569,6 +689,7 @@ export async function sendTransactionalEmail(params: {
   channel: 'EMAIL';
   messageId: string;
   smtpConfigured: boolean;
+  transportUsed?: string;
   fallbackReason?: string;
 }> {
   const recipient = (params.to || '').trim();
@@ -582,48 +703,75 @@ export async function sendTransactionalEmail(params: {
     };
   }
 
-  const host = process.env.SMTP_HOST;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 465;
-  const secure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : port === 465;
-  const from = process.env.SMTP_SUPPORT_EMAIL || user || 'Support@bharatvarshcrafts.com';
+  const host = normalizeEnvValue(process.env.SMTP_HOST);
+  const user = normalizeEnvValue(process.env.SMTP_USER);
+  const pass = normalizeEnvValue(process.env.SMTP_PASS);
+  const supportEmail = normalizeEnvValue(process.env.SMTP_SUPPORT_EMAIL);
+  // GoDaddy (smtpout.secureserver.net) & Hostinger require MAIL FROM to match the authenticated SMTP_USER
+  const from = user || supportEmail || 'Support@bharatvarshcrafts.com';
+  const replyTo = supportEmail && supportEmail.toLowerCase() !== from.toLowerCase() ? supportEmail : undefined;
   const smtpConfigured =
     isConfiguredCredential(host) && isConfiguredCredential(user) && isConfiguredCredential(pass);
 
   if (smtpConfigured) {
-    try {
+    const attempts = buildSmtpTransportAttempts(process.env);
+    const attemptErrors: string[] = [];
+
+    for (let i = 0; i < attempts.length; i++) {
+      const attempt = attempts[i];
       const transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure,
-        auth: { user, pass }
+        host: attempt.host,
+        port: attempt.port,
+        secure: attempt.secure,
+        ...(attempt.requireTLS ? { requireTLS: true } : {}),
+        auth: { user, pass },
+        connectionTimeout: 15000,
+        greetingTimeout: 15000,
+        socketTimeout: 25000,
+        tls: {
+          servername: attempt.host,
+          minVersion: 'TLSv1.2'
+        }
       });
-      const info = await transporter.sendMail({
-        from: `"Bharatvarsh Leathercrafts LLP" <${from}>`,
-        to: recipient,
-        subject: params.subject,
-        text: params.text,
-        html: params.html || `<p>${params.text.replace(/\n/g, '<br/>')}</p>`,
-        ...(Array.isArray(params.attachments) && params.attachments.length > 0
-          ? { attachments: params.attachments }
-          : {})
-      });
-      return {
-        mode: 'LIVE',
-        channel: 'EMAIL',
-        messageId: info.messageId || `smtp_${Date.now()}`,
-        smtpConfigured: true
-      };
-    } catch (err: any) {
-      return {
-        mode: 'SANDBOX_FALLBACK',
-        channel: 'EMAIL',
-        messageId: `email_sbx_${Date.now()}`,
-        smtpConfigured: true,
-        fallbackReason: `SMTP transport error: ${err.message}`
-      };
+
+      try {
+        const info = await transporter.sendMail({
+          from: `"Bharatvarsh Leathercrafts LLP" <${from}>`,
+          ...(replyTo ? { replyTo } : {}),
+          to: recipient,
+          subject: params.subject,
+          text: params.text,
+          html: params.html || `<p>${params.text.replace(/\n/g, '<br/>')}</p>`,
+          ...(Array.isArray(params.attachments) && params.attachments.length > 0
+            ? { attachments: params.attachments }
+            : {})
+        });
+        transporter.close();
+        return {
+          mode: 'LIVE',
+          channel: 'EMAIL',
+          messageId: info.messageId || `smtp_${Date.now()}`,
+          smtpConfigured: true,
+          transportUsed: attempt.label
+        };
+      } catch (err: any) {
+        transporter.close();
+        const reason = `${attempt.label} -> ${err?.message || err}`;
+        attemptErrors.push(reason);
+        const canFallback = i < attempts.length - 1 && isRetryableSmtpTransportError(err);
+        if (!canFallback) {
+          break;
+        }
+      }
     }
+
+    return {
+      mode: 'SANDBOX_FALLBACK',
+      channel: 'EMAIL',
+      messageId: `email_sbx_${Date.now()}`,
+      smtpConfigured: true,
+      fallbackReason: `SMTP transport error: ${attemptErrors.join(' | ')}`
+    };
   }
 
   return {
@@ -885,6 +1033,27 @@ export async function dispatchOrderConfirmationAndCareGuide(order: Order): Promi
   supportEmailDelivery: Awaited<ReturnType<typeof sendTransactionalEmail>>;
   whatsappDelivery: Awaited<ReturnType<typeof sendWhatsAppMessage>>;
 }> {
+  if (isPerOrderEmailDisabled()) {
+    const skippedEmail = {
+      mode: 'SANDBOX_FALLBACK' as GatewayExecutionMode,
+      channel: 'EMAIL' as const,
+      messageId: `email_skipped_${Date.now()}`,
+      smtpConfigured: false,
+      fallbackReason: 'Per-order emails disabled (using daily consolidated Excel summary)'
+    };
+    const whatsappDelivery = await sendWhatsAppMessage({
+      toPhone: order.customerPhone,
+      text: `Bharatvarsh Atelier: Order ${order.orderNumber} confirmed (₹${order.totalAmount.toLocaleString(
+        'en-IN'
+      )}). AWB: ${order.awbNumber}. Digital Beeswax Care Guide included inside your My Atelier portal.`
+    });
+    return {
+      emailDelivery: skippedEmail,
+      supportEmailDelivery: skippedEmail,
+      whatsappDelivery
+    };
+  }
+
   const { pdfBuffer, safeFilename } = resolveOrderInvoiceContext(order);
   const summaryLines = order.items.map(
     it =>

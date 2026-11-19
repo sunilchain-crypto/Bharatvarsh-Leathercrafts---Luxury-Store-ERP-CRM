@@ -2389,7 +2389,108 @@ var init_db = __esm({
             })) : []
           }));
         }
+        if (!Array.isArray(raw.knowledgeBase) || raw.knowledgeBase.length === 0) {
+          raw.knowledgeBase = this.getDefaultKnowledgeBaseEntries();
+        }
         return raw;
+      }
+      getDefaultKnowledgeBaseEntries() {
+        return [
+          {
+            id: "kb_hide_anatomy_01",
+            title: "Full-Grain Vegetable-Tanned Leather & Hide Anatomy",
+            description: "How to distinguish full-grain heirloom hides from corrected-grain and split leathers, why natural bark tannins age into rich amber patina, and how we select every cut.",
+            category: "LEATHER_GUIDE",
+            fileType: "DECK",
+            uploadedBy: "support@bharatvarshcrafts.com",
+            uploadedAt: "2026-11-01T00:00:00Z",
+            slides: [
+              {
+                title: "01 \xB7 Full-Grain vs Top-Grain vs Split Leather",
+                subtitle: "Why Bharatvarsh exclusively works with unbuffed full-grain hides and bio-substitutes",
+                points: [
+                  "Full-Grain retains the outermost, tightest fiber layer of the hide \u2014 resisting stretching, tearing, and peeling for decades.",
+                  "Top-Grain (corrected) sands away the surface to hide blemishes, sacrificing breathability and natural patina development.",
+                  "Genuine / Split leather uses weaker lower layers bonded with polyurethane coatings that crack within 12\u201324 months."
+                ]
+              },
+              {
+                title: "02 \xB7 The 45-Day Vegetable Tanning Ritual",
+                subtitle: "Slow botanical pit tanning using natural bark extracts (Mimosa, Myrobalan & Babul)",
+                points: [
+                  "Zero chromium salts or harsh heavy-metal runoffs \u2014 gentle on skin and safe for the artisans crafting every piece.",
+                  "Rich natural oils stay locked inside the fiber network, creating a warm, earthy aroma unmistakable to connoisseurs.",
+                  "Sunlight, hand oils, and daily travel gradually deepen the tone into a one-of-a-kind burnished patina."
+                ]
+              },
+              {
+                title: "03 \xB7 Conscious Cactus Bio-Substitute Craft",
+                subtitle: "Plant-derived structural leather for patrons seeking zero-animal luxury",
+                points: [
+                  "Crafted from mature Nopal cactus leaves harvested sustainably without uprooting the plant.",
+                  "Engineered for high abrasion resistance, water repellency, and supple hand-feel across everyday carry silhouettes.",
+                  "Paired with the same solid cast-brass fittings and hand-waxed saddle stitching as our heritage leather line."
+                ]
+              },
+              {
+                title: "04 \xB7 Hand Saddle-Stitching & Solid Brass Hardware",
+                subtitle: "Built to be repaired and passed down, never discarded",
+                points: [
+                  "Twin-needle hand saddle stitches lock independently \u2014 if a single thread ever abrades, the seam will never unravel.",
+                  "Edges are bevelled, hand-dyed, and burnished with pure beeswax across multiple passes for a glass-smooth seal.",
+                  "Sand-cast solid brass buckles, push-locks, and D-rings never flake or rust, mellowing alongside the hide."
+                ]
+              }
+            ]
+          },
+          {
+            id: "kb_heirloom_care_02",
+            title: "Heirloom Conditioning, Monsoon Care & Patina Manual",
+            description: "Step-by-step preservation ritual for vegetable-tanned hides, seasonal humidity protection, ink & water mark recovery, and long-term archival storage.",
+            category: "CARE_MANUAL",
+            fileType: "DECK",
+            uploadedBy: "support@bharatvarshcrafts.com",
+            uploadedAt: "2026-11-05T00:00:00Z",
+            slides: [
+              {
+                title: "01 \xB7 Everyday Dusting & Horsehair Brushing",
+                subtitle: "Two minutes once a fortnight keeps natural pores breathing",
+                points: [
+                  "Sweep seams, gussets, and brass clasps with a soft horsehair brush or dry unbleached cotton cloth.",
+                  "Avoid wet wipes, alcohol sanitizers, or household detergents that strip natural vegetable tannins.",
+                  "Allow your piece to rest empty overnight occasionally so the structural temper rebounds naturally."
+                ]
+              },
+              {
+                title: "02 \xB7 Conditioning with Organic Beeswax Balm",
+                subtitle: "Nourish every 4\u20136 months or after prolonged dry air-conditioning exposure",
+                points: [
+                  "Warm a pea-sized dab of Bharatvarsh Organic Beeswax & Jojoba Balm between clean fingertips.",
+                  "Massage in light circular motions across stress bends (straps, fold creases, corners) and rest for 30 minutes.",
+                  "Buff gently with a dry lint-free cloth to restore satin lustre without clogging the grain."
+                ]
+              },
+              {
+                title: "03 \xB7 Monsoon & Moisture Protocol",
+                subtitle: "How to rescue heirloom leather after unexpected rain",
+                points: [
+                  "Blot moisture immediately with a clean absorbent cotton towel \u2014 never rub vigorously while wet.",
+                  "Stuff bags loosely with acid-free tissue paper to hold shape and dry naturally away from direct sunlight or hair dryers.",
+                  "Once completely dry (24\u201336 hours), apply a thin coat of beeswax balm to replenish displaced oils."
+                ]
+              },
+              {
+                title: "04 \xB7 Archival Storage & Lifetime Atelier Support",
+                subtitle: "Preserving silhouette and brass finish between journeys",
+                points: [
+                  "Always store inside your breathable unbleached cotton dust bag \u2014 never seal leather inside plastic covers.",
+                  "Keep silica sachets nearby during high-humidity months to prevent surface bloom.",
+                  "Every Bharatvarsh piece qualifies for complimentary artisan inspection and re-burnishing through My Atelier."
+                ]
+              }
+            ]
+          }
+        ];
       }
       loadPersistedStateOrSeed() {
         try {
@@ -3532,7 +3633,8 @@ var init_db = __esm({
           auditLogs,
           config,
           patronCredentials: {},
-          processedWebhookIds: []
+          processedWebhookIds: [],
+          knowledgeBase: this.getDefaultKnowledgeBaseEntries()
         };
       }
       // --- Audit Logging (Append-Only) ---
@@ -4377,6 +4479,9 @@ var init_db = __esm({
         order.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
         if (status === "DELIVERED") {
           order.courierStatus = "DELIVERED";
+          if (!order.deliveredAt) {
+            order.deliveredAt = (/* @__PURE__ */ new Date()).toISOString();
+          }
         } else if (status === "DISPATCHED") {
           order.courierStatus = "IN_TRANSIT";
         }
@@ -4388,6 +4493,141 @@ var init_db = __esm({
         );
         this.persistState();
         return order;
+      }
+      // --- Knowledge Base Presentations ---
+      getKnowledgeBase() {
+        if (!Array.isArray(this.state.knowledgeBase)) {
+          this.state.knowledgeBase = this.getDefaultKnowledgeBaseEntries();
+        }
+        return this.state.knowledgeBase;
+      }
+      upsertKnowledgeBaseEntry(entry, actorEmail) {
+        if (!Array.isArray(this.state.knowledgeBase)) {
+          this.state.knowledgeBase = this.getDefaultKnowledgeBaseEntries();
+        }
+        const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+        const existingIdx = entry.id ? this.state.knowledgeBase.findIndex((k) => k.id === entry.id) : -1;
+        if (existingIdx >= 0) {
+          const prev = this.state.knowledgeBase[existingIdx];
+          const updated = {
+            ...prev,
+            ...entry,
+            id: prev.id,
+            uploadedBy: actorEmail,
+            uploadedAt: entry.uploadedAt || nowIso
+          };
+          this.state.knowledgeBase[existingIdx] = updated;
+          this.appendAuditEntry(
+            actorEmail,
+            "UPDATE_KNOWLEDGE_BASE",
+            "STORE_MANAGEMENT",
+            `Updated Knowledge Base presentation "${updated.title}" (${updated.fileType})`
+          );
+          this.persistState();
+          return updated;
+        }
+        const created = {
+          ...entry,
+          id: entry.id || `kb_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          uploadedBy: actorEmail,
+          uploadedAt: entry.uploadedAt || nowIso
+        };
+        this.state.knowledgeBase.unshift(created);
+        this.appendAuditEntry(
+          actorEmail,
+          "UPLOAD_KNOWLEDGE_BASE",
+          "STORE_MANAGEMENT",
+          `Published Knowledge Base presentation "${created.title}" (${created.fileType})`
+        );
+        this.persistState();
+        return created;
+      }
+      deleteKnowledgeBaseEntry(id, actorEmail) {
+        if (!Array.isArray(this.state.knowledgeBase)) {
+          return null;
+        }
+        const idx = this.state.knowledgeBase.findIndex((k) => k.id === id);
+        if (idx === -1) return null;
+        const [removed] = this.state.knowledgeBase.splice(idx, 1);
+        this.appendAuditEntry(
+          actorEmail,
+          "DELETE_KNOWLEDGE_BASE",
+          "STORE_MANAGEMENT",
+          `Removed Knowledge Base presentation "${removed.title}" (${removed.id})`
+        );
+        this.persistState();
+        return removed;
+      }
+      // --- Patron 10-Day Return / Exchange Requests ---
+      requestOrderReturn(params) {
+        const order = this.state.orders.find((o) => o.id === params.orderId || o.orderNumber === params.orderId);
+        if (!order) {
+          return { ok: false, code: "NOT_FOUND", error: `Order ${params.orderId} not found.` };
+        }
+        const cleanEmail = params.customerEmail.trim().toLowerCase();
+        const matchedCustomer = this.getCustomerById(cleanEmail) || (params.customerUid ? this.getCustomerById(params.customerUid) : void 0);
+        const ownsOrder = order.customerEmail.trim().toLowerCase() === cleanEmail || matchedCustomer && order.customerId === matchedCustomer.id || params.customerUid && order.customerId === params.customerUid;
+        if (!ownsOrder) {
+          return { ok: false, code: "FORBIDDEN", error: "You do not have permission to request a return for this order." };
+        }
+        if (order.status === "RETURNED" || order.returnRequestStatus === "REQUESTED" || order.returnRequestStatus === "APPROVED" || order.returnRequestStatus === "PROCESSED") {
+          return {
+            ok: false,
+            code: "CONFLICT",
+            error: `A return or exchange request is already recorded for order ${order.orderNumber} (status: ${order.returnRequestStatus || order.status}).`
+          };
+        }
+        if (order.status !== "DELIVERED" && order.courierStatus !== "DELIVERED") {
+          return {
+            ok: false,
+            code: "NOT_DELIVERED",
+            error: "Returns and exchanges can only be requested after the order has been delivered."
+          };
+        }
+        const referenceTimestamp = order.deliveredAt || order.updatedAt || order.createdAt;
+        const deliveredMs = new Date(referenceTimestamp).getTime();
+        const elapsedDays = Number.isFinite(deliveredMs) ? Math.max(0, (Date.now() - deliveredMs) / (1e3 * 60 * 60 * 24)) : 999;
+        if (elapsedDays > 10) {
+          return {
+            ok: false,
+            code: "WINDOW_EXPIRED",
+            elapsedDays: Math.floor(elapsedDays),
+            error: "Return and exchange window (10 days from delivery) has expired. No returns or exchanges are permitted after 10 days."
+          };
+        }
+        const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+        const cleanNotes = typeof params.notes === "string" ? params.notes.trim().slice(0, 800) : "";
+        const reasonLabelMap = {
+          COLOR_MISMATCH: "Color / Patina Tone Mismatch",
+          TEXTURE_DEFECT: "Leather Grain / Stitching Defect",
+          HARDWARE_DAMAGE: "Brass Hardware Damage",
+          INCORRECT_SIZE: "Incorrect Size / Fit Exchange"
+        };
+        const ticket = this.createSupportTicket({
+          customerId: order.customerId,
+          customerName: order.customerName,
+          customerEmail: order.customerEmail,
+          customerPhone: order.customerPhone,
+          channel: "EMAIL",
+          subject: `Return / Exchange Request \u2014 ${order.orderNumber} (${reasonLabelMap[params.reason]})`,
+          category: params.reason === "INCORRECT_SIZE" ? "SIZE_EXCHANGE" : "HARDWARE_REPAIR",
+          priority: "HIGH",
+          initialMessage: `Patron submitted a 10-day return/exchange request for Order ${order.orderNumber} (${order.items.map((it) => `${it.productName} x${it.quantity}`).join(", ")}). Reason: ${reasonLabelMap[params.reason]}.${cleanNotes ? ` Patron notes: "${cleanNotes}"` : ""}`
+        });
+        order.returnRequestStatus = "REQUESTED";
+        order.returnReason = params.reason;
+        order.returnNotes = cleanNotes || void 0;
+        order.returnRequestedAt = nowIso;
+        order.returnTicketId = ticket.id;
+        order.updatedAt = nowIso;
+        this.appendAuditEntry(
+          cleanEmail,
+          "PATRON_RETURN_REQUESTED",
+          "STORE_MANAGEMENT",
+          `Patron requested return/exchange for ${order.orderNumber} within ${elapsedDays.toFixed(1)} days of delivery (Reason: ${params.reason}, Ticket: ${ticket.ticketNumber})`
+        );
+        this.persistState();
+        return { ok: true, order, ticket, elapsedDays: Number(elapsedDays.toFixed(2)) };
       }
       recalculateCustomerMetrics(customerId) {
         const cust = this.state.customers.find((c) => c.id === customerId);
@@ -4484,6 +4724,39 @@ var init_db = __esm({
       }
       getTicketsByCustomer(customerId) {
         return this.getSupportTickets().filter((t) => t.customerId === customerId);
+      }
+      createSupportTicket(payload) {
+        const nowIso = (/* @__PURE__ */ new Date()).toISOString();
+        const ticketNum = `TKT-${(/* @__PURE__ */ new Date()).getFullYear()}-${881 + this.state.supportTickets.length}`;
+        const ticket = {
+          id: `tkt_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
+          ticketNumber: ticketNum,
+          customerId: payload.customerId,
+          customerName: payload.customerName,
+          customerEmail: payload.customerEmail,
+          customerPhone: payload.customerPhone,
+          channel: payload.channel || "EMAIL",
+          subject: payload.subject,
+          category: payload.category,
+          priority: payload.priority || "HIGH",
+          status: "OPEN",
+          assignedTo: "support@bharatvarshcrafts.com",
+          slaBreachHours: 12,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          messages: [
+            {
+              id: `msg_${Date.now()}`,
+              sender: "PATRON",
+              text: payload.initialMessage,
+              timestamp: nowIso,
+              channel: payload.channel || "EMAIL"
+            }
+          ]
+        };
+        this.state.supportTickets.unshift(ticket);
+        this.persistState();
+        return ticket;
       }
       addSupportMessage(ticketId, text, sender, channel) {
         const ticket = this.state.supportTickets.find((t) => t.id === ticketId);
@@ -6665,6 +6938,8 @@ var init_erpSync = __esm({
           if (!order) throw new Error(`Order ${rma.orderId} not found`);
           order.status = "RETURNED";
           order.paymentStatus = "REFUNDED";
+          order.returnRequestStatus = "PROCESSED";
+          order.returnReason = rma.reason;
           order.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
           if (rma.restockInWarehouse) {
             for (const item of order.items) {
@@ -6703,6 +6978,9 @@ var init_erpSync = __esm({
           order.courierStatus = milestone;
           if (milestone === "DELIVERED") {
             order.status = "DELIVERED";
+            if (!order.deliveredAt) {
+              order.deliveredAt = (/* @__PURE__ */ new Date()).toISOString();
+            }
           }
           order.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
           db.logAudit(
@@ -11582,6 +11860,262 @@ async function runCriticalPathTests() {
       message: e.message
     });
   }
+  try {
+    const dbFile = path7.resolve(process.cwd(), "src/server/data/store_db.json");
+    const preTestDbRaw = fs7.existsSync(dbFile) ? fs7.readFileSync(dbFile, "utf-8") : null;
+    const uploadedKbFilesToClean = [];
+    const app = express();
+    app.use(express.json({ limit: "5mb" }));
+    const publicKbDir = path7.resolve(process.cwd(), "public", "assets", "knowledge-base");
+    fs7.mkdirSync(publicKbDir, { recursive: true });
+    app.use("/assets/knowledge-base", express.static(publicKbDir));
+    app.use("/api", apiRouter);
+    const server = await new Promise((resolve) => {
+      const s = app.listen(0, "127.0.0.1", () => resolve(s));
+    });
+    try {
+      const port = server.address().port;
+      const firebaseSrc = fs7.readFileSync(path7.resolve(process.cwd(), "src/lib/firebase.ts"), "utf-8");
+      const idxInitApp = firebaseSrc.indexOf("initializeApp(");
+      const idxInitAppCheck = firebaseSrc.indexOf("initializeAppCheck(");
+      const idxGetAuth = firebaseSrc.indexOf("getAuth(app)");
+      const appCheckOrderOk = firebaseSrc.includes("ReCaptchaEnterpriseProvider") && idxInitApp > -1 && idxInitAppCheck > idxInitApp && idxGetAuth > idxInitAppCheck;
+      const storefrontSrc = fs7.readFileSync(path7.resolve(process.cwd(), "src/components/Storefront.tsx"), "utf-8");
+      const ourStorySrc = fs7.readFileSync(path7.resolve(process.cwd(), "src/components/OurStoryView.tsx"), "utf-8");
+      const erpSrc = fs7.readFileSync(path7.resolve(process.cwd(), "src/components/ERPWarehouseView.tsx"), "utf-8");
+      const dbSrc = fs7.readFileSync(path7.resolve(process.cwd(), "src/server/db.ts"), "utf-8");
+      const cityRegex = /\b(pune|mumbai|kanpur|jaipur|bengaluru|pimpri)\b/i;
+      const copySeparationOk = !cityRegex.test(storefrontSrc) && !cityRegex.test(ourStorySrc) && erpSrc.includes("punePrimaryHub") && erpSrc.includes("mumbaiWarehouse") && dbSrc.includes("punePrimaryHub") && dbSrc.includes("mumbaiWarehouse");
+      const adminJwt = signSessionJwt({
+        sub: "uid_master_sunil",
+        email: "sunilchain@gmail.com",
+        name: "Sunil Chainani",
+        role: "STORE_MANAGER"
+      });
+      const patronJwt = signSessionJwt({
+        sub: "uid_vikram",
+        email: "vikram.singhania@heritagecrafts.in",
+        name: "Vikramaditya Singhania",
+        role: "PATRON"
+      });
+      const otherPatronJwt = signSessionJwt({
+        sub: "uid_ananya",
+        email: "ananya.deshmukh@gmail.com",
+        name: "Ananya Deshmukh",
+        role: "PATRON"
+      });
+      const kbListRes = await fetch(`http://127.0.0.1:${port}/api/knowledge-base`);
+      const kbListJson = await kbListRes.json();
+      const seededKbOk = kbListRes.status === 200 && Array.isArray(kbListJson.entries) && kbListJson.entries.length >= 2;
+      const kbUnauthRes = await fetch(`http://127.0.0.1:${port}/api/store-management/knowledge-base`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "Unauthorized Deck" })
+      });
+      const kbPatronRes = await fetch(`http://127.0.0.1:${port}/api/store-management/knowledge-base`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${patronJwt}` },
+        body: JSON.stringify({ title: "Patron Deck" })
+      });
+      const kbBadExtRes = await fetch(`http://127.0.0.1:${port}/api/store-management/knowledge-base`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminJwt}` },
+        body: JSON.stringify({
+          title: "Malicious Script",
+          filename: "payload.exe",
+          mimeType: "application/octet-stream",
+          dataBase64: Buffer.from("MZfake").toString("base64")
+        })
+      });
+      const fakePdfBytes = Buffer.from("%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n%%EOF\n", "utf-8");
+      const kbPdfUploadRes = await fetch(`http://127.0.0.1:${port}/api/store-management/knowledge-base`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminJwt}` },
+        body: JSON.stringify({
+          title: "Full-Grain Vegetable Tanning Dossier",
+          description: "Atelier master guide to hide anatomy and wax-burnished patina.",
+          category: "LEATHER_GUIDE",
+          filename: "tanning_dossier.pdf",
+          mimeType: "application/pdf",
+          dataBase64: fakePdfBytes.toString("base64")
+        })
+      });
+      const kbPdfJson = await kbPdfUploadRes.json();
+      const uploadedPdfUrl = String(kbPdfJson.entry?.fileUrl || "");
+      if (uploadedPdfUrl.startsWith("/assets/knowledge-base/")) {
+        uploadedKbFilesToClean.push(path7.basename(uploadedPdfUrl));
+      }
+      const staticPdfRes = uploadedPdfUrl ? await fetch(`http://127.0.0.1:${port}${uploadedPdfUrl}`) : null;
+      const staticPdfText = staticPdfRes ? await staticPdfRes.text() : "";
+      const fakePptxBytes = Buffer.from("PKmock-pptx-archive-bytes", "binary");
+      const kbPptxUploadRes = await fetch(`http://127.0.0.1:${port}/api/store-management/knowledge-base`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminJwt}` },
+        body: JSON.stringify({
+          title: "Saddle Stitching Presentation",
+          description: "Hand-stitching workshop slides.",
+          category: "CRAFT_DECK",
+          filename: "saddle_stitch.pptx",
+          mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+          dataBase64: fakePptxBytes.toString("base64")
+        })
+      });
+      const kbPptxJson = await kbPptxUploadRes.json();
+      const uploadedPptxUrl = String(kbPptxJson.entry?.fileUrl || "");
+      if (uploadedPptxUrl.startsWith("/assets/knowledge-base/")) {
+        uploadedKbFilesToClean.push(path7.basename(uploadedPptxUrl));
+      }
+      const kbUpdateRes = await fetch(`http://127.0.0.1:${port}/api/store-management/knowledge-base`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminJwt}` },
+        body: JSON.stringify({
+          id: kbPdfJson.entry?.id,
+          title: "Full-Grain Vegetable Tanning Dossier (Rev 2)",
+          category: "LEATHER_GUIDE"
+        })
+      });
+      const kbUpdateJson = await kbUpdateRes.json();
+      const kbDelPdfRes = await fetch(
+        `http://127.0.0.1:${port}/api/store-management/knowledge-base/${kbPdfJson.entry?.id}`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${adminJwt}` } }
+      );
+      const kbDelPptxRes = await fetch(
+        `http://127.0.0.1:${port}/api/store-management/knowledge-base/${kbPptxJson.entry?.id}`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${adminJwt}` } }
+      );
+      const pdfRemovedFromDisk = uploadedPdfUrl.startsWith("/assets/knowledge-base/") && !fs7.existsSync(path7.join(publicKbDir, path7.basename(uploadedPdfUrl)));
+      const kbOk = seededKbOk && kbUnauthRes.status === 401 && kbPatronRes.status === 403 && kbBadExtRes.status === 400 && kbPdfUploadRes.status === 201 && kbPdfJson.entry?.fileType === "PDF" && staticPdfRes?.status === 200 && staticPdfText.startsWith("%PDF-1.4") && kbPptxUploadRes.status === 201 && kbPptxJson.entry?.fileType === "PPTX" && kbUpdateRes.status === 200 && kbUpdateJson.entry?.title === "Full-Grain Vegetable Tanning Dossier (Rev 2)" && kbDelPdfRes.status === 200 && kbDelPptxRes.status === 200 && pdfRemovedFromDisk;
+      const baseAddr = {
+        id: "addr_ret_test",
+        customerId: "cust_vikram",
+        street: "10 Heritage Lane",
+        city: "New Delhi",
+        state: "Delhi",
+        pincode: "110001",
+        country: "India",
+        isDefault: true,
+        addressType: "SHIPPING"
+      };
+      const makeOrderPayload = (status, paymentId) => ({
+        customerId: "cust_vikram",
+        customerName: "Vikramaditya Singhania",
+        customerEmail: "vikram.singhania@heritagecrafts.in",
+        customerPhone: "+91 98201 11223",
+        status,
+        currency: "INR",
+        subtotal: 4200,
+        discountAmount: 0,
+        taxAmount: 756,
+        shippingFee: 0,
+        totalAmount: 4956,
+        paymentGateway: "RAZORPAY",
+        paymentId,
+        paymentStatus: "PAID",
+        items: [
+          {
+            id: `item_${paymentId}`,
+            orderId: "",
+            productId: "prod-m-belt-01",
+            productName: "The Rajputana Bridle Belt",
+            sku: "BVL-MEN-BLT-01",
+            category: "men",
+            quantity: 1,
+            unitPrice: 4200,
+            leatherType: "VEGETABLE_TANNED_HERITAGE",
+            hsnCode: "4203",
+            gstRate: 0.18,
+            taxAmount: 756,
+            lineTotal: 4956
+          }
+        ],
+        shippingAddress: baseAddr,
+        billingAddress: { ...baseAddr, id: "addr_ret_bill", addressType: "BILLING" }
+      });
+      const processingOrder = await db.createOrderAsync(makeOrderPayload("PROCESSING", "pay_ret_proc"));
+      const expiredOrder = await db.createOrderAsync(makeOrderPayload("DELIVERED", "pay_ret_exp"));
+      const eligibleOrder = await db.createOrderAsync(makeOrderPayload("DELIVERED", "pay_ret_elig"));
+      const nowMs = Date.now();
+      await db.runAtomicMutation(() => {
+        const expRef = db.getOrders().find((o) => o.id === expiredOrder.id);
+        expRef.deliveredAt = new Date(nowMs - 12 * 24 * 60 * 60 * 1e3).toISOString();
+        const eligRef = db.getOrders().find((o) => o.id === eligibleOrder.id);
+        eligRef.deliveredAt = new Date(nowMs - 3 * 24 * 60 * 60 * 1e3).toISOString();
+      });
+      const retUnauth = await fetch(`http://127.0.0.1:${port}/api/patron/orders/${eligibleOrder.id}/return-request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "INCORRECT_SIZE" })
+      });
+      const retWrongOwner = await fetch(`http://127.0.0.1:${port}/api/patron/orders/${eligibleOrder.id}/return-request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${otherPatronJwt}` },
+        body: JSON.stringify({ reason: "INCORRECT_SIZE" })
+      });
+      const retNotDelivered = await fetch(
+        `http://127.0.0.1:${port}/api/patron/orders/${processingOrder.id}/return-request`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${patronJwt}` },
+          body: JSON.stringify({ reason: "INCORRECT_SIZE" })
+        }
+      );
+      const retExpired = await fetch(`http://127.0.0.1:${port}/api/patron/orders/${expiredOrder.id}/return-request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${patronJwt}` },
+        body: JSON.stringify({ reason: "COLOR_MISMATCH", notes: "Shade slightly darker than expected" })
+      });
+      const retExpiredJson = await retExpired.json();
+      const ticketsBefore = db.getSupportTickets().length;
+      const retEligible = await fetch(`http://127.0.0.1:${port}/api/patron/orders/${eligibleOrder.id}/return-request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${patronJwt}` },
+        body: JSON.stringify({ reason: "INCORRECT_SIZE", notes: "Need next waist size up" })
+      });
+      const retEligibleJson = await retEligible.json();
+      const ticketsAfter = db.getSupportTickets().length;
+      const hasReturnAudit = db.getAuditLogs().some((log) => log.action === "PATRON_RETURN_REQUESTED" && log.details.includes(eligibleOrder.orderNumber));
+      const retDuplicate = await fetch(`http://127.0.0.1:${port}/api/patron/orders/${eligibleOrder.id}/return-request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${patronJwt}` },
+        body: JSON.stringify({ reason: "INCORRECT_SIZE" })
+      });
+      const returnWindowOk = retUnauth.status === 401 && retWrongOwner.status === 403 && retNotDelivered.status === 400 && retExpired.status === 403 && retExpiredJson.error === "Return and exchange window (10 days from delivery) has expired. No returns or exchanges are permitted after 10 days." && retEligible.status === 201 && retEligibleJson.order?.returnRequestStatus === "REQUESTED" && retEligibleJson.order?.returnReason === "INCORRECT_SIZE" && ticketsAfter === ticketsBefore + 1 && hasReturnAudit && retDuplicate.status === 409;
+      if (appCheckOrderOk && copySeparationOk && kbOk && returnWindowOk) {
+        results.push({
+          test: "Phase 4 & App Check: Init Order, Hub-Neutral Copy, Knowledge Base Upload & Strict 10-Day Return Window",
+          status: "PASS",
+          message: "Verified Firebase App Check init before getAuth, hub-neutral public copy with ERP hubs preserved, Knowledge Base PDF/PPTX upload/serve/update/delete, and strict 10-day post-delivery patron return enforcement."
+        });
+      } else {
+        results.push({
+          test: "Phase 4 & App Check: Init Order, Hub-Neutral Copy, Knowledge Base Upload & Strict 10-Day Return Window",
+          status: "FAIL",
+          message: `appCheck=${appCheckOrderOk}, copy=${copySeparationOk}, kb=${kbOk} (pdf=${kbPdfUploadRes.status}, pptx=${kbPptxUploadRes.status}, upd=${kbUpdateRes.status}, del=${kbDelPdfRes.status}/${pdfRemovedFromDisk}), returns=${returnWindowOk} (unauth=${retUnauth.status}, owner=${retWrongOwner.status}, proc=${retNotDelivered.status}, exp=${retExpired.status}, elig=${retEligible.status}, dup=${retDuplicate.status})`
+        });
+      }
+    } finally {
+      await new Promise((resolve) => server.close(() => resolve()));
+      for (const fname of uploadedKbFilesToClean) {
+        try {
+          const p1 = path7.join(publicKbDir, fname);
+          if (fs7.existsSync(p1)) fs7.unlinkSync(p1);
+          const p2 = path7.resolve(process.cwd(), "dist", "assets", "knowledge-base", fname);
+          if (fs7.existsSync(p2)) fs7.unlinkSync(p2);
+        } catch {
+        }
+      }
+      if (preTestDbRaw) {
+        fs7.writeFileSync(dbFile, preTestDbRaw, "utf-8");
+        db.state = JSON.parse(preTestDbRaw);
+      }
+    }
+  } catch (e) {
+    results.push({
+      test: "Phase 4 & App Check: Init Order, Hub-Neutral Copy, Knowledge Base Upload & Strict 10-Day Return Window",
+      status: "FAIL",
+      message: e.message
+    });
+  }
   const allPassed = results.every((r) => r.status === "PASS");
   console.log("CRITICAL PATH TEST SUMMARY:");
   results.forEach((r) => console.log(`[${r.status}] ${r.test}: ${r.message}`));
@@ -11662,6 +12196,50 @@ function parseMultipartSingleFile(body, contentType) {
   }
   return null;
 }
+function parseMultipartFormData(body, contentType) {
+  const fields = {};
+  let file = null;
+  const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;\s]+))/i);
+  const boundary = boundaryMatch?.[1] || boundaryMatch?.[2];
+  if (!boundary) return { fields, file };
+  const delimiter = Buffer.from(`--${boundary}`);
+  const headerEndMarker = Buffer.from("\r\n\r\n");
+  let searchFrom = 0;
+  while (searchFrom < body.length) {
+    const startBoundary = body.indexOf(delimiter, searchFrom);
+    if (startBoundary === -1) break;
+    const afterBoundary = startBoundary + delimiter.length;
+    if (body[afterBoundary] === 45 && body[afterBoundary + 1] === 45) break;
+    let partStart = afterBoundary;
+    if (body[partStart] === 13 && body[partStart + 1] === 10) partStart += 2;
+    else if (body[partStart] === 10) partStart += 1;
+    const nextBoundary = body.indexOf(delimiter, partStart);
+    if (nextBoundary === -1) break;
+    let partEnd = nextBoundary;
+    if (partEnd >= 2 && body[partEnd - 2] === 13 && body[partEnd - 1] === 10) partEnd -= 2;
+    else if (partEnd >= 1 && body[partEnd - 1] === 10) partEnd -= 1;
+    const partBuf = body.subarray(partStart, partEnd);
+    const headerEndIdx = partBuf.indexOf(headerEndMarker);
+    if (headerEndIdx !== -1) {
+      const rawHeaders = partBuf.subarray(0, headerEndIdx).toString("utf8");
+      const nameMatch = rawHeaders.match(/name="([^"]+)"/i) || rawHeaders.match(/name=([^;\r\n]+)/i);
+      const filenameMatch = rawHeaders.match(/filename="([^"]+)"/i) || rawHeaders.match(/filename=([^;\r\n]+)/i);
+      const contentBuf = partBuf.subarray(headerEndIdx + 4);
+      if (filenameMatch && !file) {
+        const mimeMatch = rawHeaders.match(/Content-Type:\s*([^\r\n;]+)/i);
+        file = {
+          filename: (filenameMatch[1] || "").trim(),
+          mimeType: (mimeMatch?.[1] || "").trim().toLowerCase(),
+          buffer: contentBuf
+        };
+      } else if (nameMatch) {
+        fields[nameMatch[1].trim()] = contentBuf.toString("utf8").trim();
+      }
+    }
+    searchFrom = nextBoundary;
+  }
+  return { fields, file };
+}
 function handleMediaUploadBody(req, res, next) {
   if (req.is("application/json") && req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
     return next();
@@ -11670,7 +12248,7 @@ function handleMediaUploadBody(req, res, next) {
     if (err) {
       if (err.type === "entity.too.large" || err.status === 413) {
         return res.status(413).json({
-          error: "Uploaded file exceeds maximum allowed payload size (10MB images, 50MB videos)."
+          error: "Uploaded file exceeds maximum allowed payload size."
         });
       }
       return res.status(400).json({ error: err.message || "Invalid media upload payload." });
@@ -11678,7 +12256,7 @@ function handleMediaUploadBody(req, res, next) {
     return next();
   });
 }
-var apiRouter, IMAGE_MIME_BY_EXT, VIDEO_MIME_BY_EXT, EXT_BY_MIME, MAX_IMAGE_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_BYTES, rawMediaUploadMiddleware;
+var apiRouter, IMAGE_MIME_BY_EXT, VIDEO_MIME_BY_EXT, EXT_BY_MIME, MAX_IMAGE_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_BYTES, KB_MIME_BY_EXT, KB_EXT_BY_MIME, MAX_KB_UPLOAD_BYTES, rawMediaUploadMiddleware;
 var init_api = __esm({
   "src/server/api.ts"() {
     init_db();
@@ -11716,8 +12294,27 @@ var init_api = __esm({
     };
     MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
     MAX_VIDEO_UPLOAD_BYTES = 50 * 1024 * 1024;
+    KB_MIME_BY_EXT = {
+      ".pdf": "application/pdf",
+      ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      ".ppt": "application/vnd.ms-powerpoint"
+    };
+    KB_EXT_BY_MIME = {
+      "application/pdf": ".pdf",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+      "application/vnd.ms-powerpoint": ".ppt"
+    };
+    MAX_KB_UPLOAD_BYTES = 30 * 1024 * 1024;
     rawMediaUploadMiddleware = express2.raw({
-      type: ["multipart/form-data", "image/*", "video/*", "application/octet-stream"],
+      type: [
+        "multipart/form-data",
+        "image/*",
+        "video/*",
+        "application/pdf",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/octet-stream"
+      ],
       limit: "55mb"
     });
     apiRouter.get("/test/critical-paths", requireStoreManagementAccess, async (req, res) => {
@@ -11732,6 +12329,10 @@ var init_api = __esm({
     apiRouter.get("/catalog", (req, res) => {
       const catalog = db.getCatalog();
       res.json({ success: true, catalog });
+    });
+    apiRouter.get("/knowledge-base", (_req, res) => {
+      const entries = db.getKnowledgeBase();
+      res.json({ success: true, entries });
     });
     apiRouter.get("/storefront/config", (req, res) => {
       const cfg = db.getConfig();
@@ -12127,6 +12728,43 @@ var init_api = __esm({
         supplierGstin: cfg.supplierGstin,
         gstRatePercent: cfg.gstRatePercent
       });
+    });
+    apiRouter.post("/patron/orders/:id/return-request", requireAuth, async (req, res) => {
+      try {
+        const allowedReasons = ["COLOR_MISMATCH", "TEXTURE_DEFECT", "HARDWARE_DAMAGE", "INCORRECT_SIZE"];
+        const rawReason = String(req.body?.reason || "").trim().toUpperCase();
+        if (!allowedReasons.includes(rawReason)) {
+          return res.status(400).json({
+            error: "Please select a valid return or exchange reason (COLOR_MISMATCH, TEXTURE_DEFECT, HARDWARE_DAMAGE, or INCORRECT_SIZE)."
+          });
+        }
+        const notes = typeof req.body?.notes === "string" ? req.body.notes.trim() : "";
+        const outcome = await db.runAtomicMutation(
+          () => db.requestOrderReturn({
+            orderId: req.params.id,
+            customerEmail: req.user.email,
+            customerUid: req.user.uid,
+            reason: rawReason,
+            notes
+          })
+        );
+        if (!outcome.ok) {
+          const statusCode = outcome.code === "NOT_FOUND" ? 404 : outcome.code === "FORBIDDEN" || outcome.code === "WINDOW_EXPIRED" ? 403 : outcome.code === "CONFLICT" ? 409 : 400;
+          return res.status(statusCode).json({
+            success: false,
+            code: outcome.code,
+            error: outcome.error
+          });
+        }
+        return res.status(201).json({
+          success: true,
+          order: outcome.order,
+          ticket: outcome.ticket,
+          message: `Return / exchange request registered for ${outcome.order.orderNumber} (Support Desk Ticket ${outcome.ticket.ticketNumber}).`
+        });
+      } catch (err) {
+        return res.status(500).json({ error: err?.message || "Failed to register return request." });
+      }
     });
     apiRouter.post("/personalization-vector", async (req, res) => {
       try {
@@ -13190,6 +13828,173 @@ var init_api = __esm({
         }
       }
     );
+    apiRouter.post(
+      "/store-management/knowledge-base",
+      requireStoreManagementAccess,
+      handleMediaUploadBody,
+      async (req, res) => {
+        try {
+          const contentTypeHeader = String(req.headers["content-type"] || "").toLowerCase();
+          let entryId = "";
+          let title = "";
+          let description = "";
+          let category = "LEATHER_GUIDE";
+          let rawFilename = "";
+          let rawMimeType = "";
+          let fileBuffer = null;
+          let slides;
+          if (Buffer.isBuffer(req.body)) {
+            if (contentTypeHeader.includes("multipart/form-data")) {
+              const parsed = parseMultipartFormData(req.body, String(req.headers["content-type"] || ""));
+              entryId = parsed.fields.id || "";
+              title = parsed.fields.title || "";
+              description = parsed.fields.description || "";
+              const rawCat = (parsed.fields.category || "LEATHER_GUIDE").toUpperCase();
+              if (["LEATHER_GUIDE", "CARE_MANUAL", "CRAFT_DECK", "SUSTAINABILITY"].includes(rawCat)) {
+                category = rawCat;
+              }
+              if (parsed.file) {
+                rawFilename = parsed.file.filename;
+                rawMimeType = parsed.file.mimeType;
+                fileBuffer = parsed.file.buffer;
+              }
+            } else {
+              rawFilename = String(req.headers["x-filename"] || req.query.filename || "");
+              rawMimeType = contentTypeHeader.split(";")[0].trim();
+              title = String(req.headers["x-kb-title"] || req.query.title || "");
+              description = String(req.headers["x-kb-description"] || req.query.description || "");
+              fileBuffer = req.body;
+            }
+          } else if (req.body && typeof req.body === "object") {
+            entryId = String(req.body.id || "").trim();
+            title = String(req.body.title || "").trim();
+            description = String(req.body.description || "").trim();
+            const rawCat = String(req.body.category || "LEATHER_GUIDE").toUpperCase();
+            if (["LEATHER_GUIDE", "CARE_MANUAL", "CRAFT_DECK", "SUSTAINABILITY"].includes(rawCat)) {
+              category = rawCat;
+            }
+            if (Array.isArray(req.body.slides)) {
+              slides = req.body.slides;
+            }
+            rawFilename = String(req.body.filename || req.body.fileName || "").trim();
+            rawMimeType = String(req.body.mimeType || req.body.contentType || "").toLowerCase().trim();
+            const encoded = String(req.body.dataBase64 || req.body.dataUrl || req.body.data || "").trim();
+            const dataUrlMatch = encoded.match(/^data:([^;]+);base64,(.+)$/i);
+            if (dataUrlMatch) {
+              if (!rawMimeType) rawMimeType = dataUrlMatch[1].toLowerCase().trim();
+              fileBuffer = Buffer.from(dataUrlMatch[2], "base64");
+            } else if (encoded) {
+              fileBuffer = Buffer.from(encoded, "base64");
+            }
+          }
+          const existing = entryId ? db.getKnowledgeBase().find((k) => k.id === entryId) : void 0;
+          const finalTitle = title || existing?.title || (rawFilename ? path8.basename(rawFilename, path8.extname(rawFilename)).replace(/[_-]+/g, " ") : "");
+          if (!finalTitle || finalTitle.length < 2) {
+            return res.status(400).json({ error: "Presentation title is required (minimum 2 characters)." });
+          }
+          const finalDescription = description || existing?.description || "Bharatvarsh Atelier leathercraft presentation & patron reference guide.";
+          let fileUrl = existing?.fileUrl;
+          let fileName = existing?.fileName;
+          let fileType = existing?.fileType || "DECK";
+          let mimeType = existing?.mimeType;
+          let sizeBytes = existing?.sizeBytes;
+          if (fileBuffer && fileBuffer.length > 0) {
+            if (fileBuffer.length > MAX_KB_UPLOAD_BYTES) {
+              return res.status(413).json({ error: "Presentation file size must not exceed 30MB." });
+            }
+            const rawExt = path8.extname(rawFilename || "").toLowerCase();
+            const validByExt = Boolean(KB_MIME_BY_EXT[rawExt]);
+            const extByMime = rawMimeType ? KB_EXT_BY_MIME[rawMimeType] : void 0;
+            if (rawExt && !validByExt) {
+              return res.status(400).json({
+                error: "Unsupported file format. Please upload a .pdf, .pptx, or .ppt presentation file."
+              });
+            }
+            if (!validByExt && !extByMime) {
+              return res.status(400).json({
+                error: "Could not verify presentation format. Please upload a valid .pdf, .pptx, or .ppt file."
+              });
+            }
+            const canonicalExt = validByExt ? rawExt : extByMime;
+            const resolvedMime = KB_MIME_BY_EXT[canonicalExt];
+            const rawBase = path8.basename(rawFilename || finalTitle, path8.extname(rawFilename || "")).toLowerCase().replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 48) || "leather_presentation";
+            const safeFileName = `${rawBase}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}${canonicalExt}`;
+            const publicKbDir = path8.resolve(process.cwd(), "public", "assets", "knowledge-base");
+            fs8.mkdirSync(publicKbDir, { recursive: true });
+            fs8.writeFileSync(path8.join(publicKbDir, safeFileName), fileBuffer);
+            const distDir = path8.resolve(process.cwd(), "dist");
+            if (fs8.existsSync(distDir)) {
+              const distKbDir = path8.join(distDir, "assets", "knowledge-base");
+              fs8.mkdirSync(distKbDir, { recursive: true });
+              fs8.writeFileSync(path8.join(distKbDir, safeFileName), fileBuffer);
+            }
+            fileUrl = `/assets/knowledge-base/${safeFileName}`;
+            fileName = rawFilename || safeFileName;
+            fileType = canonicalExt === ".pdf" ? "PDF" : canonicalExt === ".pptx" ? "PPTX" : "PPT";
+            mimeType = resolvedMime;
+            sizeBytes = fileBuffer.length;
+          } else if (!existing && (!slides || slides.length === 0)) {
+            return res.status(400).json({
+              error: "Please attach a presentation file (.pdf, .pptx, or .ppt) to publish in the Knowledge Base."
+            });
+          }
+          const savedEntry = await db.runAtomicMutation(
+            () => db.upsertKnowledgeBaseEntry(
+              {
+                id: entryId || void 0,
+                title: finalTitle,
+                description: finalDescription,
+                category,
+                fileUrl,
+                fileName,
+                fileType,
+                mimeType,
+                sizeBytes,
+                uploadedBy: req.user.email,
+                slides: slides || existing?.slides
+              },
+              req.user.email
+            )
+          );
+          return res.status(existing ? 200 : 201).json({
+            success: true,
+            entry: savedEntry,
+            entries: db.getKnowledgeBase(),
+            message: existing ? `Knowledge Base presentation "${savedEntry.title}" updated.` : `Knowledge Base presentation "${savedEntry.title}" published.`
+          });
+        } catch (err) {
+          return res.status(500).json({ error: err?.message || "Knowledge Base upload failed." });
+        }
+      }
+    );
+    apiRouter.delete("/store-management/knowledge-base/:id", requireStoreManagementAccess, async (req, res) => {
+      try {
+        const removed = await db.runAtomicMutation(
+          () => db.deleteKnowledgeBaseEntry(req.params.id, req.user.email)
+        );
+        if (!removed) {
+          return res.status(404).json({ error: "Knowledge Base presentation not found." });
+        }
+        if (removed.fileUrl && removed.fileUrl.startsWith("/assets/knowledge-base/")) {
+          const basename = path8.basename(removed.fileUrl);
+          const publicPath = path8.resolve(process.cwd(), "public", "assets", "knowledge-base", basename);
+          const distPath = path8.resolve(process.cwd(), "dist", "assets", "knowledge-base", basename);
+          try {
+            if (fs8.existsSync(publicPath)) fs8.unlinkSync(publicPath);
+            if (fs8.existsSync(distPath)) fs8.unlinkSync(distPath);
+          } catch {
+          }
+        }
+        return res.json({
+          success: true,
+          removed,
+          entries: db.getKnowledgeBase(),
+          message: `Removed "${removed.title}" from the Leather Knowledge Base.`
+        });
+      } catch (err) {
+        return res.status(500).json({ error: err?.message || "Failed to delete Knowledge Base entry." });
+      }
+    });
     apiRouter.post("/store-management/catalog", requireStoreManagementAccess, async (req, res) => {
       try {
         const { catalog } = req.body;
@@ -13240,11 +14045,15 @@ async function startServer() {
   );
   app.use(express3.urlencoded({ extended: true, limit: "75mb" }));
   const publicImagesDir = path9.resolve(__dirname, "public", "assets", "images");
+  const publicKnowledgeBaseDir = path9.resolve(__dirname, "public", "assets", "knowledge-base");
   const distDir = path9.resolve(__dirname, "dist");
   const distImagesDir = path9.resolve(distDir, "assets", "images");
+  const distKnowledgeBaseDir = path9.resolve(distDir, "assets", "knowledge-base");
   fs9.mkdirSync(publicImagesDir, { recursive: true });
+  fs9.mkdirSync(publicKnowledgeBaseDir, { recursive: true });
   if (fs9.existsSync(distDir)) {
     fs9.mkdirSync(distImagesDir, { recursive: true });
+    fs9.mkdirSync(distKnowledgeBaseDir, { recursive: true });
   }
   app.get("/api/health", (_req, res) => {
     res.json({
@@ -13262,11 +14071,13 @@ async function startServer() {
   if (isProduction) {
     app.use("/assets/images", express3.static(distImagesDir));
     app.use("/assets/images", express3.static(publicImagesDir));
+    app.use("/assets/knowledge-base", express3.static(distKnowledgeBaseDir));
+    app.use("/assets/knowledge-base", express3.static(publicKnowledgeBaseDir));
     app.use("/src/assets/images", express3.static(distImagesDir));
     app.use("/src/assets/images", express3.static(publicImagesDir));
   } else {
     app.use("/assets/images", express3.static(publicImagesDir));
-    app.use("/src/assets/images", express3.static(publicImagesDir));
+    app.use("/assets/knowledge-base", express3.static(publicKnowledgeBaseDir));
   }
   cartRecovery.startBackgroundWorker(6e4);
   mysqlInitPromise.finally(() => {

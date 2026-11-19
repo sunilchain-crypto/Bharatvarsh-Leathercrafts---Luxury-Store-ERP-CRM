@@ -26,7 +26,8 @@ import {
   PromoCodeRule,
   UserRole,
   OrderStatus,
-  AdminUserCredential
+  AdminUserCredential,
+  KnowledgeBaseEntry
 } from '../types/index.ts';
 import { mysqlAdapter } from './mysqlAdapter.ts';
 import { hashPassword, verifyPassword } from './security.ts';
@@ -61,6 +62,7 @@ interface DatabaseState {
   patronCredentials?: Record<string, PatronCredentialRecord>;
   processedWebhookIds: string[];
   lastDailyReportDate?: string;
+  knowledgeBase?: KnowledgeBaseEntry[];
 }
 
 class RelationalDatabase {
@@ -230,7 +232,111 @@ class RelationalDatabase {
           : []
       }));
     }
+    if (!Array.isArray(raw.knowledgeBase) || raw.knowledgeBase.length === 0) {
+      raw.knowledgeBase = this.getDefaultKnowledgeBaseEntries();
+    }
     return raw as DatabaseState;
+  }
+
+  private getDefaultKnowledgeBaseEntries(): KnowledgeBaseEntry[] {
+    return [
+      {
+        id: 'kb_hide_anatomy_01',
+        title: 'Full-Grain Vegetable-Tanned Leather & Hide Anatomy',
+        description:
+          'How to distinguish full-grain heirloom hides from corrected-grain and split leathers, why natural bark tannins age into rich amber patina, and how we select every cut.',
+        category: 'LEATHER_GUIDE',
+        fileType: 'DECK',
+        uploadedBy: 'support@bharatvarshcrafts.com',
+        uploadedAt: '2026-11-01T00:00:00Z',
+        slides: [
+          {
+            title: '01 · Full-Grain vs Top-Grain vs Split Leather',
+            subtitle: 'Why Bharatvarsh exclusively works with unbuffed full-grain hides and bio-substitutes',
+            points: [
+              'Full-Grain retains the outermost, tightest fiber layer of the hide — resisting stretching, tearing, and peeling for decades.',
+              'Top-Grain (corrected) sands away the surface to hide blemishes, sacrificing breathability and natural patina development.',
+              'Genuine / Split leather uses weaker lower layers bonded with polyurethane coatings that crack within 12–24 months.'
+            ]
+          },
+          {
+            title: '02 · The 45-Day Vegetable Tanning Ritual',
+            subtitle: 'Slow botanical pit tanning using natural bark extracts (Mimosa, Myrobalan & Babul)',
+            points: [
+              'Zero chromium salts or harsh heavy-metal runoffs — gentle on skin and safe for the artisans crafting every piece.',
+              'Rich natural oils stay locked inside the fiber network, creating a warm, earthy aroma unmistakable to connoisseurs.',
+              'Sunlight, hand oils, and daily travel gradually deepen the tone into a one-of-a-kind burnished patina.'
+            ]
+          },
+          {
+            title: '03 · Conscious Cactus Bio-Substitute Craft',
+            subtitle: 'Plant-derived structural leather for patrons seeking zero-animal luxury',
+            points: [
+              'Crafted from mature Nopal cactus leaves harvested sustainably without uprooting the plant.',
+              'Engineered for high abrasion resistance, water repellency, and supple hand-feel across everyday carry silhouettes.',
+              'Paired with the same solid cast-brass fittings and hand-waxed saddle stitching as our heritage leather line.'
+            ]
+          },
+          {
+            title: '04 · Hand Saddle-Stitching & Solid Brass Hardware',
+            subtitle: 'Built to be repaired and passed down, never discarded',
+            points: [
+              'Twin-needle hand saddle stitches lock independently — if a single thread ever abrades, the seam will never unravel.',
+              'Edges are bevelled, hand-dyed, and burnished with pure beeswax across multiple passes for a glass-smooth seal.',
+              'Sand-cast solid brass buckles, push-locks, and D-rings never flake or rust, mellowing alongside the hide.'
+            ]
+          }
+        ]
+      },
+      {
+        id: 'kb_heirloom_care_02',
+        title: 'Heirloom Conditioning, Monsoon Care & Patina Manual',
+        description:
+          'Step-by-step preservation ritual for vegetable-tanned hides, seasonal humidity protection, ink & water mark recovery, and long-term archival storage.',
+        category: 'CARE_MANUAL',
+        fileType: 'DECK',
+        uploadedBy: 'support@bharatvarshcrafts.com',
+        uploadedAt: '2026-11-05T00:00:00Z',
+        slides: [
+          {
+            title: '01 · Everyday Dusting & Horsehair Brushing',
+            subtitle: 'Two minutes once a fortnight keeps natural pores breathing',
+            points: [
+              'Sweep seams, gussets, and brass clasps with a soft horsehair brush or dry unbleached cotton cloth.',
+              'Avoid wet wipes, alcohol sanitizers, or household detergents that strip natural vegetable tannins.',
+              'Allow your piece to rest empty overnight occasionally so the structural temper rebounds naturally.'
+            ]
+          },
+          {
+            title: '02 · Conditioning with Organic Beeswax Balm',
+            subtitle: 'Nourish every 4–6 months or after prolonged dry air-conditioning exposure',
+            points: [
+              'Warm a pea-sized dab of Bharatvarsh Organic Beeswax & Jojoba Balm between clean fingertips.',
+              'Massage in light circular motions across stress bends (straps, fold creases, corners) and rest for 30 minutes.',
+              'Buff gently with a dry lint-free cloth to restore satin lustre without clogging the grain.'
+            ]
+          },
+          {
+            title: '03 · Monsoon & Moisture Protocol',
+            subtitle: 'How to rescue heirloom leather after unexpected rain',
+            points: [
+              'Blot moisture immediately with a clean absorbent cotton towel — never rub vigorously while wet.',
+              'Stuff bags loosely with acid-free tissue paper to hold shape and dry naturally away from direct sunlight or hair dryers.',
+              'Once completely dry (24–36 hours), apply a thin coat of beeswax balm to replenish displaced oils.'
+            ]
+          },
+          {
+            title: '04 · Archival Storage & Lifetime Atelier Support',
+            subtitle: 'Preserving silhouette and brass finish between journeys',
+            points: [
+              'Always store inside your breathable unbleached cotton dust bag — never seal leather inside plastic covers.',
+              'Keep silica sachets nearby during high-humidity months to prevent surface bloom.',
+              'Every Bharatvarsh piece qualifies for complimentary artisan inspection and re-burnishing through My Atelier.'
+            ]
+          }
+        ]
+      }
+    ];
   }
 
   private loadPersistedStateOrSeed(): DatabaseState {
@@ -1457,7 +1563,8 @@ class RelationalDatabase {
       auditLogs,
       config,
       patronCredentials: {},
-      processedWebhookIds: []
+      processedWebhookIds: [],
+      knowledgeBase: this.getDefaultKnowledgeBaseEntries()
     };
   }
 
@@ -2518,6 +2625,9 @@ class RelationalDatabase {
 
     if (status === 'DELIVERED') {
       order.courierStatus = 'DELIVERED';
+      if (!order.deliveredAt) {
+        order.deliveredAt = new Date().toISOString();
+      }
     } else if (status === 'DISPATCHED') {
       order.courierStatus = 'IN_TRANSIT';
     }
@@ -2530,6 +2640,181 @@ class RelationalDatabase {
     );
     this.persistState();
     return order;
+  }
+
+  // --- Knowledge Base Presentations ---
+  public getKnowledgeBase(): KnowledgeBaseEntry[] {
+    if (!Array.isArray(this.state.knowledgeBase)) {
+      this.state.knowledgeBase = this.getDefaultKnowledgeBaseEntries();
+    }
+    return this.state.knowledgeBase;
+  }
+
+  public upsertKnowledgeBaseEntry(
+    entry: Omit<KnowledgeBaseEntry, 'id' | 'uploadedAt'> & { id?: string; uploadedAt?: string },
+    actorEmail: string
+  ): KnowledgeBaseEntry {
+    if (!Array.isArray(this.state.knowledgeBase)) {
+      this.state.knowledgeBase = this.getDefaultKnowledgeBaseEntries();
+    }
+    const nowIso = new Date().toISOString();
+    const existingIdx = entry.id ? this.state.knowledgeBase.findIndex(k => k.id === entry.id) : -1;
+
+    if (existingIdx >= 0) {
+      const prev = this.state.knowledgeBase[existingIdx];
+      const updated: KnowledgeBaseEntry = {
+        ...prev,
+        ...entry,
+        id: prev.id,
+        uploadedBy: actorEmail,
+        uploadedAt: entry.uploadedAt || nowIso
+      };
+      this.state.knowledgeBase[existingIdx] = updated;
+      this.appendAuditEntry(
+        actorEmail,
+        'UPDATE_KNOWLEDGE_BASE',
+        'STORE_MANAGEMENT',
+        `Updated Knowledge Base presentation "${updated.title}" (${updated.fileType})`
+      );
+      this.persistState();
+      return updated;
+    }
+
+    const created: KnowledgeBaseEntry = {
+      ...entry,
+      id: entry.id || `kb_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      uploadedBy: actorEmail,
+      uploadedAt: entry.uploadedAt || nowIso
+    };
+    this.state.knowledgeBase.unshift(created);
+    this.appendAuditEntry(
+      actorEmail,
+      'UPLOAD_KNOWLEDGE_BASE',
+      'STORE_MANAGEMENT',
+      `Published Knowledge Base presentation "${created.title}" (${created.fileType})`
+    );
+    this.persistState();
+    return created;
+  }
+
+  public deleteKnowledgeBaseEntry(id: string, actorEmail: string): KnowledgeBaseEntry | null {
+    if (!Array.isArray(this.state.knowledgeBase)) {
+      return null;
+    }
+    const idx = this.state.knowledgeBase.findIndex(k => k.id === id);
+    if (idx === -1) return null;
+    const [removed] = this.state.knowledgeBase.splice(idx, 1);
+    this.appendAuditEntry(
+      actorEmail,
+      'DELETE_KNOWLEDGE_BASE',
+      'STORE_MANAGEMENT',
+      `Removed Knowledge Base presentation "${removed.title}" (${removed.id})`
+    );
+    this.persistState();
+    return removed;
+  }
+
+  // --- Patron 10-Day Return / Exchange Requests ---
+  public requestOrderReturn(params: {
+    orderId: string;
+    customerEmail: string;
+    customerUid?: string;
+    reason: 'COLOR_MISMATCH' | 'TEXTURE_DEFECT' | 'HARDWARE_DAMAGE' | 'INCORRECT_SIZE';
+    notes?: string;
+  }): {
+    ok: boolean;
+    code?: 'NOT_FOUND' | 'FORBIDDEN' | 'NOT_DELIVERED' | 'CONFLICT' | 'WINDOW_EXPIRED';
+    error?: string;
+    order?: Order;
+    ticket?: SupportTicket;
+    elapsedDays?: number;
+  } {
+    const order = this.state.orders.find(o => o.id === params.orderId || o.orderNumber === params.orderId);
+    if (!order) {
+      return { ok: false, code: 'NOT_FOUND', error: `Order ${params.orderId} not found.` };
+    }
+
+    const cleanEmail = params.customerEmail.trim().toLowerCase();
+    const matchedCustomer = this.getCustomerById(cleanEmail) || (params.customerUid ? this.getCustomerById(params.customerUid) : undefined);
+    const ownsOrder =
+      order.customerEmail.trim().toLowerCase() === cleanEmail ||
+      (matchedCustomer && order.customerId === matchedCustomer.id) ||
+      (params.customerUid && order.customerId === params.customerUid);
+
+    if (!ownsOrder) {
+      return { ok: false, code: 'FORBIDDEN', error: 'You do not have permission to request a return for this order.' };
+    }
+
+    if (order.status === 'RETURNED' || order.returnRequestStatus === 'REQUESTED' || order.returnRequestStatus === 'APPROVED' || order.returnRequestStatus === 'PROCESSED') {
+      return {
+        ok: false,
+        code: 'CONFLICT',
+        error: `A return or exchange request is already recorded for order ${order.orderNumber} (status: ${order.returnRequestStatus || order.status}).`
+      };
+    }
+
+    if (order.status !== 'DELIVERED' && order.courierStatus !== 'DELIVERED') {
+      return {
+        ok: false,
+        code: 'NOT_DELIVERED',
+        error: 'Returns and exchanges can only be requested after the order has been delivered.'
+      };
+    }
+
+    const referenceTimestamp = order.deliveredAt || order.updatedAt || order.createdAt;
+    const deliveredMs = new Date(referenceTimestamp).getTime();
+    const elapsedDays = Number.isFinite(deliveredMs)
+      ? Math.max(0, (Date.now() - deliveredMs) / (1000 * 60 * 60 * 24))
+      : 999;
+
+    if (elapsedDays > 10) {
+      return {
+        ok: false,
+        code: 'WINDOW_EXPIRED',
+        elapsedDays: Math.floor(elapsedDays),
+        error: 'Return and exchange window (10 days from delivery) has expired. No returns or exchanges are permitted after 10 days.'
+      };
+    }
+
+    const nowIso = new Date().toISOString();
+    const cleanNotes = typeof params.notes === 'string' ? params.notes.trim().slice(0, 800) : '';
+    const reasonLabelMap: Record<typeof params.reason, string> = {
+      COLOR_MISMATCH: 'Color / Patina Tone Mismatch',
+      TEXTURE_DEFECT: 'Leather Grain / Stitching Defect',
+      HARDWARE_DAMAGE: 'Brass Hardware Damage',
+      INCORRECT_SIZE: 'Incorrect Size / Fit Exchange'
+    };
+
+    const ticket = this.createSupportTicket({
+      customerId: order.customerId,
+      customerName: order.customerName,
+      customerEmail: order.customerEmail,
+      customerPhone: order.customerPhone,
+      channel: 'EMAIL',
+      subject: `Return / Exchange Request — ${order.orderNumber} (${reasonLabelMap[params.reason]})`,
+      category: params.reason === 'INCORRECT_SIZE' ? 'SIZE_EXCHANGE' : 'DAMAGED_GOODS',
+      priority: 'HIGH',
+      initialMessage: `Patron submitted a 10-day return/exchange request for Order ${order.orderNumber} (${order.items
+        .map(it => `${it.productName} x${it.quantity}`)
+        .join(', ')}). Reason: ${reasonLabelMap[params.reason]}.${cleanNotes ? ` Patron notes: "${cleanNotes}"` : ''}`
+    });
+
+    order.returnRequestStatus = 'REQUESTED';
+    order.returnReason = params.reason;
+    order.returnNotes = cleanNotes || undefined;
+    order.returnRequestedAt = nowIso;
+    order.returnTicketId = ticket.id;
+    order.updatedAt = nowIso;
+
+    this.appendAuditEntry(
+      cleanEmail,
+      'PATRON_RETURN_REQUESTED',
+      'STORE_MANAGEMENT',
+      `Patron requested return/exchange for ${order.orderNumber} within ${elapsedDays.toFixed(1)} days of delivery (Reason: ${params.reason}, Ticket: ${ticket.ticketNumber})`
+    );
+    this.persistState();
+
+    return { ok: true, order, ticket, elapsedDays: Number(elapsedDays.toFixed(2)) };
   }
 
   public recalculateCustomerMetrics(customerId: string) {
@@ -2649,6 +2934,50 @@ class RelationalDatabase {
 
   public getTicketsByCustomer(customerId: string): SupportTicket[] {
     return this.getSupportTickets().filter(t => t.customerId === customerId);
+  }
+
+  public createSupportTicket(payload: {
+    customerId: string;
+    customerName: string;
+    customerEmail: string;
+    customerPhone?: string;
+    channel?: 'WHATSAPP' | 'EMAIL' | 'LIVE_CHAT';
+    subject: string;
+    category: SupportTicket['category'];
+    priority?: SupportTicket['priority'];
+    initialMessage: string;
+  }): SupportTicket {
+    const nowIso = new Date().toISOString();
+    const ticketNum = `TKT-${new Date().getFullYear()}-${881 + this.state.supportTickets.length}`;
+    const ticket: SupportTicket = {
+      id: `tkt_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
+      ticketNumber: ticketNum,
+      customerId: payload.customerId,
+      customerName: payload.customerName,
+      customerEmail: payload.customerEmail,
+      customerPhone: payload.customerPhone,
+      channel: payload.channel || 'EMAIL',
+      subject: payload.subject,
+      category: payload.category,
+      priority: payload.priority || 'HIGH',
+      status: 'OPEN',
+      assignedTo: 'support@bharatvarshcrafts.com',
+      slaBreachHours: 12,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      messages: [
+        {
+          id: `msg_${Date.now()}`,
+          sender: 'PATRON',
+          text: payload.initialMessage,
+          timestamp: nowIso,
+          channel: payload.channel || 'EMAIL'
+        }
+      ]
+    };
+    this.state.supportTickets.unshift(ticket);
+    this.persistState();
+    return ticket;
   }
 
   public addSupportMessage(ticketId: string, text: string, sender: 'PATRON' | 'AGENT' | 'SYSTEM', channel: 'WHATSAPP' | 'EMAIL' | 'LIVE_CHAT') {

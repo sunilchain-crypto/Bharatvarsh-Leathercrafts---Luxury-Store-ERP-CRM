@@ -36,7 +36,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
         <div className="max-w-7xl mx-auto px-6 py-16 lg:py-24 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
           <div className="space-y-6 z-10">
             <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-[0.25em] text-[#C5A059]">
-              <span>Handcrafted in Pune & Kanpur</span>
+              <span>Master Atelier Craftsmanship</span>
               <span aria-hidden="true">·</span>
               <span>Full-Grain Vegetable Tannage</span>
             </div>
@@ -81,7 +81,7 @@ export const Storefront: React.FC<StorefrontProps> = ({
             />
             <div className="absolute inset-0 bg-gradient-to-t from-[#16120E]/80 via-transparent to-transparent" />
             <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between text-xs text-[#EBE4D5]/90 font-mono">
-              <span>Atelier Bench No. 04 · Pune Primary Hub</span>
+              <span>Master Artisan Workbench · Small-Batch Craft</span>
               <span>100% Solid Brass Hardware</span>
             </div>
           </div>
@@ -388,10 +388,10 @@ export const Storefront: React.FC<StorefrontProps> = ({
               The Bharatvarsh Standard
             </span>
             <h2 className="font-display text-3xl font-bold text-[#16120E]">
-              Traceable Kanpur Hides. Assembled in Pune.
+              Traceable Full-Grain Hides. Hand-Assembled for Life.
             </h2>
             <p className="text-sm text-[#4A3E31] leading-relaxed">
-              Modern fast-fashion hides rely on toxic chromium baths that decay within three years. We exclusively use traditional tree bark tannins (mimosa, chestnut, and quebracho) steeped over 60 days and hand-assembled at our Pune Primary Hub. The result is leather that does not wear out—it wears in, accumulating an individual story with every transit.
+              Modern fast-fashion hides rely on toxic chromium baths that decay within three years. We exclusively use traditional tree bark tannins (mimosa, chestnut, and quebracho) steeped over 60 days and hand-assembled by our master artisans. The result is leather that does not wear out—it wears in, accumulating an individual story with every transit.
             </p>
             <div className="grid grid-cols-2 gap-4 pt-2 text-xs text-[#5C4D3E]">
               <div className="flex items-center gap-2">

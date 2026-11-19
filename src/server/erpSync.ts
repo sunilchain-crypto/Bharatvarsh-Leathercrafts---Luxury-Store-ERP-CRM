@@ -261,6 +261,8 @@ export class ERPSynchronizer {
 
       order.status = 'RETURNED';
       order.paymentStatus = 'REFUNDED';
+      order.returnRequestStatus = 'PROCESSED';
+      order.returnReason = rma.reason;
       order.updatedAt = new Date().toISOString();
 
       // Restock in inspected warehouse hub if approved
@@ -311,6 +313,9 @@ export class ERPSynchronizer {
       order.courierStatus = milestone;
       if (milestone === 'DELIVERED') {
         order.status = 'DELIVERED';
+        if (!order.deliveredAt) {
+          order.deliveredAt = new Date().toISOString();
+        }
       }
       order.updatedAt = new Date().toISOString();
 

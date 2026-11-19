@@ -45,7 +45,7 @@ import {
   renderCreditNotePdf,
   renderCreditNoteHtml
 } from './invoicePdf.ts';
-import { sendDailyOrdersReport } from './dailyOrderReport.ts';
+import { sendDailyOrdersReport, generateDailyOrderWorkbook } from './dailyOrderReport.ts';
 import {
   validateIndianCheckoutFields,
   validateIndianPhone,
@@ -138,8 +138,84 @@ function parseMultipartSingleFile(
   return null;
 }
 
+const KB_MIME_BY_EXT: Record<string, string> = {
+  '.pdf': 'application/pdf',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.ppt': 'application/vnd.ms-powerpoint'
+};
+
+const KB_EXT_BY_MIME: Record<string, string> = {
+  'application/pdf': '.pdf',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+  'application/vnd.ms-powerpoint': '.ppt'
+};
+
+const MAX_KB_UPLOAD_BYTES = 30 * 1024 * 1024;
+
+function parseMultipartFormData(
+  body: Buffer,
+  contentType: string
+): { fields: Record<string, string>; file: { filename: string; mimeType: string; buffer: Buffer } | null } {
+  const fields: Record<string, string> = {};
+  let file: { filename: string; mimeType: string; buffer: Buffer } | null = null;
+  const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;\s]+))/i);
+  const boundary = boundaryMatch?.[1] || boundaryMatch?.[2];
+  if (!boundary) return { fields, file };
+
+  const delimiter = Buffer.from(`--${boundary}`);
+  const headerEndMarker = Buffer.from('\r\n\r\n');
+  let searchFrom = 0;
+
+  while (searchFrom < body.length) {
+    const startBoundary = body.indexOf(delimiter, searchFrom);
+    if (startBoundary === -1) break;
+    const afterBoundary = startBoundary + delimiter.length;
+    if (body[afterBoundary] === 45 && body[afterBoundary + 1] === 45) break;
+
+    let partStart = afterBoundary;
+    if (body[partStart] === 13 && body[partStart + 1] === 10) partStart += 2;
+    else if (body[partStart] === 10) partStart += 1;
+
+    const nextBoundary = body.indexOf(delimiter, partStart);
+    if (nextBoundary === -1) break;
+
+    let partEnd = nextBoundary;
+    if (partEnd >= 2 && body[partEnd - 2] === 13 && body[partEnd - 1] === 10) partEnd -= 2;
+    else if (partEnd >= 1 && body[partEnd - 1] === 10) partEnd -= 1;
+
+    const partBuf = body.subarray(partStart, partEnd);
+    const headerEndIdx = partBuf.indexOf(headerEndMarker);
+    if (headerEndIdx !== -1) {
+      const rawHeaders = partBuf.subarray(0, headerEndIdx).toString('utf8');
+      const nameMatch = rawHeaders.match(/name="([^"]+)"/i) || rawHeaders.match(/name=([^;\r\n]+)/i);
+      const filenameMatch = rawHeaders.match(/filename="([^"]+)"/i) || rawHeaders.match(/filename=([^;\r\n]+)/i);
+      const contentBuf = partBuf.subarray(headerEndIdx + 4);
+      if (filenameMatch && !file) {
+        const mimeMatch = rawHeaders.match(/Content-Type:\s*([^\r\n;]+)/i);
+        file = {
+          filename: (filenameMatch[1] || '').trim(),
+          mimeType: (mimeMatch?.[1] || '').trim().toLowerCase(),
+          buffer: contentBuf
+        };
+      } else if (nameMatch) {
+        fields[nameMatch[1].trim()] = contentBuf.toString('utf8').trim();
+      }
+    }
+    searchFrom = nextBoundary;
+  }
+  return { fields, file };
+}
+
 const rawMediaUploadMiddleware = express.raw({
-  type: ['multipart/form-data', 'image/*', 'video/*', 'application/octet-stream'],
+  type: [
+    'multipart/form-data',
+    'image/*',
+    'video/*',
+    'application/pdf',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/octet-stream'
+  ],
   limit: '55mb'
 });
 
@@ -151,7 +227,7 @@ function handleMediaUploadBody(req: Request, res: Response, next: NextFunction) 
     if (err) {
       if (err.type === 'entity.too.large' || err.status === 413) {
         return res.status(413).json({
-          error: 'Uploaded file exceeds maximum allowed payload size (10MB images, 50MB videos).'
+          error: 'Uploaded file exceeds maximum allowed payload size.'
         });
       }
       return res.status(400).json({ error: err.message || 'Invalid media upload payload.' });
@@ -179,6 +255,12 @@ apiRouter.get('/test/critical-paths', requireStoreManagementAccess, async (req: 
 apiRouter.get('/catalog', (req: Request, res: Response) => {
   const catalog = db.getCatalog();
   res.json({ success: true, catalog });
+});
+
+// Public Leather Knowledge Base Presentations & Guides
+apiRouter.get('/knowledge-base', (_req: Request, res: Response) => {
+  const entries = db.getKnowledgeBase();
+  res.json({ success: true, entries });
 });
 
 // Public Storefront Statutory & Operational Metadata (no sensitive secrets/credentials)
@@ -670,6 +752,55 @@ apiRouter.get('/patron/overview', requireAuth, (req: AuthenticatedRequest, res: 
     supplierGstin: cfg.supplierGstin,
     gstRatePercent: cfg.gstRatePercent
   });
+});
+
+// Patron-Initiated Return / Exchange Request (Strict 10-Day Post-Delivery Window)
+apiRouter.post('/patron/orders/:id/return-request', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const allowedReasons = ['COLOR_MISMATCH', 'TEXTURE_DEFECT', 'HARDWARE_DAMAGE', 'INCORRECT_SIZE'] as const;
+    const rawReason = String(req.body?.reason || '').trim().toUpperCase();
+    if (!allowedReasons.includes(rawReason as any)) {
+      return res.status(400).json({
+        error: 'Please select a valid return or exchange reason (COLOR_MISMATCH, TEXTURE_DEFECT, HARDWARE_DAMAGE, or INCORRECT_SIZE).'
+      });
+    }
+
+    const notes = typeof req.body?.notes === 'string' ? req.body.notes.trim() : '';
+    const outcome = await db.runAtomicMutation(() =>
+      db.requestOrderReturn({
+        orderId: req.params.id,
+        customerEmail: req.user!.email,
+        customerUid: req.user!.uid,
+        reason: rawReason as (typeof allowedReasons)[number],
+        notes
+      })
+    );
+
+    if (!outcome.ok) {
+      const statusCode =
+        outcome.code === 'NOT_FOUND'
+          ? 404
+          : outcome.code === 'FORBIDDEN' || outcome.code === 'WINDOW_EXPIRED'
+          ? 403
+          : outcome.code === 'CONFLICT'
+          ? 409
+          : 400;
+      return res.status(statusCode).json({
+        success: false,
+        code: outcome.code,
+        error: outcome.error
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      order: outcome.order,
+      ticket: outcome.ticket,
+      message: `Return / exchange request registered for ${outcome.order!.orderNumber} (Support Desk Ticket ${outcome.ticket!.ticketNumber}).`
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Failed to register return request.' });
+  }
 });
 
 // Debossing Personalization Vector Capture (Scoped strictly to authenticated caller or 'cust_guest')
@@ -1663,6 +1794,21 @@ apiRouter.post('/admin/reports/send-daily-orders', requireMasterAdminAccess, asy
   }
 });
 
+apiRouter.get('/admin/reports/daily-orders-excel', requireStoreManagementAccess, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const targetDateIst = typeof req.query?.date === 'string' ? req.query.date.trim() : undefined;
+    const report = generateDailyOrderWorkbook(targetDateIst);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${report.filename}"`);
+    res.send(report.buffer);
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err.message || 'Failed to export daily Excel workbook.' });
+  }
+});
+
 apiRouter.get('/store-management/integrations-status', requireStoreManagementAccess, (req: AuthenticatedRequest, res: Response) => {
   res.json({ success: true, integrations: getIntegrationsReadiness() });
 });
@@ -1941,6 +2087,199 @@ apiRouter.post(
     }
   }
 );
+
+// Knowledge Base Presentation Upload / Update (.pdf, .pptx, .ppt <= 30MB)
+apiRouter.post(
+  '/store-management/knowledge-base',
+  requireStoreManagementAccess,
+  handleMediaUploadBody,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const contentTypeHeader = String(req.headers['content-type'] || '').toLowerCase();
+      let entryId = '';
+      let title = '';
+      let description = '';
+      let category: 'LEATHER_GUIDE' | 'CARE_MANUAL' | 'CRAFT_DECK' | 'SUSTAINABILITY' = 'LEATHER_GUIDE';
+      let rawFilename = '';
+      let rawMimeType = '';
+      let fileBuffer: Buffer | null = null;
+      let slides: Array<{ title: string; subtitle?: string; points: string[] }> | undefined;
+
+      if (Buffer.isBuffer(req.body)) {
+        if (contentTypeHeader.includes('multipart/form-data')) {
+          const parsed = parseMultipartFormData(req.body, String(req.headers['content-type'] || ''));
+          entryId = parsed.fields.id || '';
+          title = parsed.fields.title || '';
+          description = parsed.fields.description || '';
+          const rawCat = (parsed.fields.category || 'LEATHER_GUIDE').toUpperCase();
+          if (['LEATHER_GUIDE', 'CARE_MANUAL', 'CRAFT_DECK', 'SUSTAINABILITY'].includes(rawCat)) {
+            category = rawCat as typeof category;
+          }
+          if (parsed.file) {
+            rawFilename = parsed.file.filename;
+            rawMimeType = parsed.file.mimeType;
+            fileBuffer = parsed.file.buffer;
+          }
+        } else {
+          rawFilename = String(req.headers['x-filename'] || req.query.filename || '');
+          rawMimeType = contentTypeHeader.split(';')[0].trim();
+          title = String(req.headers['x-kb-title'] || req.query.title || '');
+          description = String(req.headers['x-kb-description'] || req.query.description || '');
+          fileBuffer = req.body;
+        }
+      } else if (req.body && typeof req.body === 'object') {
+        entryId = String(req.body.id || '').trim();
+        title = String(req.body.title || '').trim();
+        description = String(req.body.description || '').trim();
+        const rawCat = String(req.body.category || 'LEATHER_GUIDE').toUpperCase();
+        if (['LEATHER_GUIDE', 'CARE_MANUAL', 'CRAFT_DECK', 'SUSTAINABILITY'].includes(rawCat)) {
+          category = rawCat as typeof category;
+        }
+        if (Array.isArray(req.body.slides)) {
+          slides = req.body.slides;
+        }
+        rawFilename = String(req.body.filename || req.body.fileName || '').trim();
+        rawMimeType = String(req.body.mimeType || req.body.contentType || '').toLowerCase().trim();
+        const encoded = String(req.body.dataBase64 || req.body.dataUrl || req.body.data || '').trim();
+        const dataUrlMatch = encoded.match(/^data:([^;]+);base64,(.+)$/i);
+        if (dataUrlMatch) {
+          if (!rawMimeType) rawMimeType = dataUrlMatch[1].toLowerCase().trim();
+          fileBuffer = Buffer.from(dataUrlMatch[2], 'base64');
+        } else if (encoded) {
+          fileBuffer = Buffer.from(encoded, 'base64');
+        }
+      }
+
+      const existing = entryId ? db.getKnowledgeBase().find(k => k.id === entryId) : undefined;
+      const finalTitle = title || existing?.title || (rawFilename ? path.basename(rawFilename, path.extname(rawFilename)).replace(/[_-]+/g, ' ') : '');
+      if (!finalTitle || finalTitle.length < 2) {
+        return res.status(400).json({ error: 'Presentation title is required (minimum 2 characters).' });
+      }
+      const finalDescription = description || existing?.description || 'Bharatvarsh Atelier leathercraft presentation & patron reference guide.';
+
+      let fileUrl = existing?.fileUrl;
+      let fileName = existing?.fileName;
+      let fileType: 'PDF' | 'PPTX' | 'PPT' | 'DECK' = existing?.fileType || 'DECK';
+      let mimeType = existing?.mimeType;
+      let sizeBytes = existing?.sizeBytes;
+
+      if (fileBuffer && fileBuffer.length > 0) {
+        if (fileBuffer.length > MAX_KB_UPLOAD_BYTES) {
+          return res.status(413).json({ error: 'Presentation file size must not exceed 30MB.' });
+        }
+
+        const rawExt = path.extname(rawFilename || '').toLowerCase();
+        const validByExt = Boolean(KB_MIME_BY_EXT[rawExt]);
+        const extByMime = rawMimeType ? KB_EXT_BY_MIME[rawMimeType] : undefined;
+
+        if (rawExt && !validByExt) {
+          return res.status(400).json({
+            error: 'Unsupported file format. Please upload a .pdf, .pptx, or .ppt presentation file.'
+          });
+        }
+        if (!validByExt && !extByMime) {
+          return res.status(400).json({
+            error: 'Could not verify presentation format. Please upload a valid .pdf, .pptx, or .ppt file.'
+          });
+        }
+
+        const canonicalExt = validByExt ? rawExt : extByMime!;
+        const resolvedMime = KB_MIME_BY_EXT[canonicalExt];
+        const rawBase =
+          path
+            .basename(rawFilename || finalTitle, path.extname(rawFilename || ''))
+            .toLowerCase()
+            .replace(/[^a-z0-9_-]+/g, '_')
+            .replace(/^_+|_+$/g, '')
+            .slice(0, 48) || 'leather_presentation';
+
+        const safeFileName = `${rawBase}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}${canonicalExt}`;
+        const publicKbDir = path.resolve(process.cwd(), 'public', 'assets', 'knowledge-base');
+        fs.mkdirSync(publicKbDir, { recursive: true });
+        fs.writeFileSync(path.join(publicKbDir, safeFileName), fileBuffer);
+
+        const distDir = path.resolve(process.cwd(), 'dist');
+        if (fs.existsSync(distDir)) {
+          const distKbDir = path.join(distDir, 'assets', 'knowledge-base');
+          fs.mkdirSync(distKbDir, { recursive: true });
+          fs.writeFileSync(path.join(distKbDir, safeFileName), fileBuffer);
+        }
+
+        fileUrl = `/assets/knowledge-base/${safeFileName}`;
+        fileName = rawFilename || safeFileName;
+        fileType = canonicalExt === '.pdf' ? 'PDF' : canonicalExt === '.pptx' ? 'PPTX' : 'PPT';
+        mimeType = resolvedMime;
+        sizeBytes = fileBuffer.length;
+      } else if (!existing && (!slides || slides.length === 0)) {
+        return res.status(400).json({
+          error: 'Please attach a presentation file (.pdf, .pptx, or .ppt) to publish in the Knowledge Base.'
+        });
+      }
+
+      const savedEntry = await db.runAtomicMutation(() =>
+        db.upsertKnowledgeBaseEntry(
+          {
+            id: entryId || undefined,
+            title: finalTitle,
+            description: finalDescription,
+            category,
+            fileUrl,
+            fileName,
+            fileType,
+            mimeType,
+            sizeBytes,
+            uploadedBy: req.user!.email,
+            slides: slides || existing?.slides
+          },
+          req.user!.email
+        )
+      );
+
+      return res.status(existing ? 200 : 201).json({
+        success: true,
+        entry: savedEntry,
+        entries: db.getKnowledgeBase(),
+        message: existing
+          ? `Knowledge Base presentation "${savedEntry.title}" updated.`
+          : `Knowledge Base presentation "${savedEntry.title}" published.`
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || 'Knowledge Base upload failed.' });
+    }
+  }
+);
+
+apiRouter.delete('/store-management/knowledge-base/:id', requireStoreManagementAccess, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const removed = await db.runAtomicMutation(() =>
+      db.deleteKnowledgeBaseEntry(req.params.id, req.user!.email)
+    );
+    if (!removed) {
+      return res.status(404).json({ error: 'Knowledge Base presentation not found.' });
+    }
+
+    if (removed.fileUrl && removed.fileUrl.startsWith('/assets/knowledge-base/')) {
+      const basename = path.basename(removed.fileUrl);
+      const publicPath = path.resolve(process.cwd(), 'public', 'assets', 'knowledge-base', basename);
+      const distPath = path.resolve(process.cwd(), 'dist', 'assets', 'knowledge-base', basename);
+      try {
+        if (fs.existsSync(publicPath)) fs.unlinkSync(publicPath);
+        if (fs.existsSync(distPath)) fs.unlinkSync(distPath);
+      } catch {
+        // Non-fatal file cleanup
+      }
+    }
+
+    return res.json({
+      success: true,
+      removed,
+      entries: db.getKnowledgeBase(),
+      message: `Removed "${removed.title}" from the Leather Knowledge Base.`
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Failed to delete Knowledge Base entry.' });
+  }
+});
 
 // Update Catalog Content (Persisted to MySQL + catalog.json)
 apiRouter.post('/store-management/catalog', requireStoreManagementAccess, async (req: AuthenticatedRequest, res: Response) => {

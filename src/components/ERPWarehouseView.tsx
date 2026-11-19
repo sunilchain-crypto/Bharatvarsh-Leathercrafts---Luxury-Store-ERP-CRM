@@ -491,6 +491,19 @@ export const ERPWarehouseView: React.FC<ERPWarehouseViewProps> = ({ authToken, o
       {/* Tab 2: FULFILLMENT & ORDERS */}
       {activeTab === 'ORDERS' && (
         <div className="space-y-4">
+          {orders.some((o) => o.returnRequestStatus === 'REQUESTED') && (
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-xs text-amber-950 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-800 shrink-0" />
+                <span>
+                  <strong>
+                    {orders.filter((o) => o.returnRequestStatus === 'REQUESTED').length} Patron Return / Exchange Request(s)
+                  </strong>{' '}
+                  awaiting warehouse RMA review &amp; inspection.
+                </span>
+              </div>
+            </div>
+          )}
           <div className="bg-white rounded-xl border border-[#221C16]/10 shadow-sm overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
@@ -515,19 +528,28 @@ export const ERPWarehouseView: React.FC<ERPWarehouseViewProps> = ({ authToken, o
                       <div className="text-[11px] text-[#5C4D3E]">{ord.customerEmail}</div>
                     </td>
                     <td className="p-3.5">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          ord.status === 'DELIVERED'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : ord.status === 'DISPATCHED'
-                            ? 'bg-blue-100 text-blue-800'
-                            : ord.status === 'RETURNED'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        {ord.status}
-                      </span>
+                      <div className="space-y-1">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                            ord.status === 'DELIVERED'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : ord.status === 'DISPATCHED'
+                              ? 'bg-blue-100 text-blue-800'
+                              : ord.status === 'RETURNED'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {ord.status}
+                        </span>
+                        {ord.returnRequestStatus === 'REQUESTED' && (
+                          <div className="text-[10px] font-sans text-amber-900 bg-amber-50 border border-amber-300 rounded px-2 py-1">
+                            <strong className="font-mono">RETURN REQUESTED</strong>
+                            {ord.returnReason ? ` · ${ord.returnReason.replace(/_/g, ' ')}` : ''}
+                            {ord.returnNotes ? <div className="text-[#5C4D3E] truncate max-w-[200px]">{ord.returnNotes}</div> : null}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="p-3.5">
                       <div>{ord.awbNumber || 'Generating AWB...'}</div>
@@ -561,11 +583,16 @@ export const ERPWarehouseView: React.FC<ERPWarehouseViewProps> = ({ authToken, o
                             onClick={() => {
                               setRestockChecked(true);
                               setRestockLocation('punePrimaryHub');
+                              setRmaReason(ord.returnReason || 'TEXTURE_DEFECT');
                               setRmaOrder(ord);
                             }}
-                            className="px-2 py-1 text-[10px] font-semibold border border-red-300 text-red-800 rounded hover:bg-red-50"
+                            className={`px-2 py-1 text-[10px] font-semibold rounded ${
+                              ord.returnRequestStatus === 'REQUESTED'
+                                ? 'bg-amber-800 text-white hover:bg-amber-900'
+                                : 'border border-red-300 text-red-800 hover:bg-red-50'
+                            }`}
                           >
-                            Initiate RMA
+                            {ord.returnRequestStatus === 'REQUESTED' ? 'Review Return / RMA' : 'Initiate RMA'}
                           </button>
                         )}
                       </div>

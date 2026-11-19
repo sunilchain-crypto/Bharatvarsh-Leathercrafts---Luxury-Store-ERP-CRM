@@ -9,7 +9,9 @@ import {
   Eye,
   AlertCircle,
   RefreshCw,
-  CheckCircle2
+  CheckCircle2,
+  RotateCcw,
+  X
 } from 'lucide-react';
 import {
   Order,
@@ -62,6 +64,12 @@ export const PatronPortalView: React.FC<PatronPortalViewProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [previewDocNumber, setPreviewDocNumber] = useState<string | null>(null);
   const [downloadNotice, setDownloadNotice] = useState<string | null>(null);
+  const [returnModalOrder, setReturnModalOrder] = useState<Order | null>(null);
+  const [returnReason, setReturnReason] = useState<'COLOR_MISMATCH' | 'TEXTURE_DEFECT' | 'HARDWARE_DAMAGE' | 'INCORRECT_SIZE'>('INCORRECT_SIZE');
+  const [returnNotes, setReturnNotes] = useState('');
+  const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
+  const [returnModalError, setReturnModalError] = useState<string | null>(null);
+  const [returnSuccessBanner, setReturnSuccessBanner] = useState<string | null>(null);
 
   const loadOverview = async () => {
     setIsLoading(true);
@@ -96,6 +104,56 @@ export const PatronPortalView: React.FC<PatronPortalViewProps> = ({
     } catch (e: any) {
       setError(e?.message || 'PDF download failed');
       setDownloadNotice(null);
+    }
+  };
+
+  const getReturnWindowInfo = (ord: Order) => {
+    const isDelivered = ord.status === 'DELIVERED' || ord.courierStatus === 'DELIVERED';
+    if (!isDelivered) {
+      return { isDelivered: false, eligible: false, daysLeft: 0 };
+    }
+    const refTs = ord.deliveredAt || ord.updatedAt || ord.createdAt;
+    const deliveredMs = new Date(refTs).getTime();
+    const elapsedDays = Number.isFinite(deliveredMs)
+      ? Math.max(0, (Date.now() - deliveredMs) / (1000 * 60 * 60 * 24))
+      : 999;
+    const eligible = elapsedDays <= 10;
+    const daysLeft = eligible ? Math.max(0, Math.ceil(10 - elapsedDays)) : 0;
+    return { isDelivered: true, eligible, daysLeft };
+  };
+
+  const handleSubmitReturnRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!returnModalOrder) return;
+    setReturnModalError(null);
+    setIsSubmittingReturn(true);
+    try {
+      const res = await fetch(`/api/patron/orders/${encodeURIComponent(returnModalOrder.id)}/return-request`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          reason: returnReason,
+          notes: returnNotes.trim()
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setReturnModalError(data.error || 'Could not register return request.');
+        return;
+      }
+      setReturnSuccessBanner(
+        data.message || `Return / exchange request submitted for ${returnModalOrder.orderNumber}.`
+      );
+      setReturnModalOrder(null);
+      setReturnNotes('');
+      await loadOverview();
+    } catch (err: any) {
+      setReturnModalError(err?.message || 'Network error submitting return request.');
+    } finally {
+      setIsSubmittingReturn(false);
     }
   };
 
@@ -150,6 +208,22 @@ export const PatronPortalView: React.FC<PatronPortalViewProps> = ({
         </div>
       )}
 
+      {returnSuccessBanner && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{returnSuccessBanner}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReturnSuccessBanner(null)}
+            className="text-[11px] underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Summary Metric Strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="p-5 bg-white rounded-xl border border-[#221C16]/10 shadow-sm space-y-1">
@@ -157,7 +231,7 @@ export const PatronPortalView: React.FC<PatronPortalViewProps> = ({
           <div className="font-mono text-2xl font-bold text-[#16120E] tabular-nums">
             {overview ? overview.orders.length : '...'}
           </div>
-          <span className="text-[11px] text-[#5C4D3E]">Crafted at Pune Primary Hub</span>
+          <span className="text-[11px] text-[#5C4D3E]">Handcrafted Master Atelier Pieces</span>
         </div>
 
         <div className="p-5 bg-white rounded-xl border border-[#221C16]/10 shadow-sm space-y-1">
@@ -257,63 +331,116 @@ export const PatronPortalView: React.FC<PatronPortalViewProps> = ({
                   </button>
                 </div>
               ) : (
-                overview.orders.map((ord) => (
-                  <div key={ord.id} className="p-5 bg-white rounded-xl border border-[#221C16]/10 shadow-sm space-y-4">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-[#221C16]/10">
-                      <div className="space-y-0.5">
-                        <div className="flex flex-wrap items-center gap-2 text-xs">
-                          <span className="font-mono font-bold text-[#16120E] text-sm">{ord.orderNumber}</span>
-                          <span className="text-[#5C4D3E]">·</span>
-                          <span className="font-mono text-[#5C4D3E]">{ord.createdAt.slice(0, 10)}</span>
-                          <span className="text-[#5C4D3E]">·</span>
-                          <span className="font-mono font-semibold text-[#1B332A]">
-                            {ord.status} ({ord.courierStatus || 'IN_TRANSIT'})
-                          </span>
-                        </div>
-                        <div className="text-[11px] font-mono text-[#5C4D3E]">
-                          Courier: {ord.courierPartner || 'SHIPROCKET'} · AWB: <strong className="text-[#16120E]">{ord.awbNumber || 'Allocating...'}</strong>
-                          {ord.shippingAddress?.city ? ` · Destination: ${ord.shippingAddress.city}, ${ord.shippingAddress.state}` : ''}
-                        </div>
-                      </div>
+                overview.orders.map((ord) => {
+                  const retWin = getReturnWindowInfo(ord);
+                  const isAlreadyReturned =
+                    ord.status === 'RETURNED' || ord.returnRequestStatus === 'PROCESSED';
+                  const isReturnPending =
+                    ord.returnRequestStatus === 'REQUESTED' || ord.returnRequestStatus === 'APPROVED';
 
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <div className="text-[10px] uppercase tracking-wider text-[#5C4D3E]">Total Paid</div>
-                          <div className="font-mono font-bold text-sm text-[#16120E] tabular-nums">
-                            ₹{ord.totalAmount.toLocaleString('en-IN')}
+                  return (
+                    <div key={ord.id} className="p-5 bg-white rounded-xl border border-[#221C16]/10 shadow-sm space-y-4">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-[#221C16]/10">
+                        <div className="space-y-0.5">
+                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                            <span className="font-mono font-bold text-[#16120E] text-sm">{ord.orderNumber}</span>
+                            <span className="text-[#5C4D3E]">·</span>
+                            <span className="font-mono text-[#5C4D3E]">{ord.createdAt.slice(0, 10)}</span>
+                            <span className="text-[#5C4D3E]">·</span>
+                            <span className="font-mono font-semibold text-[#1B332A]">
+                              {ord.status} ({ord.courierStatus || 'IN_TRANSIT'})
+                            </span>
+                          </div>
+                          <div className="text-[11px] font-mono text-[#5C4D3E]">
+                            Courier: {ord.courierPartner || 'SHIPROCKET'} · AWB: <strong className="text-[#16120E]">{ord.awbNumber || 'Allocating...'}</strong>
+                            {ord.shippingAddress?.city ? ` · Destination: ${ord.shippingAddress.city}, ${ord.shippingAddress.state}` : ''}
                           </div>
                         </div>
-                        {ord.invoiceNumber && (
-                          <button
-                            type="button"
-                            onClick={() => setPreviewDocNumber(ord.invoiceNumber!)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-[#221C16]/20 rounded hover:bg-[#FAF7F2]"
-                          >
-                            <FileText className="w-3.5 h-3.5 text-[#8B4513]" />
-                            <span>GST Invoice</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
 
-                    <div className="divide-y divide-[#221C16]/5 text-xs">
-                      {ord.items.map((it) => (
-                        <div key={it.id} className="py-2 flex items-center justify-between gap-4">
-                          <div>
-                            <div className="font-semibold text-[#16120E]">{it.productName}</div>
-                            <div className="text-[11px] font-mono text-[#5C4D3E]">
-                              SKU: {it.sku} · Qty: {it.quantity} · HSN: {it.hsnCode}
-                              {it.customization?.monogramInitials ? ` · Debossed: "${it.customization.monogramInitials}" (${it.customization.foilType})` : ''}
+                        <div className="flex flex-wrap items-center gap-3">
+                          <div className="text-right">
+                            <div className="text-[10px] uppercase tracking-wider text-[#5C4D3E]">Total Paid</div>
+                            <div className="font-mono font-bold text-sm text-[#16120E] tabular-nums">
+                              ₹{ord.totalAmount.toLocaleString('en-IN')}
                             </div>
                           </div>
-                          <div className="font-mono font-bold text-[#16120E] tabular-nums shrink-0">
-                            ₹{it.lineTotal.toLocaleString('en-IN')}
-                          </div>
+                          {ord.invoiceNumber && (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewDocNumber(ord.invoiceNumber!)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold border border-[#221C16]/20 rounded hover:bg-[#FAF7F2]"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-[#8B4513]" />
+                              <span>GST Invoice</span>
+                            </button>
+                          )}
                         </div>
-                      ))}
+                      </div>
+
+                      <div className="divide-y divide-[#221C16]/5 text-xs">
+                        {ord.items.map((it) => (
+                          <div key={it.id} className="py-2 flex items-center justify-between gap-4">
+                            <div>
+                              <div className="font-semibold text-[#16120E]">{it.productName}</div>
+                              <div className="text-[11px] font-mono text-[#5C4D3E]">
+                                SKU: {it.sku} · Qty: {it.quantity} · HSN: {it.hsnCode}
+                                {it.customization?.monogramInitials ? ` · Debossed: "${it.customization.monogramInitials}" (${it.customization.foilType})` : ''}
+                              </div>
+                            </div>
+                            <div className="font-mono font-bold text-[#16120E] tabular-nums shrink-0">
+                              ₹{it.lineTotal.toLocaleString('en-IN')}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* 10-Day Return & Exchange Bar */}
+                      {(isAlreadyReturned || isReturnPending || retWin.isDelivered) && (
+                        <div className="pt-3 border-t border-[#221C16]/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                          {isAlreadyReturned ? (
+                            <div className="font-mono text-[11px] font-semibold text-[#1B332A]">
+                              Return Approved &amp; Refunded
+                              {ord.returnReason ? ` · ${ord.returnReason.replace(/_/g, ' ')}` : ''}
+                            </div>
+                          ) : isReturnPending ? (
+                            <div className="font-mono text-[11px] text-[#8B4513]">
+                              <strong>
+                                {ord.returnRequestStatus === 'APPROVED' ? 'Return Approved' : 'Return / Exchange Requested'}
+                              </strong>
+                              {ord.returnReason ? ` · Reason: ${ord.returnReason.replace(/_/g, ' ')}` : ''}
+                              {ord.returnRequestedAt ? ` · Submitted ${ord.returnRequestedAt.slice(0, 10)}` : ''}
+                            </div>
+                          ) : retWin.eligible ? (
+                            <>
+                              <span className="font-mono text-[11px] text-[#5C4D3E]">
+                                {retWin.daysLeft === 0
+                                  ? 'Final day to request a return or exchange (10-day post-delivery policy)'
+                                  : `${retWin.daysLeft} ${retWin.daysLeft === 1 ? 'day' : 'days'} left to request return or exchange`}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setReturnModalError(null);
+                                  setReturnReason('INCORRECT_SIZE');
+                                  setReturnNotes('');
+                                  setReturnModalOrder(ord);
+                                }}
+                                className="inline-flex items-center gap-1.5 self-start sm:self-auto px-3 py-1.5 text-xs font-semibold border border-[#8B4513]/40 text-[#8B4513] rounded hover:bg-[#8B4513] hover:text-white transition-colors"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                                <span>Request Return / Exchange</span>
+                              </button>
+                            </>
+                          ) : (
+                            <span className="font-mono text-[11px] text-[#7A6B5D]">
+                              Return &amp; Exchange Window Closed (10-Day Policy)
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           )}
@@ -502,7 +629,7 @@ export const PatronPortalView: React.FC<PatronPortalViewProps> = ({
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               <div className="lg:col-span-7 p-6 bg-white rounded-xl border border-[#221C16]/10 shadow-sm space-y-4 text-xs leading-relaxed">
                 <span className="text-[10px] font-mono uppercase tracking-widest text-[#8B4513]">
-                  Pune Atelier Preservation Manual
+                  Atelier Preservation Manual
                 </span>
                 <h2 className="font-display text-xl font-bold text-[#16120E]">
                   Vegetable-Tanned Steerhide & Solid Brass Care Protocol
@@ -561,6 +688,105 @@ export const PatronPortalView: React.FC<PatronPortalViewProps> = ({
           authToken={authToken}
           onClose={() => setPreviewDocNumber(null)}
         />
+      )}
+
+      {/* Patron 10-Day Return / Exchange Request Modal */}
+      {returnModalOrder && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#16120E]/70 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="return-modal-title"
+        >
+          <div className="w-full max-w-md rounded-xl border border-[#221C16]/15 bg-[#FAF7F2] p-6 shadow-2xl space-y-4 text-[#221C16]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-widest text-[#8B4513]">
+                  10-Day Return &amp; Exchange Policy
+                </p>
+                <h3 id="return-modal-title" className="font-display text-lg font-bold text-[#16120E] mt-0.5">
+                  Request Return / Exchange
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReturnModalOrder(null)}
+                className="p-1 text-[#5C4D3E] hover:text-[#16120E]"
+                aria-label="Close return request modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-white rounded-lg border border-[#221C16]/10 text-xs font-mono">
+              <div className="font-bold text-[#16120E]">{returnModalOrder.orderNumber}</div>
+              <div className="text-[#5C4D3E] mt-0.5">
+                {returnModalOrder.items.map(i => `${i.productName} ×${i.quantity}`).join(', ')}
+              </div>
+            </div>
+
+            {returnModalError && (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-900 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{returnModalError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmitReturnRequest} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-[11px] font-semibold text-[#5C4D3E] mb-1">
+                  Reason for Return / Exchange *
+                </label>
+                <select
+                  value={returnReason}
+                  onChange={(e) => setReturnReason(e.target.value as any)}
+                  className="w-full px-3 py-2 bg-white border border-[#221C16]/20 rounded text-xs"
+                >
+                  <option value="INCORRECT_SIZE">Incorrect Size / Fit Exchange</option>
+                  <option value="COLOR_MISMATCH">Color / Patina Tone Mismatch</option>
+                  <option value="TEXTURE_DEFECT">Leather Grain / Stitching Defect</option>
+                  <option value="HARDWARE_DAMAGE">Brass Hardware Transit Damage</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-[#5C4D3E] mb-1">
+                  Additional Details (Optional)
+                </label>
+                <textarea
+                  rows={3}
+                  maxLength={800}
+                  value={returnNotes}
+                  onChange={(e) => setReturnNotes(e.target.value)}
+                  placeholder="Share preferred exchange size, pickup timing, or inspection notes..."
+                  className="w-full px-3 py-2 bg-white border border-[#221C16]/20 rounded text-xs"
+                />
+              </div>
+
+              <p className="text-[11px] text-[#5C4D3E] leading-relaxed">
+                Submitting creates a priority Atelier Support Desk ticket and flags your order for
+                insured reverse pickup &amp; RMA review. Pieces must be unused in original packaging.
+              </p>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-[#221C16]/10">
+                <button
+                  type="button"
+                  onClick={() => setReturnModalOrder(null)}
+                  className="px-3.5 py-2 border border-[#221C16]/20 rounded text-[#5C4D3E] hover:bg-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingReturn}
+                  className="px-4 py-2 bg-[#221C16] text-[#FAF7F2] font-semibold rounded hover:bg-[#8B4513] disabled:opacity-50"
+                >
+                  {isSubmittingReturn ? 'Submitting...' : 'Submit Return Request'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

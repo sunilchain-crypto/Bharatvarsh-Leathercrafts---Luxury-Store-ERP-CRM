@@ -261,7 +261,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   </>
                 )}
                 <span className="text-xs text-[#5C4D3E] font-sans">
-                  (+ {effectiveGstPercent}% GST at checkout · Dispatched from Pune Primary Hub)
+                  (+ {effectiveGstPercent}% GST at checkout · Complimentary Insured Dispatch)
                 </span>
               </div>
 
@@ -284,7 +284,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                     }`}
                   >
                     <div className="font-semibold text-sm">Vegetable-Tanned Hide</div>
-                    <div className="text-[11px] opacity-80 mt-0.5">Kanpur Steer · Rich Patina</div>
+                    <div className="text-[11px] opacity-80 mt-0.5">Full-Grain Steer · Rich Patina</div>
                   </button>
 
                   <button
@@ -341,7 +341,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                           {monogram || 'BLC'}
                         </div>
                         <span className="text-[9px] text-[#C5A059]/80 font-mono tracking-wider mt-1 block">
-                          HAND-PRESSED AT PUNE ATELIER
+                          HAND-PRESSED AT OUR MASTER ATELIER
                         </span>
                       </div>
                     </div>

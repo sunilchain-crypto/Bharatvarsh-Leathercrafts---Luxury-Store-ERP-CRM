@@ -31,13 +31,18 @@ import {
   sendTransactionalEmail,
   sendWhatsAppMessage,
   dispatchOrderInvoiceEmailToSupport,
-  getSupportOrderEmailRecipient
+  dispatchOrderConfirmationAndCareGuide,
+  getSupportOrderEmailRecipient,
+  buildSmtpTransportAttempts,
+  isPerOrderEmailDisabled
 } from '../server/integrations.ts';
 import {
   generateDailyOrderWorkbook,
   sendDailyOrdersReport,
   runScheduledDailyOrderReportIfDue,
-  getYesterdayIstDateKey
+  getYesterdayIstDateKey,
+  resetDailyReportSchedulerBackoff,
+  getDailyReportSchedulerStatus
 } from '../server/dailyOrderReport.ts';
 import { erpSync } from '../server/erpSync.ts';
 import { cartRecovery } from '../server/cartRecovery.ts';
@@ -4460,6 +4465,505 @@ export async function runCriticalPathTests(): Promise<{ passed: boolean; results
   } catch (e: any) {
     results.push({
       test: 'Google reCAPTCHA Enterprise Script, Action Execution & Assessment Verification',
+      status: 'FAIL',
+      message: e.message
+    });
+  }
+
+  // TEST 41: Phase 4 & Firebase App Check — AppCheck Init Order, Hub-Neutral Copy, Knowledge Base Upload & Strict 10-Day Return Window
+  try {
+    const dbFile = path.resolve(process.cwd(), 'src/server/data/store_db.json');
+    const preTestDbRaw = fs.existsSync(dbFile) ? fs.readFileSync(dbFile, 'utf-8') : null;
+    const uploadedKbFilesToClean: string[] = [];
+
+    const app = express();
+    app.use(express.json({ limit: '5mb' }));
+    const publicKbDir = path.resolve(process.cwd(), 'public', 'assets', 'knowledge-base');
+    fs.mkdirSync(publicKbDir, { recursive: true });
+    app.use('/assets/knowledge-base', express.static(publicKbDir));
+    app.use('/api', apiRouter);
+    const server = await new Promise<http.Server>(resolve => {
+      const s = app.listen(0, '127.0.0.1', () => resolve(s));
+    });
+
+    try {
+      const port = (server.address() as any).port;
+
+      // 1. Firebase App Check initialized before getAuth(app)
+      const firebaseSrc = fs.readFileSync(path.resolve(process.cwd(), 'src/lib/firebase.ts'), 'utf-8');
+      const idxInitApp = firebaseSrc.indexOf('initializeApp(');
+      const idxInitAppCheck = firebaseSrc.indexOf('initializeAppCheck(');
+      const idxGetAuth = firebaseSrc.indexOf('getAuth(app)');
+      const appCheckOrderOk =
+        firebaseSrc.includes('ReCaptchaEnterpriseProvider') &&
+        idxInitApp > -1 &&
+        idxInitAppCheck > idxInitApp &&
+        idxGetAuth > idxInitAppCheck;
+
+      // 2. Hub-neutral public copy (no Pune/Kanpur/Mumbai/Jaipur/Bengaluru in public storefront & Our Story)
+      //    while ERP warehouse & DB preserve punePrimaryHub and mumbaiWarehouse
+      const storefrontSrc = fs.readFileSync(path.resolve(process.cwd(), 'src/components/Storefront.tsx'), 'utf-8');
+      const ourStorySrc = fs.readFileSync(path.resolve(process.cwd(), 'src/components/OurStoryView.tsx'), 'utf-8');
+      const erpSrc = fs.readFileSync(path.resolve(process.cwd(), 'src/components/ERPWarehouseView.tsx'), 'utf-8');
+      const dbSrc = fs.readFileSync(path.resolve(process.cwd(), 'src/server/db.ts'), 'utf-8');
+      const cityRegex = /\b(pune|mumbai|kanpur|jaipur|bengaluru|pimpri)\b/i;
+      const copySeparationOk =
+        !cityRegex.test(storefrontSrc) &&
+        !cityRegex.test(ourStorySrc) &&
+        erpSrc.includes('punePrimaryHub') &&
+        erpSrc.includes('mumbaiWarehouse') &&
+        dbSrc.includes('punePrimaryHub') &&
+        dbSrc.includes('mumbaiWarehouse');
+
+      // 3. Knowledge Base public GET + Admin upload (.pdf & .pptx), update, static serve, and delete
+      const adminJwt = signSessionJwt({
+        sub: 'uid_master_sunil',
+        email: 'sunilchain@gmail.com',
+        name: 'Sunil Chainani',
+        role: 'STORE_MANAGER'
+      });
+      const patronJwt = signSessionJwt({
+        sub: 'uid_vikram',
+        email: 'vikram.singhania@heritagecrafts.in',
+        name: 'Vikramaditya Singhania',
+        role: 'PATRON'
+      });
+      const otherPatronJwt = signSessionJwt({
+        sub: 'uid_ananya',
+        email: 'ananya.deshmukh@gmail.com',
+        name: 'Ananya Deshmukh',
+        role: 'PATRON'
+      });
+
+      const kbListRes = await fetch(`http://127.0.0.1:${port}/api/knowledge-base`);
+      const kbListJson = await kbListRes.json();
+      const seededKbOk =
+        kbListRes.status === 200 &&
+        Array.isArray(kbListJson.entries) &&
+        kbListJson.entries.length >= 2;
+
+      const kbUnauthRes = await fetch(`http://127.0.0.1:${port}/api/store-management/knowledge-base`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'Unauthorized Deck' })
+      });
+      const kbPatronRes = await fetch(`http://127.0.0.1:${port}/api/store-management/knowledge-base`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${patronJwt}` },
+        body: JSON.stringify({ title: 'Patron Deck' })
+      });
+      const kbBadExtRes = await fetch(`http://127.0.0.1:${port}/api/store-management/knowledge-base`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminJwt}` },
+        body: JSON.stringify({
+          title: 'Malicious Script',
+          filename: 'payload.exe',
+          mimeType: 'application/octet-stream',
+          dataBase64: Buffer.from('MZfake').toString('base64')
+        })
+      });
+
+      const fakePdfBytes = Buffer.from('%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n%%EOF\n', 'utf-8');
+      const kbPdfUploadRes = await fetch(`http://127.0.0.1:${port}/api/store-management/knowledge-base`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminJwt}` },
+        body: JSON.stringify({
+          title: 'Full-Grain Vegetable Tanning Dossier',
+          description: 'Atelier master guide to hide anatomy and wax-burnished patina.',
+          category: 'LEATHER_GUIDE',
+          filename: 'tanning_dossier.pdf',
+          mimeType: 'application/pdf',
+          dataBase64: fakePdfBytes.toString('base64')
+        })
+      });
+      const kbPdfJson = await kbPdfUploadRes.json();
+      const uploadedPdfUrl = String(kbPdfJson.entry?.fileUrl || '');
+      if (uploadedPdfUrl.startsWith('/assets/knowledge-base/')) {
+        uploadedKbFilesToClean.push(path.basename(uploadedPdfUrl));
+      }
+
+      const staticPdfRes = uploadedPdfUrl
+        ? await fetch(`http://127.0.0.1:${port}${uploadedPdfUrl}`)
+        : null;
+      const staticPdfText = staticPdfRes ? await staticPdfRes.text() : '';
+
+      // Upload PPTX
+      const fakePptxBytes = Buffer.from('PK\x03\x04mock-pptx-archive-bytes', 'binary');
+      const kbPptxUploadRes = await fetch(`http://127.0.0.1:${port}/api/store-management/knowledge-base`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminJwt}` },
+        body: JSON.stringify({
+          title: 'Saddle Stitching Presentation',
+          description: 'Hand-stitching workshop slides.',
+          category: 'CRAFT_DECK',
+          filename: 'saddle_stitch.pptx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          dataBase64: fakePptxBytes.toString('base64')
+        })
+      });
+      const kbPptxJson = await kbPptxUploadRes.json();
+      const uploadedPptxUrl = String(kbPptxJson.entry?.fileUrl || '');
+      if (uploadedPptxUrl.startsWith('/assets/knowledge-base/')) {
+        uploadedKbFilesToClean.push(path.basename(uploadedPptxUrl));
+      }
+
+      // Update PDF entry title by id
+      const kbUpdateRes = await fetch(`http://127.0.0.1:${port}/api/store-management/knowledge-base`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminJwt}` },
+        body: JSON.stringify({
+          id: kbPdfJson.entry?.id,
+          title: 'Full-Grain Vegetable Tanning Dossier (Rev 2)',
+          category: 'LEATHER_GUIDE'
+        })
+      });
+      const kbUpdateJson = await kbUpdateRes.json();
+
+      // Delete both uploaded entries and verify disk cleanup
+      const kbDelPdfRes = await fetch(
+        `http://127.0.0.1:${port}/api/store-management/knowledge-base/${kbPdfJson.entry?.id}`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${adminJwt}` } }
+      );
+      const kbDelPptxRes = await fetch(
+        `http://127.0.0.1:${port}/api/store-management/knowledge-base/${kbPptxJson.entry?.id}`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${adminJwt}` } }
+      );
+      const pdfRemovedFromDisk =
+        uploadedPdfUrl.startsWith('/assets/knowledge-base/') &&
+        !fs.existsSync(path.join(publicKbDir, path.basename(uploadedPdfUrl)));
+
+      const kbOk =
+        seededKbOk &&
+        kbUnauthRes.status === 401 &&
+        kbPatronRes.status === 403 &&
+        kbBadExtRes.status === 400 &&
+        kbPdfUploadRes.status === 201 &&
+        kbPdfJson.entry?.fileType === 'PDF' &&
+        staticPdfRes?.status === 200 &&
+        staticPdfText.startsWith('%PDF-1.4') &&
+        kbPptxUploadRes.status === 201 &&
+        kbPptxJson.entry?.fileType === 'PPTX' &&
+        kbUpdateRes.status === 200 &&
+        kbUpdateJson.entry?.title === 'Full-Grain Vegetable Tanning Dossier (Rev 2)' &&
+        kbDelPdfRes.status === 200 &&
+        kbDelPptxRes.status === 200 &&
+        pdfRemovedFromDisk;
+
+      // 4. Strict 10-Day Post-Delivery Patron Return Window
+      const baseAddr = {
+        id: 'addr_ret_test',
+        customerId: 'cust_vikram',
+        street: '10 Heritage Lane',
+        city: 'New Delhi',
+        state: 'Delhi',
+        pincode: '110001',
+        country: 'India',
+        isDefault: true,
+        addressType: 'SHIPPING' as const
+      };
+      const makeOrderPayload = (status: 'PROCESSING' | 'DELIVERED', paymentId: string) => ({
+        customerId: 'cust_vikram',
+        customerName: 'Vikramaditya Singhania',
+        customerEmail: 'vikram.singhania@heritagecrafts.in',
+        customerPhone: '+91 98201 11223',
+        status,
+        currency: 'INR' as const,
+        subtotal: 4200,
+        discountAmount: 0,
+        taxAmount: 756,
+        shippingFee: 0,
+        totalAmount: 4956,
+        paymentGateway: 'RAZORPAY' as const,
+        paymentId,
+        paymentStatus: 'PAID' as const,
+        items: [
+          {
+            id: `item_${paymentId}`,
+            orderId: '',
+            productId: 'prod-m-belt-01',
+            productName: 'The Rajputana Bridle Belt',
+            sku: 'BVL-MEN-BLT-01',
+            category: 'men' as const,
+            quantity: 1,
+            unitPrice: 4200,
+            leatherType: 'VEGETABLE_TANNED_HERITAGE' as const,
+            hsnCode: '4203',
+            gstRate: 0.18,
+            taxAmount: 756,
+            lineTotal: 4956
+          }
+        ],
+        shippingAddress: baseAddr,
+        billingAddress: { ...baseAddr, id: 'addr_ret_bill', addressType: 'BILLING' as const }
+      });
+
+      const processingOrder = await db.createOrderAsync(makeOrderPayload('PROCESSING', 'pay_ret_proc'));
+      const expiredOrder = await db.createOrderAsync(makeOrderPayload('DELIVERED', 'pay_ret_exp'));
+      const eligibleOrder = await db.createOrderAsync(makeOrderPayload('DELIVERED', 'pay_ret_elig'));
+
+      // Set deliveredAt timestamps: 12 days ago (expired) vs 3 days ago (eligible)
+      const nowMs = Date.now();
+      await db.runAtomicMutation(() => {
+        const expRef = db.getOrders().find(o => o.id === expiredOrder.id)!;
+        expRef.deliveredAt = new Date(nowMs - 12 * 24 * 60 * 60 * 1000).toISOString();
+        const eligRef = db.getOrders().find(o => o.id === eligibleOrder.id)!;
+        eligRef.deliveredAt = new Date(nowMs - 3 * 24 * 60 * 60 * 1000).toISOString();
+      });
+
+      // a) Unauthenticated -> 401
+      const retUnauth = await fetch(`http://127.0.0.1:${port}/api/patron/orders/${eligibleOrder.id}/return-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'INCORRECT_SIZE' })
+      });
+      // b) Another patron -> 403
+      const retWrongOwner = await fetch(`http://127.0.0.1:${port}/api/patron/orders/${eligibleOrder.id}/return-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${otherPatronJwt}` },
+        body: JSON.stringify({ reason: 'INCORRECT_SIZE' })
+      });
+      // c) Not yet delivered -> 400
+      const retNotDelivered = await fetch(
+        `http://127.0.0.1:${port}/api/patron/orders/${processingOrder.id}/return-request`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${patronJwt}` },
+          body: JSON.stringify({ reason: 'INCORRECT_SIZE' })
+        }
+      );
+      // d) Delivered 12 days ago -> 403 with exact 10-day policy message
+      const retExpired = await fetch(`http://127.0.0.1:${port}/api/patron/orders/${expiredOrder.id}/return-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${patronJwt}` },
+        body: JSON.stringify({ reason: 'COLOR_MISMATCH', notes: 'Shade slightly darker than expected' })
+      });
+      const retExpiredJson = await retExpired.json();
+
+      // e) Delivered 3 days ago -> 201 + REQUESTED + Support Ticket + PATRON_RETURN_REQUESTED audit log
+      const ticketsBefore = db.getSupportTickets().length;
+      const retEligible = await fetch(`http://127.0.0.1:${port}/api/patron/orders/${eligibleOrder.id}/return-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${patronJwt}` },
+        body: JSON.stringify({ reason: 'INCORRECT_SIZE', notes: 'Need next waist size up' })
+      });
+      const retEligibleJson = await retEligible.json();
+      const ticketsAfter = db.getSupportTickets().length;
+      const hasReturnAudit = db
+        .getAuditLogs()
+        .some(log => log.action === 'PATRON_RETURN_REQUESTED' && log.details.includes(eligibleOrder.orderNumber));
+
+      // f) Duplicate return request -> 409
+      const retDuplicate = await fetch(`http://127.0.0.1:${port}/api/patron/orders/${eligibleOrder.id}/return-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${patronJwt}` },
+        body: JSON.stringify({ reason: 'INCORRECT_SIZE' })
+      });
+
+      const returnWindowOk =
+        retUnauth.status === 401 &&
+        retWrongOwner.status === 403 &&
+        retNotDelivered.status === 400 &&
+        retExpired.status === 403 &&
+        retExpiredJson.error ===
+          'Return and exchange window (10 days from delivery) has expired. No returns or exchanges are permitted after 10 days.' &&
+        retEligible.status === 201 &&
+        retEligibleJson.order?.returnRequestStatus === 'REQUESTED' &&
+        retEligibleJson.order?.returnReason === 'INCORRECT_SIZE' &&
+        ticketsAfter === ticketsBefore + 1 &&
+        hasReturnAudit &&
+        retDuplicate.status === 409;
+
+      if (appCheckOrderOk && copySeparationOk && kbOk && returnWindowOk) {
+        results.push({
+          test: 'Phase 4 & App Check: Init Order, Hub-Neutral Copy, Knowledge Base Upload & Strict 10-Day Return Window',
+          status: 'PASS',
+          message:
+            'Verified Firebase App Check init before getAuth, hub-neutral public copy with ERP hubs preserved, Knowledge Base PDF/PPTX upload/serve/update/delete, and strict 10-day post-delivery patron return enforcement.'
+        });
+      } else {
+        results.push({
+          test: 'Phase 4 & App Check: Init Order, Hub-Neutral Copy, Knowledge Base Upload & Strict 10-Day Return Window',
+          status: 'FAIL',
+          message: `appCheck=${appCheckOrderOk}, copy=${copySeparationOk}, kb=${kbOk} (pdf=${kbPdfUploadRes.status}, pptx=${kbPptxUploadRes.status}, upd=${kbUpdateRes.status}, del=${kbDelPdfRes.status}/${pdfRemovedFromDisk}), returns=${returnWindowOk} (unauth=${retUnauth.status}, owner=${retWrongOwner.status}, proc=${retNotDelivered.status}, exp=${retExpired.status}, elig=${retEligible.status}, dup=${retDuplicate.status})`
+        });
+      }
+    } finally {
+      await new Promise<void>(resolve => server.close(() => resolve()));
+      for (const fname of uploadedKbFilesToClean) {
+        try {
+          const p1 = path.join(publicKbDir, fname);
+          if (fs.existsSync(p1)) fs.unlinkSync(p1);
+          const p2 = path.resolve(process.cwd(), 'dist', 'assets', 'knowledge-base', fname);
+          if (fs.existsSync(p2)) fs.unlinkSync(p2);
+        } catch {
+          // ignore cleanup failure
+        }
+      }
+      if (preTestDbRaw) {
+        fs.writeFileSync(dbFile, preTestDbRaw, 'utf-8');
+        (db as any).state = JSON.parse(preTestDbRaw);
+      }
+    }
+  } catch (e: any) {
+    results.push({
+      test: 'Phase 4 & App Check: Init Order, Hub-Neutral Copy, Knowledge Base Upload & Strict 10-Day Return Window',
+      status: 'FAIL',
+      message: e.message
+    });
+  }
+
+  // TEST 42: Hardened SMTP TLS Negotiation (465/587 Fallback), Optional Per-Order Bypass, Excel Download & Scheduler Backoff
+  try {
+    const dbFile = path.resolve(process.cwd(), 'src/server/data/store_db.json');
+    const preTestDbRaw = fs.existsSync(dbFile) ? fs.readFileSync(dbFile, 'utf-8') : null;
+    const prevDisablePerOrder = process.env.DISABLE_PER_ORDER_EMAILS;
+    const prevSmtpHost = process.env.SMTP_HOST;
+    const prevSmtpPort = process.env.SMTP_PORT;
+    const prevSmtpSecure = process.env.SMTP_SECURE;
+    const prevSmtpUser = process.env.SMTP_USER;
+    const prevSmtpPass = process.env.SMTP_PASS;
+
+    const app = express();
+    app.use(express.json());
+    app.use('/api', apiRouter);
+    const server = await new Promise<http.Server>(resolve => {
+      const s = app.listen(0, '127.0.0.1', () => resolve(s));
+    });
+
+    try {
+      const port = (server.address() as any).port;
+
+      // 1. Port 465 ALWAYS enforces secure=true (even if SMTP_SECURE='"true"' or 'false') + 587 STARTTLS fallback
+      const attempts465 = buildSmtpTransportAttempts({
+        SMTP_HOST: '"smtpout.secureserver.net"',
+        SMTP_PORT: '465',
+        SMTP_SECURE: '"false"'
+      } as any);
+      const attempts587 = buildSmtpTransportAttempts({
+        SMTP_HOST: 'smtpout.secureserver.net',
+        SMTP_PORT: '587',
+        SMTP_SECURE: 'true'
+      } as any);
+
+      const tlsNegotiationOk =
+        attempts465.length === 2 &&
+        attempts465[0].host === 'smtpout.secureserver.net' &&
+        attempts465[0].port === 465 &&
+        attempts465[0].secure === true &&
+        attempts465[1].port === 587 &&
+        attempts465[1].secure === false &&
+        attempts465[1].requireTLS === true &&
+        attempts587.length === 2 &&
+        attempts587[0].port === 587 &&
+        attempts587[0].secure === false &&
+        attempts587[0].requireTLS === true &&
+        attempts587[1].port === 465 &&
+        attempts587[1].secure === true;
+
+      // 2. DISABLE_PER_ORDER_EMAILS="true" skips per-order SMTP cleanly without error
+      process.env.DISABLE_PER_ORDER_EMAILS = '"true"';
+      const perOrderDisabledFlagOk = isPerOrderEmailDisabled();
+      const sampleOrder = db.getOrders()[0];
+      const skippedRes = await dispatchOrderConfirmationAndCareGuide(sampleOrder);
+      const perOrderBypassOk =
+        perOrderDisabledFlagOk &&
+        skippedRes.emailDelivery.smtpConfigured === false &&
+        skippedRes.supportEmailDelivery.smtpConfigured === false &&
+        String(skippedRes.supportEmailDelivery.fallbackReason || '').includes('daily consolidated');
+
+      // 3. Direct yesterday Excel workbook download endpoint + RBAC
+      const adminJwt = signSessionJwt({
+        sub: 'uid_master_sunil',
+        email: 'sunilchain@gmail.com',
+        name: 'Sunil Chainani',
+        role: 'STORE_MANAGER'
+      });
+      const patronJwt = signSessionJwt({
+        sub: 'uid_vikram',
+        email: 'vikram.singhania@heritagecrafts.in',
+        name: 'Vikramaditya Singhania',
+        role: 'PATRON'
+      });
+
+      const dlUnauth = await fetch(`http://127.0.0.1:${port}/api/admin/reports/daily-orders-excel`);
+      const dlPatron = await fetch(`http://127.0.0.1:${port}/api/admin/reports/daily-orders-excel`, {
+        headers: { Authorization: `Bearer ${patronJwt}` }
+      });
+      const dlAdmin = await fetch(`http://127.0.0.1:${port}/api/admin/reports/daily-orders-excel`, {
+        headers: { Authorization: `Bearer ${adminJwt}` }
+      });
+      const dlBytes = Buffer.from(await dlAdmin.arrayBuffer());
+      const dlWb = XLSX.read(dlBytes, { type: 'buffer' });
+      const excelDownloadOk =
+        dlUnauth.status === 401 &&
+        dlPatron.status === 403 &&
+        dlAdmin.status === 200 &&
+        String(dlAdmin.headers.get('content-disposition') || '').includes('.xlsx') &&
+        dlWb.SheetNames.includes('Orders') &&
+        dlWb.SheetNames.includes('Summary');
+
+      // 4. Daily scheduler exponential backoff prevents minute-by-minute error log flood
+      resetDailyReportSchedulerBackoff();
+      await db.runAtomicMutation(() => {
+        db.setLastDailyReportDate('2000-01-01');
+      });
+      // Point SMTP at an immediately refused local port to simulate live SMTP failure quickly
+      process.env.SMTP_HOST = '127.0.0.1';
+      process.env.SMTP_PORT = '1';
+      process.env.SMTP_SECURE = 'false';
+      process.env.SMTP_USER = 'Support@bharatvarshcrafts.com';
+      process.env.SMTP_PASS = 'test-live-pass-for-backoff';
+
+      const errCountBefore = db.getAuditLogs().filter(a => a.action === 'DAILY_ORDER_REPORT_ERROR').length;
+      await runScheduledDailyOrderReportIfDue();
+      const errCountAfterFirst = db.getAuditLogs().filter(a => a.action === 'DAILY_ORDER_REPORT_ERROR').length;
+      // Second immediate scheduled tick must be skipped due to 15-minute backoff
+      await runScheduledDailyOrderReportIfDue();
+      const errCountAfterSecond = db.getAuditLogs().filter(a => a.action === 'DAILY_ORDER_REPORT_ERROR').length;
+      const schedStatus = getDailyReportSchedulerStatus();
+      const backoffOk =
+        errCountAfterFirst === errCountBefore + 1 &&
+        errCountAfterSecond === errCountAfterFirst &&
+        schedStatus.consecutiveFailures === 1 &&
+        Boolean(schedStatus.nextRetryAt);
+
+      if (tlsNegotiationOk && perOrderBypassOk && excelDownloadOk && backoffOk) {
+        results.push({
+          test: 'SMTP 465/587 TLS Negotiation, Per-Order Bypass, Excel Download & Scheduler Backoff',
+          status: 'PASS',
+          message:
+            'Verified canonical 465 SMTPS / 587 STARTTLS fallback & quote stripping, DISABLE_PER_ORDER_EMAILS bypass, direct .xlsx download RBAC, and 15m+ scheduler retry backoff.'
+        });
+      } else {
+        results.push({
+          test: 'SMTP 465/587 TLS Negotiation, Per-Order Bypass, Excel Download & Scheduler Backoff',
+          status: 'FAIL',
+          message: `tls=${tlsNegotiationOk}, perOrder=${perOrderBypassOk}, excel=${excelDownloadOk}, backoff=${backoffOk} (${errCountBefore}->${errCountAfterFirst}->${errCountAfterSecond})`
+        });
+      }
+    } finally {
+      resetDailyReportSchedulerBackoff();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+      if (prevDisablePerOrder !== undefined) process.env.DISABLE_PER_ORDER_EMAILS = prevDisablePerOrder;
+      else delete process.env.DISABLE_PER_ORDER_EMAILS;
+      if (prevSmtpHost !== undefined) process.env.SMTP_HOST = prevSmtpHost;
+      else delete process.env.SMTP_HOST;
+      if (prevSmtpPort !== undefined) process.env.SMTP_PORT = prevSmtpPort;
+      else delete process.env.SMTP_PORT;
+      if (prevSmtpSecure !== undefined) process.env.SMTP_SECURE = prevSmtpSecure;
+      else delete process.env.SMTP_SECURE;
+      if (prevSmtpUser !== undefined) process.env.SMTP_USER = prevSmtpUser;
+      else delete process.env.SMTP_USER;
+      if (prevSmtpPass !== undefined) process.env.SMTP_PASS = prevSmtpPass;
+      else delete process.env.SMTP_PASS;
+      if (preTestDbRaw) {
+        fs.writeFileSync(dbFile, preTestDbRaw, 'utf-8');
+        (db as any).state = JSON.parse(preTestDbRaw);
+      }
+    }
+  } catch (e: any) {
+    results.push({
+      test: 'SMTP 465/587 TLS Negotiation, Per-Order Bypass, Excel Download & Scheduler Backoff',
       status: 'FAIL',
       message: e.message
     });

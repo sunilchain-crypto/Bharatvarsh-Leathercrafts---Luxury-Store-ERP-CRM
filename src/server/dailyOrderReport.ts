@@ -12,6 +12,30 @@ import { Order } from '../types/index.ts';
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 let reportTimer: NodeJS.Timeout | null = null;
 let reportInFlight = false;
+// Backoff state so transient SMTP failures never spam the audit trail every 60 seconds
+let failedDateKey: string | null = null;
+let consecutiveFailureCount = 0;
+let nextRetryAllowedAtMs = 0;
+
+export function resetDailyReportSchedulerBackoff(): void {
+  failedDateKey = null;
+  consecutiveFailureCount = 0;
+  nextRetryAllowedAtMs = 0;
+}
+
+export function getDailyReportSchedulerStatus(): {
+  consecutiveFailures: number;
+  nextRetryAt: string | null;
+  lastDispatchedDate: string | null;
+  yesterdayIstDate: string;
+} {
+  return {
+    consecutiveFailures: consecutiveFailureCount,
+    nextRetryAt: nextRetryAllowedAtMs > Date.now() ? new Date(nextRetryAllowedAtMs).toISOString() : null,
+    lastDispatchedDate: db.getLastDailyReportDate() || null,
+    yesterdayIstDate: getYesterdayIstDateKey()
+  };
+}
 
 export function getYesterdayIstDateKey(referenceNow: Date = new Date()): string {
   const istNow = new Date(referenceNow.getTime() + IST_OFFSET_MS);
@@ -227,6 +251,8 @@ export async function sendDailyOrdersReport(options?: {
   grossRevenue: number;
   totalTax: number;
   deliveryMode: 'LIVE' | 'SANDBOX_FALLBACK';
+  smtpConfigured: boolean;
+  transportUsed?: string;
   messageId?: string;
   fallbackReason?: string;
 }> {
@@ -245,6 +271,7 @@ export async function sendDailyOrdersReport(options?: {
       grossRevenue: 0,
       totalTax: 0,
       deliveryMode: 'SANDBOX_FALLBACK',
+      smtpConfigured: false,
       fallbackReason: `Report for ${targetDateKey} already dispatched`
     };
   }
@@ -253,10 +280,10 @@ export async function sendDailyOrdersReport(options?: {
   const recipient = getSupportOrderEmailRecipient();
   const formattedGross = Math.round(report.grossRevenue).toLocaleString('en-IN');
   const formattedTax = Math.round(report.totalTax).toLocaleString('en-IN');
-  const subject = `Daily Order Summary (${report.dateKey}) — ${report.orderCount} Orders | ₹${formattedGross}`;
+  const subject = `Daily Consolidated Order Summary (${report.dateKey}) — ${report.orderCount} Orders | ₹${formattedGross}`;
 
   const text = [
-    `Bharatvarsh Leathercrafts LLP — Daily Order Summary (${report.dateKey} IST)`,
+    `Bharatvarsh Leathercrafts LLP — Daily Consolidated Order Summary (${report.dateKey} IST)`,
     `Total Orders: ${report.orderCount}`,
     `Gross Revenue: ₹${formattedGross}`,
     `Total Tax Collected: ₹${formattedTax}`,
@@ -268,7 +295,7 @@ export async function sendDailyOrdersReport(options?: {
   <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#FAF7F2;padding:24px;color:#16120E;">
     <div style="max-width:600px;margin:0 auto;background:#FFFFFF;border:1px solid #D8CFC2;padding:24px;border-radius:8px;">
       <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#8B4513;font-weight:700;">Bharatvarsh Leathercrafts LLP · Automated Ledger</div>
-      <h2 style="font-family:Georgia,serif;font-size:20px;margin:8px 0;">Daily Order Summary (${report.dateKey} IST)</h2>
+      <h2 style="font-family:Georgia,serif;font-size:20px;margin:8px 0;">Daily Consolidated Order Summary (${report.dateKey} IST)</h2>
       <div style="background:#FAF7F2;border:1px solid #E5DDD0;padding:14px;border-radius:6px;font-size:13px;line-height:1.8;font-family:monospace;">
         <div><strong>Total Orders:</strong> ${report.orderCount}</div>
         <div><strong>Gross Revenue:</strong> &#8377;${formattedGross}</div>
@@ -294,7 +321,10 @@ export async function sendDailyOrdersReport(options?: {
     ]
   });
 
-  if (delivery.mode === 'LIVE' || !delivery.smtpConfigured) {
+  const liveDispatchFailed = delivery.smtpConfigured && delivery.mode !== 'LIVE';
+
+  if (!liveDispatchFailed) {
+    resetDailyReportSchedulerBackoff();
     await db.runAtomicMutation(() => {
       if (!options?.targetDateIst || options.targetDateIst === getYesterdayIstDateKey()) {
         db.setLastDailyReportDate(report.dateKey);
@@ -303,20 +333,38 @@ export async function sendDailyOrdersReport(options?: {
         options?.actorEmail || 'daily_report_scheduler',
         'DAILY_ORDER_REPORT_SENT',
         'STORE_MANAGEMENT',
-        `Dispatched ${report.filename} to ${recipient} (${report.orderCount} orders, ₹${formattedGross}, Mode: ${delivery.mode})`
+        `Dispatched ${report.filename} to ${recipient} (${report.orderCount} orders, ₹${formattedGross}, Mode: ${delivery.mode}${
+          delivery.transportUsed ? `, Transport: ${delivery.transportUsed}` : ''
+        })`
       );
     });
   } else {
+    // Exponential retry backoff (15m -> 30m -> 60m -> 120m cap) when triggered by scheduler
+    if (!options?.force) {
+      if (failedDateKey !== report.dateKey) {
+        failedDateKey = report.dateKey;
+        consecutiveFailureCount = 1;
+      } else {
+        consecutiveFailureCount += 1;
+      }
+      const backoffMinutes = Math.min(120, 15 * Math.pow(2, consecutiveFailureCount - 1));
+      nextRetryAllowedAtMs = Date.now() + backoffMinutes * 60 * 1000;
+    }
+
     db.logAudit(
       options?.actorEmail || 'daily_report_scheduler',
       'DAILY_ORDER_REPORT_ERROR',
       'STORE_MANAGEMENT',
-      `Failed live SMTP dispatch of ${report.filename} to ${recipient}: ${delivery.fallbackReason || 'Unknown error'}`
+      `Failed live SMTP dispatch of ${report.filename} to ${recipient}: ${delivery.fallbackReason || 'Unknown error'}${
+        !options?.force && nextRetryAllowedAtMs > Date.now()
+          ? ` (next auto-retry in ${Math.round((nextRetryAllowedAtMs - Date.now()) / 60000)}m)`
+          : ''
+      }`
     );
   }
 
   return {
-    success: true,
+    success: !liveDispatchFailed,
     skipped: false,
     dateKey: report.dateKey,
     filename: report.filename,
@@ -324,6 +372,8 @@ export async function sendDailyOrdersReport(options?: {
     grossRevenue: report.grossRevenue,
     totalTax: report.totalTax,
     deliveryMode: delivery.mode,
+    smtpConfigured: delivery.smtpConfigured,
+    transportUsed: delivery.transportUsed,
     messageId: delivery.messageId,
     fallbackReason: delivery.fallbackReason
   };
@@ -334,13 +384,26 @@ export async function runScheduledDailyOrderReportIfDue(): Promise<void> {
   const yesterdayKey = getYesterdayIstDateKey();
   if (db.getLastDailyReportDate() === yesterdayKey) return;
 
+  // Respect retry backoff for the same calendar day so we never spam the audit trail every 60s
+  if (failedDateKey === yesterdayKey && Date.now() < nextRetryAllowedAtMs) {
+    return;
+  }
+
   reportInFlight = true;
   try {
     const result = await sendDailyOrdersReport({ force: false, targetDateIst: yesterdayKey });
     if (!result.skipped) {
-      console.log(
-        `[DailyOrderReport] Dispatched ${result.filename} (${result.orderCount} orders, mode: ${result.deliveryMode})`
-      );
+      if (result.success) {
+        console.log(
+          `[DailyOrderReport] Dispatched ${result.filename} (${result.orderCount} orders, mode: ${result.deliveryMode}${
+            result.transportUsed ? `, via ${result.transportUsed}` : ''
+          })`
+        );
+      } else {
+        console.warn(
+          `[DailyOrderReport] SMTP dispatch deferred for ${result.filename}: ${result.fallbackReason || 'Transport error'}`
+        );
+      }
     }
   } catch (err: any) {
     console.error('[DailyOrderReport] Scheduled report failed:', err?.message || err);

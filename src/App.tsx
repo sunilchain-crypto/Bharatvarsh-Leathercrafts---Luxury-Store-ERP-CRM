@@ -14,6 +14,9 @@ import { StoreManagementSettings } from './components/StoreManagementSettings.ts
 import { CatalogManager } from './components/CatalogManager.tsx';
 import { PatronAuthModal } from './components/PatronAuthModal.tsx';
 import { PatronPortalView } from './components/PatronPortalView.tsx';
+import { OurStoryView } from './components/OurStoryView.tsx';
+import { KnowledgeBaseView } from './components/KnowledgeBaseView.tsx';
+import { LegalPoliciesModal, LegalPolicyTab } from './components/LegalPoliciesModal.tsx';
 import { CartItem, AuthUser } from './types/index.ts';
 import { auth, onIdTokenChanged, signOutFirebase } from './lib/firebase.ts';
 
@@ -28,6 +31,7 @@ export default function App() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [activePolicyTab, setActivePolicyTab] = useState<LegalPolicyTab | null>(null);
   const [resumedCartContext, setResumedCartContext] = useState<{ cartId?: string; email?: string }>({});
   const [defaultGstRatePercent, setDefaultGstRatePercent] = useState<number>(18);
   const [appNotice, setAppNotice] = useState<{ type: 'success' | 'warning' | 'error' | 'info'; message: string } | null>(null);
@@ -72,7 +76,7 @@ export default function App() {
   const canViewAdminConsole = isAuthorizedStaff && staffRole === 'STORE_MANAGER';
 
   const canAccessTab = (tab: string): boolean => {
-    if (tab === 'storefront') return true;
+    if (tab === 'storefront' || tab === 'our-story' || tab === 'knowledge-base') return true;
     if (tab === 'my-atelier') return isSignedIn;
     if (tab === 'crm' || tab === 'inbox' || tab === 'kanban') return canViewCrm;
     if (tab === 'erp') return canViewErp;
@@ -431,6 +435,10 @@ export default function App() {
           />
         )}
 
+        {currentTab === 'our-story' && <OurStoryView onNavigate={handleSelectTab} />}
+
+        {currentTab === 'knowledge-base' && <KnowledgeBaseView />}
+
         {isSignedIn && currentTab === 'my-atelier' && currentUser && (
           <PatronPortalView
             currentUser={currentUser}
@@ -495,7 +503,7 @@ export default function App() {
           <div className="space-y-3">
             <BrandLogo size="md" lightText />
             <p className="text-[#EBE4D5]/70">
-              Heirloom saddlery, transit folios, and custom vegetable-tanned leather goods. Handcrafted at our Pune Primary Hub and Kanpur tanneries.
+              Heirloom saddlery, transit folios, and bespoke vegetable-tanned &amp; conscious leather goods. Built to carry your character for generations.
             </p>
             <div className="text-[11px] font-mono text-[#C5A059]">
               GSTIN: 27AABCB1234F1Z8
@@ -503,39 +511,55 @@ export default function App() {
           </div>
 
           <div className="space-y-2">
-            <div className="font-bold text-[#FAF7F2] uppercase tracking-wider">Solution Engines</div>
-            <div className="text-[#EBE4D5]/70 space-y-1">
-              <div>Everyday Carry & Bridle Belts</div>
-              <div>Transit Folios & Executive Luggage</div>
-              <div>Lifetime Heirloom Care & Balm Kits</div>
-              <div>B2B Bespoke Corporate Gifting</div>
+            <div className="font-bold text-[#FAF7F2] uppercase tracking-wider">Explore The Atelier</div>
+            <div className="text-[#EBE4D5]/70 space-y-1.5 flex flex-col items-start">
+              <button type="button" onClick={() => handleSelectTab('storefront')} className="hover:text-[#C5A059] transition-colors">
+                Collections &amp; Everyday Carry
+              </button>
+              <button type="button" onClick={() => handleSelectTab('our-story')} className="hover:text-[#C5A059] transition-colors">
+                Our Story &amp; Heritage
+              </button>
+              <button type="button" onClick={() => handleSelectTab('knowledge-base')} className="hover:text-[#C5A059] transition-colors">
+                Leather Knowledge Base
+              </button>
+              <button type="button" onClick={() => handleSelectTab('my-atelier')} className="hover:text-[#C5A059] transition-colors">
+                My Atelier &amp; Order Tracking
+              </button>
             </div>
           </div>
 
           <div className="space-y-2">
-            <div className="font-bold text-[#FAF7F2] uppercase tracking-wider">Atelier Operations</div>
-            <div className="text-[#EBE4D5]/70 space-y-1">
-              <div>Pune Primary Hub · Pimpri-Chinchwad</div>
-              <div>Mumbai Commercial Warehouse Hub</div>
-              <div>Shiprocket & Delhivery Express AWBs</div>
-              <div>support@bharatvarshcrafts.com</div>
+            <div className="font-bold text-[#FAF7F2] uppercase tracking-wider">Patron Policies</div>
+            <div className="text-[#EBE4D5]/70 space-y-1.5 flex flex-col items-start">
+              <button type="button" onClick={() => setActivePolicyTab('TERMS')} className="hover:text-[#C5A059] transition-colors">
+                Terms &amp; Conditions
+              </button>
+              <button type="button" onClick={() => setActivePolicyTab('RETURNS')} className="hover:text-[#C5A059] transition-colors">
+                Return &amp; Exchange Policy (10-Day)
+              </button>
+              <button type="button" onClick={() => setActivePolicyTab('SHIPPING')} className="hover:text-[#C5A059] transition-colors">
+                Shipping &amp; Dispatch Policy
+              </button>
+              <button type="button" onClick={() => setActivePolicyTab('PRIVACY')} className="hover:text-[#C5A059] transition-colors">
+                Privacy Policy
+              </button>
             </div>
           </div>
 
           <div className="space-y-2">
-            <div className="font-bold text-[#FAF7F2] uppercase tracking-wider">Quality & Compliance</div>
+            <div className="font-bold text-[#FAF7F2] uppercase tracking-wider">Quality &amp; Concierge</div>
             <div className="text-[#EBE4D5]/70 space-y-1">
-              <div>Role-Based Server Access Control</div>
               <div>GST Compliant Tax Invoicing</div>
               <div>2-Year Solid Brass Hardware Warranty</div>
               <div>Insured Express Pan-India Dispatch</div>
+              <div>support@bharatvarshcrafts.com</div>
             </div>
           </div>
         </div>
 
         <div className="max-w-7xl mx-auto pt-8 mt-8 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between text-[11px] text-[#EBE4D5]/60 font-mono">
           <div>© {new Date().getFullYear()} Bharatvarsh Leathercrafts LLP. All rights reserved.</div>
-          <div className="mt-2 sm:mt-0">Pune Primary Hub · Handcrafted Heirloom Leathergoods</div>
+          <div className="mt-2 sm:mt-0">Carry Your Character · Handcrafted Heirloom Leathergoods</div>
         </div>
       </footer>
 
@@ -568,6 +592,14 @@ export default function App() {
         resumedEmail={resumedCartContext.email}
         resumedCartId={resumedCartContext.cartId}
         onStockLimitNotice={(msg) => showNotice('warning', msg)}
+        onOpenPolicy={(tab) => setActivePolicyTab(tab)}
+      />
+
+      {/* Legal Policies Modal */}
+      <LegalPoliciesModal
+        activeTab={activePolicyTab}
+        onChangeTab={setActivePolicyTab}
+        onClose={() => setActivePolicyTab(null)}
       />
 
       {/* Account Sign In Modal */}
