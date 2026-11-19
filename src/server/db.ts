@@ -60,6 +60,7 @@ interface DatabaseState {
   config: StoreManagementConfig;
   patronCredentials?: Record<string, PatronCredentialRecord>;
   processedWebhookIds: string[];
+  lastDailyReportDate?: string;
 }
 
 class RelationalDatabase {
@@ -274,6 +275,15 @@ class RelationalDatabase {
     return this.lastPersistError;
   }
 
+  public getLastDailyReportDate(): string | undefined {
+    return this.state.lastDailyReportDate;
+  }
+
+  public setLastDailyReportDate(dateKey: string): void {
+    this.state.lastDailyReportDate = dateKey;
+    this.persistState();
+  }
+
   /**
    * Queues durable persistence to local disk and Hostinger MySQL (if connected).
    * Callers performing API writes should await flushPersistence() or persistStateAsync()
@@ -363,13 +373,40 @@ class RelationalDatabase {
     }
     let changed = false;
     const products = catalog.products.map((prod: any) => {
-      if (!Array.isArray(prod.images)) return prod;
-      const nextImages = prod.images.map((img: any) => {
-        const normalized = this.normalizeImageUrl(img);
-        if (normalized !== img) changed = true;
-        return normalized;
-      });
-      return { ...prod, images: nextImages };
+      const sourceImages = Array.isArray(prod.images)
+        ? prod.images
+        : typeof prod.image === 'string' && prod.image.trim()
+        ? [prod.image]
+        : [];
+      const nextImages = sourceImages
+        .map((img: any) => this.normalizeImageUrl(img))
+        .filter(Boolean)
+        .slice(0, 4);
+      const nextPrimaryImage = nextImages[0] || '';
+      const nextVideoUrl = typeof prod.videoUrl === 'string' ? this.normalizeImageUrl(prod.videoUrl) : '';
+
+      const imagesChanged =
+        !Array.isArray(prod.images) ||
+        prod.images.length !== nextImages.length ||
+        nextImages.some((img: string, idx: number) => img !== prod.images[idx]);
+      const primaryChanged = prod.image !== nextPrimaryImage;
+      const videoChanged = Boolean(prod.videoUrl) && nextVideoUrl !== prod.videoUrl;
+
+      if (!imagesChanged && !primaryChanged && !videoChanged) {
+        return prod;
+      }
+      changed = true;
+      const updated = {
+        ...prod,
+        images: nextImages,
+        image: nextPrimaryImage
+      };
+      if (nextVideoUrl) {
+        updated.videoUrl = nextVideoUrl;
+      } else {
+        delete updated.videoUrl;
+      }
+      return updated;
     });
     return {
       catalog: changed ? { ...catalog, products } : catalog,
@@ -439,9 +476,18 @@ class RelationalDatabase {
       const mumbaiStock = inv ? inv.stockByLocation.mumbaiWarehouse : 0;
       const totalStock = puneStock + mumbaiStock;
       const isAvailable = totalStock > 0;
+      const images = (
+        Array.isArray(prod.images)
+          ? prod.images
+          : typeof prod.image === 'string' && prod.image.trim()
+          ? [prod.image.trim()]
+          : []
+      ).slice(0, 4);
 
       return {
         ...prod,
+        images,
+        image: images[0] || '',
         stockCount: totalStock,
         puneStock,
         mumbaiStock,
@@ -459,6 +505,8 @@ class RelationalDatabase {
   private applyCatalogUpdateInMemory(catalogData: any, actorEmail: string) {
     const rawProducts = Array.isArray(catalogData.products) ? catalogData.products : [];
     const seenSkus = new Set<string>();
+    const cleanProducts: any[] = [];
+
     for (const rawProd of rawProducts) {
       const normalizedSku = typeof rawProd?.sku === 'string' ? rawProd.sku.trim().toUpperCase() : '';
       if (!normalizedSku) {
@@ -468,19 +516,71 @@ class RelationalDatabase {
         throw new Error(`Duplicate SKU detected: "${rawProd.sku.trim()}". Every catalog piece must have a unique SKU.`);
       }
       seenSkus.add(normalizedSku);
+
+      const numPrice = Number(rawProd.price);
+      if (!Number.isFinite(numPrice) || numPrice < 0) {
+        throw new Error(`MRP price must be a valid non-negative number for "${rawProd.name || normalizedSku}".`);
+      }
+
+      let cleanOfferPrice: number | undefined;
+      if (rawProd.offerPrice !== undefined && rawProd.offerPrice !== null && String(rawProd.offerPrice).trim() !== '') {
+        const parsedOffer = Number(rawProd.offerPrice);
+        if (!Number.isFinite(parsedOffer) || parsedOffer < 0) {
+          throw new Error(`Offer price must be a valid non-negative number for "${rawProd.name || normalizedSku}".`);
+        }
+        if (parsedOffer > 0) {
+          if (parsedOffer > numPrice) {
+            throw new Error(
+              `Offer price (₹${parsedOffer}) cannot exceed MRP price (₹${numPrice}) for "${rawProd.name || normalizedSku}".`
+            );
+          }
+          cleanOfferPrice = parsedOffer;
+        }
+      }
+
+      const rawImageList = Array.isArray(rawProd.images)
+        ? rawProd.images
+        : typeof rawProd.image === 'string' && rawProd.image.trim()
+        ? [rawProd.image]
+        : [];
+      const normalizedImages = rawImageList.map((img: any) => this.normalizeImageUrl(img)).filter(Boolean);
+      if (normalizedImages.length > 4) {
+        throw new Error(`Maximum 4 product images allowed for "${rawProd.name || normalizedSku}".`);
+      }
+
+      const cleanVideoUrl =
+        typeof rawProd.videoUrl === 'string' ? this.normalizeImageUrl(rawProd.videoUrl) : '';
+
+      const {
+        stockCount: _stockCount,
+        puneStock: _puneStock,
+        mumbaiStock: _mumbaiStock,
+        isActive: _isActive,
+        initialPuneStock: _initialPuneStock,
+        initialMumbaiStock: _initialMumbaiStock,
+        offerPrice: _ignoredOffer,
+        videoUrl: _ignoredVideo,
+        image: _ignoredImage,
+        images: _ignoredImages,
+        ...rest
+      } = rawProd;
+
+      const cleanedProduct: any = {
+        ...rest,
+        sku: String(rawProd.sku).trim(),
+        price: numPrice,
+        images: normalizedImages,
+        image: normalizedImages[0] || ''
+      };
+      if (cleanOfferPrice !== undefined) {
+        cleanedProduct.offerPrice = cleanOfferPrice;
+      }
+      if (cleanVideoUrl) {
+        cleanedProduct.videoUrl = cleanVideoUrl;
+      }
+      cleanProducts.push(cleanedProduct);
     }
 
-    const cleanProducts = rawProducts.map((p: any) => {
-      const { stockCount, puneStock, mumbaiStock, isActive, initialPuneStock, initialMumbaiStock, ...rest } = p;
-      const normalizedImages = Array.isArray(p.images)
-        ? p.images.map((img: any) => this.normalizeImageUrl(img)).filter(Boolean)
-        : [];
-      return {
-        ...rest,
-        sku: String(p.sku).trim(),
-        ...(Array.isArray(p.images) ? { images: normalizedImages } : {})
-      };
-    });
     const cleanCatalog = {
       categories: catalogData.categories || [],
       products: cleanProducts
@@ -2018,6 +2118,7 @@ class RelationalDatabase {
     utmSource?: string;
     utmMedium?: string;
     updatePhone?: boolean;
+    updateFullName?: boolean;
     address?: {
       street: string;
       city: string;
@@ -2039,7 +2140,10 @@ class RelationalDatabase {
     if (existing) {
       if (data.identityUid && !existing.identityUid) existing.identityUid = data.identityUid;
       if (data.phone && (data.updatePhone || !existing.phone)) existing.phone = data.phone;
-      if (data.fullName && (!existing.fullName || existing.fullName === 'Valued Patron')) {
+      if (
+        data.fullName &&
+        (data.updateFullName || !existing.fullName || existing.fullName === 'Valued Patron')
+      ) {
         existing.fullName = data.fullName;
       }
       if (this.isStoreManagementAuthorized(cleanEmail)) {
@@ -2584,7 +2688,7 @@ class RelationalDatabase {
       existing.phone = cart.phone || existing.phone;
       existing.lastActiveAt = new Date().toISOString();
       if (!existing.checkoutUrl || existing.checkoutUrl.includes('resume=new')) {
-        existing.checkoutUrl = `/checkout?resume=${encodeURIComponent(existing.id)}`;
+        existing.checkoutUrl = `/?resume=${encodeURIComponent(existing.id)}`;
       }
       this.persistState();
       return existing;
@@ -2602,7 +2706,7 @@ class RelationalDatabase {
       isAbandoned: false,
       recoveryStage: 'DETECTED',
       recoveryAttempts: 0,
-      checkoutUrl: `/checkout?resume=${encodeURIComponent(resolvedId)}`,
+      checkoutUrl: `/?resume=${encodeURIComponent(resolvedId)}`,
       lastActiveAt: new Date().toISOString()
     };
     this.state.carts.push(newCart);
@@ -2637,6 +2741,16 @@ class RelationalDatabase {
   public triggerCartRecovery(cartId: string, channel: 'EMAIL' | 'WHATSAPP'): { success: boolean; message: string; cart: CartRecord } {
     const cart = this.state.carts.find(c => c.id === cartId);
     if (!cart) throw new Error(`Cart ${cartId} not found`);
+
+    if (!cart.email && cart.customerId) {
+      const cust = this.getCustomerById(cart.customerId);
+      if (cust?.email) cart.email = cust.email;
+      if (!cart.phone && cust?.phone) cart.phone = cust.phone;
+    }
+
+    if (channel === 'EMAIL' && (!cart.email || !cart.email.includes('@'))) {
+      throw new Error(`Patron email address is missing or invalid for cart ${cartId}.`);
+    }
 
     const twoHoursMs = 2 * 60 * 60 * 1000;
     if (cart.lastRecoveryTriggerAt && Date.now() - new Date(cart.lastRecoveryTriggerAt).getTime() < twoHoursMs) {

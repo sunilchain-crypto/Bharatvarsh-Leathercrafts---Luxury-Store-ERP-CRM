@@ -65,7 +65,41 @@ export class CartRecoveryEngine {
 
   public buildCheckoutResumeUrl(cartId: string): string {
     const token = this.signResumeToken(cartId);
-    return `/checkout?resume=${encodeURIComponent(cartId)}&token=${encodeURIComponent(token)}`;
+    return `/?resume=${encodeURIComponent(cartId)}&token=${encodeURIComponent(token)}`;
+  }
+
+  public resolveCartRecipient(cartId: string): {
+    cart: CartRecord;
+    email: string;
+    phone: string;
+    inCooldown: boolean;
+  } {
+    const cart = db.getCartById(cartId);
+    if (!cart) {
+      throw new Error(`Cart ${cartId} not found`);
+    }
+    const matchedCustomer =
+      (cart.customerId ? db.getCustomerById(cart.customerId) : undefined) ||
+      (cart.email ? db.getCustomerById(cart.email) : undefined);
+
+    const resolvedEmail = (cart.email || matchedCustomer?.email || '').trim();
+    const resolvedPhone = (cart.phone || matchedCustomer?.phone || '').trim();
+    const twoHoursMs = 2 * 60 * 60 * 1000;
+    const inCooldown = Boolean(
+      cart.lastRecoveryTriggerAt && Date.now() - new Date(cart.lastRecoveryTriggerAt).getTime() < twoHoursMs
+    );
+
+    return {
+      cart: {
+        ...cart,
+        email: resolvedEmail || cart.email,
+        phone: resolvedPhone || cart.phone,
+        checkoutUrl: this.buildCheckoutResumeUrl(cart.id)
+      },
+      email: resolvedEmail,
+      phone: resolvedPhone,
+      inCooldown
+    };
   }
 
   /**

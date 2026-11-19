@@ -1,6 +1,7 @@
 /**
  * Client-Side Google Firebase Authentication SDK Initialization
- * Loads configuration from firebase-applet-config.json.
+ * Supports Google Sign-In, Firebase Email/Password Registration & Sign-In,
+ * Password Reset Emails, and Sign-In Method inspection.
  */
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
@@ -8,6 +9,11 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
+  sendPasswordResetEmail,
+  fetchSignInMethodsForEmail,
   signOut,
   onAuthStateChanged,
   onIdTokenChanged,
@@ -39,6 +45,40 @@ export async function signInWithGoogle(): Promise<{ user: User; idToken: string 
   const result = await signInWithPopup(auth, googleProvider);
   const idToken = await result.user.getIdToken();
   return { user: result.user, idToken };
+}
+
+export async function registerWithFirebaseEmail(
+  email: string,
+  password: string,
+  displayName: string
+): Promise<{ user: User; idToken: string }> {
+  const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+  if (displayName.trim()) {
+    await updateProfile(cred.user, { displayName: displayName.trim() }).catch(() => {});
+  }
+  const idToken = await cred.user.getIdToken(true);
+  return { user: cred.user, idToken };
+}
+
+export async function signInWithFirebaseEmail(
+  email: string,
+  password: string
+): Promise<{ user: User; idToken: string }> {
+  const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+  const idToken = await cred.user.getIdToken();
+  return { user: cred.user, idToken };
+}
+
+export async function requestFirebasePasswordReset(email: string): Promise<void> {
+  await sendPasswordResetEmail(auth, email.trim());
+}
+
+export async function getFirebaseSignInMethods(email: string): Promise<string[]> {
+  try {
+    return await fetchSignInMethodsForEmail(auth, email.trim());
+  } catch {
+    return [];
+  }
 }
 
 export async function signOutFirebase(): Promise<void> {

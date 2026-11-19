@@ -9,7 +9,9 @@
  */
 
 import nodemailer from 'nodemailer';
-import { Order, CartRecord, SupportTicket } from '../types/index.ts';
+import { Order, CartRecord, SupportTicket, GSTInvoice } from '../types/index.ts';
+import { db } from './db.ts';
+import { renderTaxInvoicePdf, REGISTERED_OFFICE_ADDRESS_HTML } from './invoicePdf.ts';
 
 export type GatewayExecutionMode = 'LIVE' | 'SANDBOX_FALLBACK';
 
@@ -533,25 +535,63 @@ export async function allocateCourierAwb(params: {
 // 3. MESSAGING ADAPTERS (SMTP & WHATSAPP)
 // ==========================================
 
+export interface EmailAttachment {
+  filename: string;
+  content: Buffer | string;
+  contentType?: string;
+}
+
+export function getSupportOrderEmailRecipient(): string {
+  const configured = process.env.SUPPORT_ORDER_EMAIL || process.env.SMTP_SUPPORT_EMAIL;
+  if (configured && isConfiguredCredential(configured)) {
+    return configured.trim();
+  }
+  return 'Support@bharatvarshcrafts.com';
+}
+
+export function getMissingSmtpReason(): string {
+  const missing: string[] = [];
+  if (!isConfiguredCredential(process.env.SMTP_HOST)) missing.push('SMTP_HOST');
+  if (!isConfiguredCredential(process.env.SMTP_USER)) missing.push('SMTP_USER');
+  if (!isConfiguredCredential(process.env.SMTP_PASS)) missing.push('SMTP_PASS');
+  if (missing.length === 0) return '';
+  return `Missing ${missing.join(', ')} in server environment`;
+}
+
 export async function sendTransactionalEmail(params: {
   to: string;
   subject: string;
   text: string;
   html?: string;
+  attachments?: EmailAttachment[];
 }): Promise<{
   mode: GatewayExecutionMode;
   channel: 'EMAIL';
   messageId: string;
+  smtpConfigured: boolean;
   fallbackReason?: string;
 }> {
+  const recipient = (params.to || '').trim();
+  if (!recipient || !recipient.includes('@')) {
+    return {
+      mode: 'SANDBOX_FALLBACK',
+      channel: 'EMAIL',
+      messageId: `email_err_${Date.now()}`,
+      smtpConfigured: false,
+      fallbackReason: 'Missing or invalid recipient email address'
+    };
+  }
+
   const host = process.env.SMTP_HOST;
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
   const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 465;
   const secure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : port === 465;
-  const from = process.env.SMTP_SUPPORT_EMAIL || user || 'support@bharatvarshcrafts.com';
+  const from = process.env.SMTP_SUPPORT_EMAIL || user || 'Support@bharatvarshcrafts.com';
+  const smtpConfigured =
+    isConfiguredCredential(host) && isConfiguredCredential(user) && isConfiguredCredential(pass);
 
-  if (isConfiguredCredential(host) && isConfiguredCredential(user) && isConfiguredCredential(pass)) {
+  if (smtpConfigured) {
     try {
       const transporter = nodemailer.createTransport({
         host,
@@ -561,22 +601,27 @@ export async function sendTransactionalEmail(params: {
       });
       const info = await transporter.sendMail({
         from: `"Bharatvarsh Leathercrafts LLP" <${from}>`,
-        to: params.to,
+        to: recipient,
         subject: params.subject,
         text: params.text,
-        html: params.html || `<p>${params.text.replace(/\n/g, '<br/>')}</p>`
+        html: params.html || `<p>${params.text.replace(/\n/g, '<br/>')}</p>`,
+        ...(Array.isArray(params.attachments) && params.attachments.length > 0
+          ? { attachments: params.attachments }
+          : {})
       });
       return {
         mode: 'LIVE',
         channel: 'EMAIL',
-        messageId: info.messageId || `smtp_${Date.now()}`
+        messageId: info.messageId || `smtp_${Date.now()}`,
+        smtpConfigured: true
       };
     } catch (err: any) {
       return {
         mode: 'SANDBOX_FALLBACK',
         channel: 'EMAIL',
         messageId: `email_sbx_${Date.now()}`,
-        fallbackReason: err.message
+        smtpConfigured: true,
+        fallbackReason: `SMTP transport error: ${err.message}`
       };
     }
   }
@@ -585,9 +630,12 @@ export async function sendTransactionalEmail(params: {
     mode: 'SANDBOX_FALLBACK',
     channel: 'EMAIL',
     messageId: `email_sbx_${Date.now()}`,
-    fallbackReason: 'SMTP credentials not configured'
+    smtpConfigured: false,
+    fallbackReason: getMissingSmtpReason() || 'SMTP credentials not configured'
   };
 }
+
+export const sendEmail = sendTransactionalEmail;
 
 export async function sendWhatsAppMessage(params: {
   toPhone?: string;
@@ -653,10 +701,191 @@ export async function sendWhatsAppMessage(params: {
   };
 }
 
+function resolveOrderInvoiceContext(order: Order) {
+  const config = db.getConfig();
+  const storedInvoice = db
+    .getInvoices()
+    .find(inv => inv.orderId === order.id || (order.invoiceNumber && inv.invoiceNumber === order.invoiceNumber));
+  const customer = db.getCustomerById(order.customerId) || db.getCustomerById(order.customerEmail);
+  const defaultAddress = customer ? db.getDefaultCustomerAddress(customer.id) : undefined;
+  const shipState = order.shippingAddress?.state || defaultAddress?.state || 'Maharashtra';
+  const isInterState = shipState.trim().toLowerCase() !== 'maharashtra';
+  const taxableValue = Math.max(0, order.subtotal - (order.discountAmount || 0));
+
+  const invoice: GSTInvoice = storedInvoice || {
+    id: `inv_summary_${order.id}`,
+    invoiceNumber: order.invoiceNumber || order.orderNumber,
+    orderId: order.id,
+    customerId: order.customerId,
+    supplierGstin: config.supplierGstin || '27AABCB1234F1Z8',
+    invoiceDate: order.createdAt,
+    supplyState: 'Maharashtra',
+    placeOfSupply: shipState,
+    isInterState,
+    taxableValue,
+    cgstAmount: isInterState ? 0 : Math.round(order.taxAmount / 2),
+    sgstAmount: isInterState ? 0 : order.taxAmount - Math.round(order.taxAmount / 2),
+    igstAmount: isInterState ? order.taxAmount : 0,
+    totalInvoiceAmount: order.totalAmount,
+    status: 'ISSUED'
+  };
+
+  const pdfBuffer = renderTaxInvoicePdf(invoice, order, config, { customer, defaultAddress });
+  const safeFilename = `${invoice.invoiceNumber.replace(/[/\\]/g, '-')}.pdf`;
+
+  return { config, invoice, customer, defaultAddress, pdfBuffer, safeFilename };
+}
+
+function escapeEmailHtml(val: string): string {
+  return String(val || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+export async function dispatchOrderInvoiceEmailToSupport(order: Order) {
+  const supportTo = getSupportOrderEmailRecipient();
+  const { invoice, defaultAddress, pdfBuffer, safeFilename } = resolveOrderInvoiceContext(order);
+  const addr = order.shippingAddress || defaultAddress;
+  const addrLine = addr
+    ? [addr.street, addr.city, addr.state, addr.pincode ? `PIN ${addr.pincode}` : '', addr.country || 'India']
+        .filter(Boolean)
+        .join(', ')
+    : invoice.placeOfSupply;
+
+  const itemsHtml = order.items
+    .map(
+      it => `
+      <tr>
+        <td style="padding:8px;border-bottom:1px solid #EFEAE2;">
+          <strong>${escapeEmailHtml(it.productName)}</strong><br/>
+          <span style="font-size:11px;color:#5C4D3E;font-family:monospace;">SKU: ${escapeEmailHtml(it.sku)} · ${
+            it.leatherType === 'BIO_SUBSTITUTE_CACTUS' ? 'Bio-Cactus' : 'Veg-Tanned Heritage'
+          }</span>
+        </td>
+        <td style="padding:8px;border-bottom:1px solid #EFEAE2;font-size:12px;">${
+          it.customization?.monogramInitials
+            ? `Initials: <strong>${escapeEmailHtml(it.customization.monogramInitials)}</strong> (${escapeEmailHtml(
+                it.customization.foilType
+              )})`
+            : 'None'
+        }</td>
+        <td style="padding:8px;border-bottom:1px solid #EFEAE2;text-align:center;font-family:monospace;">${it.quantity}</td>
+        <td style="padding:8px;border-bottom:1px solid #EFEAE2;text-align:right;font-family:monospace;">&#8377;${Math.round(
+          it.lineTotal
+        ).toLocaleString('en-IN')}</td>
+      </tr>`
+    )
+    .join('');
+
+  const taxSummaryLine = invoice.isInterState
+    ? `IGST: ₹${Math.round(invoice.igstAmount).toLocaleString('en-IN')}`
+    : `CGST: ₹${Math.round(invoice.cgstAmount).toLocaleString('en-IN')} · SGST: ₹${Math.round(
+        invoice.sgstAmount
+      ).toLocaleString('en-IN')}`;
+
+  const subject = `New Order Placed: ${order.orderNumber} — ₹${Math.round(order.totalAmount).toLocaleString(
+    'en-IN'
+  )} (${order.customerName})`;
+
+  const html = `
+  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#FAF7F2;padding:24px;color:#16120E;">
+    <div style="max-width:680px;margin:0 auto;background:#FFFFFF;border:1px solid #D8CFC2;padding:28px;border-radius:8px;">
+      <div style="border-bottom:2px solid #8B4513;padding-bottom:14px;margin-bottom:18px;">
+        <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#8B4513;font-weight:700;">Bharatvarsh Leathercrafts LLP · New Sales Order</div>
+        <h2 style="margin:6px 0 4px;font-family:Georgia,serif;font-size:20px;">${escapeEmailHtml(order.orderNumber)} · &#8377;${Math.round(
+    order.totalAmount
+  ).toLocaleString('en-IN')}</h2>
+        <div style="font-size:12px;color:#5C4D3E;">Invoice: <strong>${escapeEmailHtml(invoice.invoiceNumber)}</strong> · Gateway: <strong>${escapeEmailHtml(
+    order.paymentGateway
+  )}</strong> (${escapeEmailHtml(order.paymentStatus)})</div>
+      </div>
+
+      <div style="background:#FAF7F2;border:1px solid #E5DDD0;padding:14px;border-radius:6px;font-size:12px;line-height:1.6;margin-bottom:18px;">
+        <div><strong>Patron:</strong> ${escapeEmailHtml(order.customerName)} (${escapeEmailHtml(order.customerEmail)})</div>
+        <div><strong>Phone:</strong> ${escapeEmailHtml(order.customerPhone || 'N/A')}</div>
+        <div><strong>Shipping Address:</strong> ${escapeEmailHtml(addrLine)}</div>
+        <div><strong>Place of Supply:</strong> ${escapeEmailHtml(invoice.placeOfSupply)} (${
+    invoice.isInterState ? 'Inter-State IGST' : 'Intra-State CGST + SGST'
+  })</div>
+      </div>
+
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:18px;">
+        <thead>
+          <tr style="background:#FAF7F2;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#5C4D3E;">
+            <th style="padding:8px;">Piece &amp; SKU</th>
+            <th style="padding:8px;">Monogram Specs</th>
+            <th style="padding:8px;text-align:center;">Qty</th>
+            <th style="padding:8px;text-align:right;">Line Total</th>
+          </tr>
+        </thead>
+        <tbody>${itemsHtml}</tbody>
+      </table>
+
+      <div style="font-size:12px;background:#FAF7F2;padding:12px;border-radius:6px;font-family:monospace;">
+        <div>Subtotal: &#8377;${Math.round(order.subtotal).toLocaleString('en-IN')}${
+    order.discountAmount > 0
+      ? ` · Discount (${escapeEmailHtml(order.discountCode || 'PROMO')}): -&#8377;${Math.round(
+          order.discountAmount
+        ).toLocaleString('en-IN')}`
+      : ''
+  }</div>
+        <div>Taxable Value: &#8377;${Math.round(invoice.taxableValue).toLocaleString('en-IN')} · ${escapeEmailHtml(
+    taxSummaryLine
+  )}</div>
+        <div style="margin-top:6px;font-size:14px;font-weight:700;">Total Amount: &#8377;${Math.round(
+          order.totalAmount
+        ).toLocaleString('en-IN')}</div>
+      </div>
+
+      <div style="margin-top:16px;font-size:11px;color:#5C4D3E;">
+        Registered Office: ${REGISTERED_OFFICE_ADDRESS_HTML}. Official GST Tax Invoice PDF (${escapeEmailHtml(
+    safeFilename
+  )}) is attached.
+      </div>
+    </div>
+  </div>`;
+
+  const text = [
+    `New Order Placed: ${order.orderNumber} — ₹${Math.round(order.totalAmount).toLocaleString('en-IN')}`,
+    `Patron: ${order.customerName} | Email: ${order.customerEmail} | Phone: ${order.customerPhone || 'N/A'}`,
+    `Shipping Address: ${addrLine}`,
+    `Invoice: ${invoice.invoiceNumber} | Payment: ${order.paymentGateway} (${order.paymentStatus})`,
+    `Tax Breakdown: Taxable ₹${invoice.taxableValue} | ${taxSummaryLine}`,
+    '',
+    'Items:',
+    ...order.items.map(
+      it =>
+        `- ${it.productName} (${it.sku}) x${it.quantity} — ₹${it.lineTotal}${
+          it.customization?.monogramInitials
+            ? ` [Monogram: ${it.customization.monogramInitials} / ${it.customization.foilType}]`
+            : ''
+        }`
+    )
+  ].join('\n');
+
+  return sendTransactionalEmail({
+    to: supportTo,
+    subject,
+    text,
+    html,
+    attachments: [
+      {
+        filename: safeFilename,
+        content: pdfBuffer,
+        contentType: 'application/pdf'
+      }
+    ]
+  });
+}
+
 export async function dispatchOrderConfirmationAndCareGuide(order: Order): Promise<{
   emailDelivery: Awaited<ReturnType<typeof sendTransactionalEmail>>;
+  supportEmailDelivery: Awaited<ReturnType<typeof sendTransactionalEmail>>;
   whatsappDelivery: Awaited<ReturnType<typeof sendWhatsAppMessage>>;
 }> {
+  const { pdfBuffer, safeFilename } = resolveOrderInvoiceContext(order);
   const summaryLines = order.items.map(
     it =>
       `• ${it.productName} (${it.quantity}x) — ₹${it.unitPrice.toLocaleString('en-IN')}${
@@ -680,12 +909,20 @@ export async function dispatchOrderConfirmationAndCareGuide(order: Order): Promi
     'Bharatvarsh Atelier · Pune Primary Hub'
   ].join('\n');
 
-  const [emailDelivery, whatsappDelivery] = await Promise.all([
+  const [emailDelivery, supportEmailDelivery, whatsappDelivery] = await Promise.all([
     sendTransactionalEmail({
       to: order.customerEmail,
       subject: `Bharatvarsh Atelier Confirmation · ${order.orderNumber}`,
-      text
+      text,
+      attachments: [
+        {
+          filename: safeFilename,
+          content: pdfBuffer,
+          contentType: 'application/pdf'
+        }
+      ]
     }),
+    dispatchOrderInvoiceEmailToSupport(order),
     sendWhatsAppMessage({
       toPhone: order.customerPhone,
       text: `Bharatvarsh Atelier: Order ${order.orderNumber} confirmed (₹${order.totalAmount.toLocaleString(
@@ -694,7 +931,7 @@ export async function dispatchOrderConfirmationAndCareGuide(order: Order): Promi
     })
   ]);
 
-  return { emailDelivery, whatsappDelivery };
+  return { emailDelivery, supportEmailDelivery, whatsappDelivery };
 }
 
 export async function dispatchCartRecoveryNotice(
@@ -712,10 +949,66 @@ export async function dispatchCartRecoveryNotice(
       )}) awaits at Pune Hub. Use ${promoCode} at checkout: ${fullCheckoutUrl}`
     });
   }
-  return sendTransactionalEmail({
+
+  const itemRowsHtml = cart.items
+    .map(
+      it => `
+      <tr>
+        <td style="padding:8px;border-bottom:1px solid #EFEAE2;">
+          <strong>${escapeEmailHtml(it.productName)}</strong>
+          <div style="font-size:11px;color:#5C4D3E;font-family:monospace;">SKU: ${escapeEmailHtml(it.sku || '')}</div>
+        </td>
+        <td style="padding:8px;border-bottom:1px solid #EFEAE2;text-align:center;font-family:monospace;">${it.quantity}</td>
+        <td style="padding:8px;border-bottom:1px solid #EFEAE2;text-align:right;font-family:monospace;">&#8377;${Math.round(
+          Number(it.unitPrice || 0) * Math.max(1, Number(it.quantity || 1))
+        ).toLocaleString('en-IN')}</td>
+      </tr>`
+    )
+    .join('');
+
+  const html = `
+  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#FAF7F2;padding:24px;color:#16120E;">
+    <div style="max-width:600px;margin:0 auto;background:#FFFFFF;border:1px solid #D8CFC2;padding:28px;border-radius:8px;">
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#8B4513;font-weight:700;">Bharatvarsh Leathercrafts LLP</div>
+      <h2 style="font-family:Georgia,serif;font-size:20px;margin:8px 0;">Your Reserved Atelier Bag Awaits</h2>
+      <p style="font-size:13px;color:#5C4D3E;line-height:1.6;">
+        Your handcrafted leathercraft selection remains reserved at our Pune Primary Hub. Complete your commission today using exclusive privilege code <strong style="color:#16120E;font-family:monospace;">${escapeEmailHtml(
+          promoCode
+        )}</strong>.
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin:16px 0;">
+        <thead>
+          <tr style="background:#FAF7F2;text-align:left;font-size:10px;text-transform:uppercase;color:#5C4D3E;">
+            <th style="padding:8px;">Selected Piece</th>
+            <th style="padding:8px;text-align:center;">Qty</th>
+            <th style="padding:8px;text-align:right;">Value</th>
+          </tr>
+        </thead>
+        <tbody>${itemRowsHtml}</tbody>
+      </table>
+      <div style="font-size:13px;font-weight:700;text-align:right;margin-bottom:18px;font-family:monospace;">
+        Bag Subtotal: &#8377;${Math.round(cart.subtotal).toLocaleString('en-IN')}
+      </div>
+      <div style="text-align:center;margin:20px 0;">
+        <a href="${escapeEmailHtml(
+          fullCheckoutUrl
+        )}" style="display:inline-block;padding:12px 24px;background:#221C16;color:#FAF7F2;text-decoration:none;font-weight:700;font-size:13px;border-radius:6px;">
+          Resume Reserved Checkout (${escapeEmailHtml(promoCode)})
+        </a>
+      </div>
+      <div style="font-size:11px;color:#5C4D3E;border-top:1px solid #EFEAE2;padding-top:12px;">
+        Direct link: ${escapeEmailHtml(fullCheckoutUrl)}
+      </div>
+    </div>
+  </div>`;
+
+  return sendEmail({
     to: cart.email,
-    subject: 'Your Handcrafted Bharatvarsh Atelier Bag Awaits',
-    text: `Your selected pieces (${itemNames}) remain reserved at our Pune Primary Hub.\n\nComplete your commission with code ${promoCode}: ${fullCheckoutUrl}`
+    subject: `Your Handcrafted Bharatvarsh Atelier Bag Awaits (${promoCode})`,
+    text: `Your selected pieces (${itemNames}, Subtotal: ₹${Math.round(cart.subtotal).toLocaleString(
+      'en-IN'
+    )}) remain reserved at our Pune Primary Hub.\n\nComplete your commission with code ${promoCode}: ${fullCheckoutUrl}`,
+    html
   });
 }
 

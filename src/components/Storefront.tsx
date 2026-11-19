@@ -1,35 +1,6 @@
 import React, { useState } from 'react';
-import { Sparkles, Shield, ArrowRight, CheckCircle2, Ban } from 'lucide-react';
-import { CartItem } from '../types/index.ts';
-
-interface Product {
-  id: string;
-  category: string;
-  productType: string;
-  name: string;
-  sku: string;
-  price: number;
-  currency: string;
-  description: string;
-  features: string[];
-  images: string[];
-  hsnCode: string;
-  gstRate?: number;
-  solutionEngine: string;
-  inStock: boolean;
-  isActive?: boolean;
-  stockCount?: number;
-  allowCustomization: boolean;
-  careKitIncluded: boolean;
-}
-
-interface Category {
-  id: string;
-  name: string;
-  slug: string;
-  description: string;
-  productTypes: string[];
-}
+import { Sparkles, Shield, ArrowRight, CheckCircle2, Ban, Film } from 'lucide-react';
+import { CartItem, Category, Product } from '../types/index.ts';
 
 interface StorefrontProps {
   categories: Category[];
@@ -248,6 +219,20 @@ export const Storefront: React.FC<StorefrontProps> = ({
             const inBagQty = bagQtyByProductId[product.id] || 0;
             const maxStock = typeof product.stockCount === 'number' ? product.stockCount : Infinity;
             const isAtBagLimit = isAvailable && inBagQty >= maxStock;
+            const primaryImage = product.images?.[0] || product.image || '/assets/images/product_men_belt_wallet_1794461808951.jpg';
+            const hasActiveOffer =
+              typeof product.offerPrice === 'number' &&
+              product.offerPrice > 0 &&
+              product.offerPrice < product.price;
+            const effectivePrice =
+              typeof product.offerPrice === 'number' &&
+              product.offerPrice > 0 &&
+              product.offerPrice <= product.price
+                ? product.offerPrice
+                : product.price;
+            const discountPercent = hasActiveOffer
+              ? Math.round(((product.price - product.offerPrice!) / product.price) * 100)
+              : 0;
 
             return (
               <div
@@ -262,16 +247,30 @@ export const Storefront: React.FC<StorefrontProps> = ({
                     className="relative aspect-[4/3] bg-[#FAF7F2] overflow-hidden cursor-pointer"
                   >
                     <img
-                      src={product.images[0]}
+                      src={primaryImage}
                       alt={product.name}
                       referrerPolicy="no-referrer"
                       className={`w-full h-full object-cover transition-transform duration-300 ${
                         isAvailable ? 'group-hover:scale-105' : 'grayscale opacity-55'
                       }`}
                     />
-                    <div className="absolute top-3 left-3 bg-[#FAF7F2]/90 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider text-[#16120E]">
-                      {product.productType}
+                    <div className="absolute top-3 left-3 flex items-center gap-1.5">
+                      <span className="bg-[#FAF7F2]/90 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider text-[#16120E]">
+                        {product.productType}
+                      </span>
+                      {hasActiveOffer && discountPercent > 0 && (
+                        <span className="bg-[#1B332A] text-[#FAF7F2] px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider shadow-sm">
+                          {discountPercent}% OFF
+                        </span>
+                      )}
                     </div>
+
+                    {product.videoUrl && isAvailable && (
+                      <div className="absolute bottom-3 right-3 bg-[#16120E]/80 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider text-[#FAF7F2] flex items-center gap-1">
+                        <Film className="w-3 h-3 text-[#C5A059]" />
+                        <span>Film</span>
+                      </div>
+                    )}
 
                     {!isAvailable ? (
                       <div className="absolute inset-0 flex items-center justify-center bg-[#16120E]/45 backdrop-blur-[1px]">
@@ -317,10 +316,19 @@ export const Storefront: React.FC<StorefrontProps> = ({
 
                 <div className="p-5 pt-0 border-t border-[#221C16]/5 mt-2 flex items-center justify-between">
                   <div>
-                    <span className="text-[11px] text-[#5C4D3E] block">Price (+ GST)</span>
-                    <span className="font-mono text-base font-bold text-[#16120E] tabular-nums">
-                      ₹{product.price.toLocaleString('en-IN')}
+                    <span className="text-[11px] text-[#5C4D3E] block">
+                      {hasActiveOffer ? 'Atelier Offer (+ GST)' : 'Price (+ GST)'}
                     </span>
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-mono text-base font-bold text-[#16120E] tabular-nums">
+                        ₹{effectivePrice.toLocaleString('en-IN')}
+                      </span>
+                      {hasActiveOffer && (
+                        <span className="font-mono text-xs text-[#5C4D3E]/70 line-through tabular-nums">
+                          ₹{product.price.toLocaleString('en-IN')}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {isAvailable ? (
@@ -341,10 +349,10 @@ export const Storefront: React.FC<StorefrontProps> = ({
                             productId: product.id,
                             productName: product.name,
                             sku: product.sku,
-                            unitPrice: product.price,
+                            unitPrice: effectivePrice,
                             quantity: 1,
                             leatherType: 'VEGETABLE_TANNED_HERITAGE',
-                            imageUrl: product.images[0]
+                            imageUrl: primaryImage
                           })
                         }
                         className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wider rounded transition-colors ${

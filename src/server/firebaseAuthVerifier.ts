@@ -14,6 +14,7 @@ export interface VerifiedFirebaseClaims {
   emailVerified: boolean;
   name?: string;
   picture?: string;
+  signInProvider?: string;
   exp: number;
 }
 
@@ -133,6 +134,7 @@ export async function verifyFirebaseIdToken(idToken: string): Promise<VerifiedFi
     emailVerified: Boolean(payload.email_verified),
     name: typeof payload.name === 'string' ? payload.name : email.split('@')[0],
     picture: typeof payload.picture === 'string' ? payload.picture : undefined,
+    signInProvider: typeof payload.firebase?.sign_in_provider === 'string' ? payload.firebase.sign_in_provider : undefined,
     exp: payload.exp
   };
 

@@ -1,26 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sparkles, Shield, Droplets, Award, Ban } from 'lucide-react';
-import { CartItem } from '../types/index.ts';
-
-interface Product {
-  id: string;
-  category: string;
-  productType: string;
-  name: string;
-  sku: string;
-  price: number;
-  currency: string;
-  description: string;
-  features: string[];
-  images: string[];
-  hsnCode: string;
-  gstRate?: number;
-  solutionEngine: string;
-  inStock: boolean;
-  stockCount?: number;
-  allowCustomization: boolean;
-  careKitIncluded: boolean;
-}
+import { X, Sparkles, Shield, Droplets, Award, Ban, Play } from 'lucide-react';
+import { CartItem, Product } from '../types/index.ts';
 
 interface ProductDetailModalProps {
   product: Product | null;
@@ -41,7 +21,21 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   customerId,
   authToken
 }) => {
-  const [selectedImage, setSelectedImage] = useState(product?.images?.[0] || '');
+  const initialImages = (
+    product?.images && product.images.length > 0
+      ? product.images
+      : product?.image
+      ? [product.image]
+      : []
+  ).slice(0, 4);
+
+  const [activeMedia, setActiveMedia] = useState<{ type: 'image' | 'video'; url: string }>(() =>
+    initialImages[0]
+      ? { type: 'image', url: initialImages[0] }
+      : product?.videoUrl
+      ? { type: 'video', url: product.videoUrl }
+      : { type: 'image', url: '' }
+  );
   const [leatherType, setLeatherType] = useState<'VEGETABLE_TANNED_HERITAGE' | 'BIO_SUBSTITUTE_CACTUS'>('VEGETABLE_TANNED_HERITAGE');
   const [monogram, setMonogram] = useState('BLC');
   const [foilStyle, setFoilStyle] = useState<'BLIND' | 'GOLD_FOIL' | 'SILVER_FOIL'>('GOLD_FOIL');
@@ -49,7 +43,20 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
   useEffect(() => {
     if (!product) return;
-    setSelectedImage(product.images?.[0] || '');
+    const imgs = (
+      product.images && product.images.length > 0
+        ? product.images
+        : product.image
+        ? [product.image]
+        : []
+    ).slice(0, 4);
+    setActiveMedia(
+      imgs[0]
+        ? { type: 'image', url: imgs[0] }
+        : product.videoUrl
+        ? { type: 'video', url: product.videoUrl }
+        : { type: 'image', url: '' }
+    );
     setLeatherType('VEGETABLE_TANNED_HERITAGE');
     setMonogram('BLC');
     setFoilStyle('GOLD_FOIL');
@@ -58,6 +65,14 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
   if (!product) return null;
 
+  const galleryImages = (
+    product.images && product.images.length > 0
+      ? product.images
+      : product.image
+      ? [product.image]
+      : []
+  ).slice(0, 4);
+  const videoUrl = product.videoUrl?.trim() || '';
   const isAvailable = product.inStock !== false && (product.stockCount === undefined || product.stockCount > 0);
   const maxStock = typeof product.stockCount === 'number' ? product.stockCount : Infinity;
   const remainingStock = Math.max(0, maxStock - bagQuantityForProduct);
@@ -66,6 +81,20 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     typeof product.gstRate === 'number'
       ? Number((product.gstRate * 100).toFixed(2))
       : defaultGstRatePercent;
+
+  const hasActiveOffer =
+    typeof product.offerPrice === 'number' &&
+    product.offerPrice > 0 &&
+    product.offerPrice < product.price;
+  const effectivePrice =
+    typeof product.offerPrice === 'number' &&
+    product.offerPrice > 0 &&
+    product.offerPrice <= product.price
+      ? product.offerPrice
+      : product.price;
+  const discountPercent = hasActiveOffer
+    ? Math.round(((product.price - product.offerPrice!) / product.price) * 100)
+    : 0;
 
   const handleAdd = async () => {
     if (!isAvailable || isAtBagLimit) return;
@@ -96,12 +125,12 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
       productId: product.id,
       productName: product.name,
       sku: product.sku,
-      unitPrice: product.price,
+      unitPrice: effectivePrice,
       quantity: 1,
       leatherType,
       monogram: isDebossingActive ? monogram.toUpperCase().trim() : undefined,
       foilStyle: isDebossingActive ? foilStyle : undefined,
-      imageUrl: selectedImage || product.images[0]
+      imageUrl: (activeMedia.type === 'image' ? activeMedia.url : galleryImages[0]) || ''
     });
     onClose();
   };
@@ -119,17 +148,30 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-6 sm:p-8">
           <div className="flex flex-col gap-4">
             <div className="relative aspect-[4/3] w-full rounded-lg overflow-hidden bg-[#221C16]/5 border border-[#221C16]/10">
-              <img
-                src={selectedImage}
-                alt={product.name}
-                referrerPolicy="no-referrer"
-                className={`w-full h-full object-cover transition-transform duration-300 ${
-                  isAvailable ? 'hover:scale-105' : 'grayscale opacity-60'
-                }`}
-              />
-              <div className="absolute bottom-3 left-3 bg-[#16120E]/80 backdrop-blur-md px-2.5 py-1 rounded text-[11px] font-mono text-[#FAF7F2] tracking-wider uppercase">
-                {leatherType === 'VEGETABLE_TANNED_HERITAGE' ? 'Heritage Full-Grain Hide' : 'Organic Cactus Bio-Leather'}
-              </div>
+              {activeMedia.type === 'video' && activeMedia.url ? (
+                <video
+                  key={activeMedia.url}
+                  src={activeMedia.url}
+                  controls
+                  autoPlay
+                  playsInline
+                  className="w-full h-full object-cover bg-[#16120E]"
+                />
+              ) : (
+                <>
+                  <img
+                    src={activeMedia.url || galleryImages[0] || ''}
+                    alt={product.name}
+                    referrerPolicy="no-referrer"
+                    className={`w-full h-full object-cover transition-transform duration-300 ${
+                      isAvailable ? 'hover:scale-105' : 'grayscale opacity-60'
+                    }`}
+                  />
+                  <div className="absolute bottom-3 left-3 bg-[#16120E]/80 backdrop-blur-md px-2.5 py-1 rounded text-[11px] font-mono text-[#FAF7F2] tracking-wider uppercase">
+                    {leatherType === 'VEGETABLE_TANNED_HERITAGE' ? 'Heritage Full-Grain Hide' : 'Organic Cactus Bio-Leather'}
+                  </div>
+                </>
+              )}
               {!isAvailable && (
                 <div className="absolute top-3 left-3 bg-red-800 text-white px-2.5 py-1 rounded text-[11px] font-mono font-bold uppercase tracking-wider">
                   Out of Stock · Deactivated
@@ -137,21 +179,38 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               )}
             </div>
 
-            {product.images.length > 1 && (
-              <div className="flex items-center gap-3">
-                {product.images.map((img, idx) => (
+            {(galleryImages.length > 1 || Boolean(videoUrl)) && (
+              <div className="flex items-center gap-2.5 overflow-x-auto pb-1">
+                {galleryImages.map((img, idx) => (
                   <button
                     key={idx}
-                    onClick={() => setSelectedImage(img)}
-                    className={`relative w-20 h-16 rounded border overflow-hidden transition-all ${
-                      selectedImage === img
+                    type="button"
+                    onClick={() => setActiveMedia({ type: 'image', url: img })}
+                    className={`relative w-20 h-16 shrink-0 rounded border overflow-hidden transition-all ${
+                      activeMedia.type === 'image' && activeMedia.url === img
                         ? 'border-[#8B4513] ring-2 ring-[#8B4513]/30'
                         : 'border-[#221C16]/15 opacity-70 hover:opacity-100'
                     }`}
+                    title={`View angle ${idx + 1}`}
                   >
-                    <img src={img} alt="Thumbnail" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                    <img src={img} alt={`Angle ${idx + 1}`} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
                   </button>
                 ))}
+                {videoUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveMedia({ type: 'video', url: videoUrl })}
+                    className={`relative w-20 h-16 shrink-0 rounded border bg-[#16120E] text-[#FAF7F2] flex flex-col items-center justify-center gap-1 transition-all ${
+                      activeMedia.type === 'video'
+                        ? 'border-[#8B4513] ring-2 ring-[#C5A059]'
+                        : 'border-[#221C16]/25 opacity-80 hover:opacity-100'
+                    }`}
+                    title="Play showcase video"
+                  >
+                    <Play className="w-4 h-4 text-[#C5A059] fill-[#C5A059]" />
+                    <span className="text-[10px] font-mono uppercase tracking-wider">Video</span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -185,10 +244,22 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 {product.name}
               </h2>
 
-              <div className="flex items-baseline gap-3 mt-3">
+              <div className="flex flex-wrap items-baseline gap-2.5 mt-3">
                 <span className="font-mono text-2xl font-bold text-[#16120E] tabular-nums">
-                  ₹{product.price.toLocaleString('en-IN')}
+                  ₹{effectivePrice.toLocaleString('en-IN')}
                 </span>
+                {hasActiveOffer && (
+                  <>
+                    <span className="font-mono text-sm text-[#5C4D3E]/70 line-through tabular-nums">
+                      ₹{product.price.toLocaleString('en-IN')}
+                    </span>
+                    {discountPercent > 0 && (
+                      <span className="px-2 py-0.5 rounded bg-[#1B332A] text-[#FAF7F2] text-[10px] font-mono font-bold uppercase tracking-wider">
+                        {discountPercent}% OFF
+                      </span>
+                    )}
+                  </>
+                )}
                 <span className="text-xs text-[#5C4D3E] font-sans">
                   (+ {effectiveGstPercent}% GST at checkout · Dispatched from Pune Primary Hub)
                 </span>
@@ -376,7 +447,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                   className="w-full py-3 px-6 text-sm font-semibold tracking-wider uppercase text-[#FAF7F2] bg-[#221C16] hover:bg-[#342B22] rounded-lg transition-colors shadow-md flex items-center justify-center gap-2"
                 >
                   <span>Add to Bag</span>
-                  <span className="font-mono tabular-nums">· ₹{product.price.toLocaleString('en-IN')}</span>
+                  <span className="font-mono tabular-nums">· ₹{effectivePrice.toLocaleString('en-IN')}</span>
                 </button>
               )}
             </div>

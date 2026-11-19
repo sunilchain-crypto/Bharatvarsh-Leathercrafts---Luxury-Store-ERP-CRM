@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Lock, Database, CheckCircle2, Server, Sliders, Plus, Trash2, Radio } from 'lucide-react';
+import { AlertTriangle, Lock, Database, CheckCircle2, Server, Sliders, Plus, Trash2, Radio, FileSpreadsheet } from 'lucide-react';
 import { StoreManagementConfig, AuditLogEntry, AuthUser, PromoCodeRule } from '../types/index.ts';
 
 interface MySQLStatus {
@@ -60,6 +60,8 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
 
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isTogglingGst, setIsTogglingGst] = useState(false);
+  const [lastDailyReportDate, setLastDailyReportDate] = useState<string | null>(null);
+  const [isSendingDailyReport, setIsSendingDailyReport] = useState(false);
 
   const tokenHeader = `Bearer ${authToken}`;
 
@@ -74,6 +76,7 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
         setAuditLogs(data.auditLogs);
         setIsMasterSuperAdmin(data.isMasterSuperAdmin);
         setLastPersistError(data.lastPersistError || null);
+        setLastDailyReportDate(data.lastDailyReportDate || null);
         if (Array.isArray(data.integrations)) {
           setIntegrations(data.integrations);
         }
@@ -135,6 +138,42 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
       setFeedback({ type: 'error', message: e.message });
     } finally {
       setIsTogglingGst(false);
+    }
+  };
+
+  const handleSendDailyOrderReportNow = async () => {
+    setIsSendingDailyReport(true);
+    try {
+      const res = await fetch('/api/admin/reports/send-daily-orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: tokenHeader
+        },
+        body: JSON.stringify({})
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setLastDailyReportDate(data.dateKey || lastDailyReportDate);
+        setFeedback({
+          type: 'success',
+          message: `Daily Excel report ${data.filename} (${data.orderCount} orders, ₹${Math.round(
+            data.grossRevenue || 0
+          ).toLocaleString('en-IN')}) dispatched via ${data.deliveryMode}${
+            data.fallbackReason ? ` (${data.fallbackReason})` : ''
+          }.`
+        });
+        fetchConfig();
+      } else {
+        setFeedback({
+          type: 'error',
+          message: data.error || data.message || 'Failed to dispatch daily order report.'
+        });
+      }
+    } catch (e: any) {
+      setFeedback({ type: 'error', message: e.message });
+    } finally {
+      setIsSendingDailyReport(false);
     }
   };
 
@@ -819,6 +858,30 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
                     <div className="text-[11px] text-[#5C4D3E] leading-snug">{item.summary}</div>
                   </div>
                 ))}
+              </div>
+
+              <div className="pt-4 border-t border-[#221C16]/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="text-xs font-bold text-[#16120E] flex items-center gap-1.5">
+                    <FileSpreadsheet className="w-4 h-4 text-[#8B4513]" />
+                    <span>Daily Post-Midnight Excel Report (.xlsx)</span>
+                  </div>
+                  <div className="text-[11px] text-[#5C4D3E]">
+                    Auto-emails yesterday&apos;s IST order summary to <strong>Support@bharatvarshcrafts.com</strong> after 12:00 AM IST.{' '}
+                    <span className="font-mono text-[#16120E]">
+                      Last dispatched: {lastDailyReportDate || 'Pending initial run'}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={!isMasterSuperAdmin || isSendingDailyReport}
+                  onClick={handleSendDailyOrderReportNow}
+                  title={!isMasterSuperAdmin ? 'Master Super-Admin access required' : undefined}
+                  className="px-3.5 py-2 text-xs font-semibold bg-[#221C16] text-[#FAF7F2] rounded hover:bg-[#342B22] disabled:opacity-50 shrink-0"
+                >
+                  {isSendingDailyReport ? 'Generating Excel...' : "Send Yesterday's Excel Report Now"}
+                </button>
               </div>
             </div>
 

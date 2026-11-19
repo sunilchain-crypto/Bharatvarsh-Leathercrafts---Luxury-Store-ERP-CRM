@@ -7,6 +7,7 @@ import {
   normalizeIndianState,
   validateIndianCheckoutFields
 } from '../lib/indianValidation.ts';
+import { executeRecaptchaEnterprise } from '../lib/recaptcha.ts';
 
 interface CatalogStockProduct {
   id: string;
@@ -205,10 +206,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     setPromoFeedback(null);
     setIsValidatingPromo(true);
     try {
+      const recaptchaToken = await executeRecaptchaEnterprise('PROMO_VALIDATE');
       const res = await fetch('/api/checkout/validate-promo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: trimmed, subtotal })
+        body: JSON.stringify({ code: trimmed, subtotal, recaptchaToken, recaptchaAction: 'PROMO_VALIDATE' })
       });
       const data = await res.json();
       if (res.ok && data.valid) {
@@ -270,6 +272,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         addressType: 'SHIPPING'
       };
 
+      const recaptchaToken = await executeRecaptchaEnterprise('CHECKOUT');
+
       const res = await fetch('/api/checkout/place-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -283,7 +287,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           discountCode: appliedDiscount?.code,
           shippingAddress,
           billingAddress: shippingAddress,
-          paymentGateway: gateway
+          paymentGateway: gateway,
+          recaptchaToken,
+          recaptchaAction: 'CHECKOUT'
         })
       });
 

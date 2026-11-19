@@ -3,7 +3,9 @@
  * Enforces server-side RBAC on all admin/CRM/ERP/Store Management endpoints.
  */
 
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { db, MASTER_AUTHORIZED_ACCOUNTS } from './db.ts';
 import { mysqlAdapter } from './mysqlAdapter.ts';
 import { handleWebhookRequest } from './webhooks.ts';
@@ -43,6 +45,7 @@ import {
   renderCreditNotePdf,
   renderCreditNoteHtml
 } from './invoicePdf.ts';
+import { sendDailyOrdersReport } from './dailyOrderReport.ts';
 import {
   validateIndianCheckoutFields,
   validateIndianPhone,
@@ -50,8 +53,112 @@ import {
   validateEmailAddress,
   normalizeIndianState
 } from '../lib/indianValidation.ts';
+import { verifyRecaptchaEnterpriseToken } from './recaptcha.ts';
 
 export const apiRouter = express.Router();
+
+function getEffectiveProductPrice(product: any): number {
+  const mrp = Number(product?.price || 0);
+  const offer = product?.offerPrice !== undefined && product?.offerPrice !== null ? Number(product.offerPrice) : 0;
+  if (Number.isFinite(offer) && offer > 0 && offer <= mrp) {
+    return offer;
+  }
+  return mrp;
+}
+
+const IMAGE_MIME_BY_EXT: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp'
+};
+
+const VIDEO_MIME_BY_EXT: Record<string, string> = {
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm'
+};
+
+const EXT_BY_MIME: Record<string, string> = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/jpg': '.jpg',
+  'image/webp': '.webp',
+  'video/mp4': '.mp4',
+  'video/webm': '.webm'
+};
+
+const MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_VIDEO_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+function parseMultipartSingleFile(
+  body: Buffer,
+  contentType: string
+): { filename: string; mimeType: string; buffer: Buffer } | null {
+  const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;\s]+))/i);
+  const boundary = boundaryMatch?.[1] || boundaryMatch?.[2];
+  if (!boundary) return null;
+
+  const delimiter = Buffer.from(`--${boundary}`);
+  const headerEndMarker = Buffer.from('\r\n\r\n');
+  let searchFrom = 0;
+
+  while (searchFrom < body.length) {
+    const startBoundary = body.indexOf(delimiter, searchFrom);
+    if (startBoundary === -1) break;
+    const afterBoundary = startBoundary + delimiter.length;
+    if (body[afterBoundary] === 45 && body[afterBoundary + 1] === 45) break;
+
+    let partStart = afterBoundary;
+    if (body[partStart] === 13 && body[partStart + 1] === 10) partStart += 2;
+    else if (body[partStart] === 10) partStart += 1;
+
+    const nextBoundary = body.indexOf(delimiter, partStart);
+    if (nextBoundary === -1) break;
+
+    let partEnd = nextBoundary;
+    if (partEnd >= 2 && body[partEnd - 2] === 13 && body[partEnd - 1] === 10) partEnd -= 2;
+    else if (partEnd >= 1 && body[partEnd - 1] === 10) partEnd -= 1;
+
+    const partBuf = body.subarray(partStart, partEnd);
+    const headerEndIdx = partBuf.indexOf(headerEndMarker);
+    if (headerEndIdx !== -1) {
+      const rawHeaders = partBuf.subarray(0, headerEndIdx).toString('utf8');
+      const filenameMatch = rawHeaders.match(/filename="([^"]+)"/i) || rawHeaders.match(/filename=([^;\r\n]+)/i);
+      if (filenameMatch) {
+        const mimeMatch = rawHeaders.match(/Content-Type:\s*([^\r\n;]+)/i);
+        return {
+          filename: (filenameMatch[1] || '').trim(),
+          mimeType: (mimeMatch?.[1] || '').trim().toLowerCase(),
+          buffer: partBuf.subarray(headerEndIdx + 4)
+        };
+      }
+    }
+    searchFrom = nextBoundary;
+  }
+  return null;
+}
+
+const rawMediaUploadMiddleware = express.raw({
+  type: ['multipart/form-data', 'image/*', 'video/*', 'application/octet-stream'],
+  limit: '55mb'
+});
+
+function handleMediaUploadBody(req: Request, res: Response, next: NextFunction) {
+  if (req.is('application/json') && req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
+    return next();
+  }
+  return rawMediaUploadMiddleware(req, res, (err: any) => {
+    if (err) {
+      if (err.type === 'entity.too.large' || err.status === 413) {
+        return res.status(413).json({
+          error: 'Uploaded file exceeds maximum allowed payload size (10MB images, 50MB videos).'
+        });
+      }
+      return res.status(400).json({ error: err.message || 'Invalid media upload payload.' });
+    }
+    return next();
+  });
+}
 
 // Critical Paths Verification Endpoint (Restricted to Admin)
 apiRouter.get('/test/critical-paths', requireStoreManagementAccess, async (req: Request, res: Response) => {
@@ -87,8 +194,19 @@ apiRouter.get('/storefront/config', (req: Request, res: Response) => {
 });
 
 // Server-Side Promo Code Validation (dynamically reads StoreManagementConfig.promoCodes)
-apiRouter.post('/checkout/validate-promo', (req: Request, res: Response) => {
-  const { code, subtotal } = req.body || {};
+apiRouter.post('/checkout/validate-promo', async (req: Request, res: Response) => {
+  const { code, subtotal, recaptchaToken } = req.body || {};
+  const recaptchaCheck = await verifyRecaptchaEnterpriseToken({
+    token: recaptchaToken,
+    expectedAction: 'PROMO_VALIDATE'
+  });
+  if (!recaptchaCheck.allowed) {
+    return res.status(403).json({
+      success: false,
+      valid: false,
+      error: recaptchaCheck.reason || 'Security verification failed.'
+    });
+  }
   const rule = db.validatePromoCode(code);
   if (!rule) {
     return res.status(404).json({
@@ -174,7 +292,7 @@ apiRouter.post('/cart/simulate-abandonment', async (req: Request, res: Response)
     const catalog = db.getCatalog();
     const authoritativeSubtotal = items.reduce((sum: number, item: any) => {
       const prod = (catalog.products || []).find((p: any) => p.id === item.productId || p.sku === item.sku);
-      const unitPrice = prod ? Number(prod.price) : 0;
+      const unitPrice = prod ? getEffectiveProductPrice(prod) : 0;
       const qty = Math.max(1, Math.floor(Number(item.quantity) || 1));
       return sum + unitPrice * qty;
     }, 0);
@@ -222,8 +340,20 @@ apiRouter.post('/checkout/place-order', async (req: Request, res: Response) => {
       discountCode,
       shippingAddress,
       billingAddress,
-      paymentGateway
+      paymentGateway,
+      recaptchaToken
     } = req.body;
+
+    const recaptchaCheck = await verifyRecaptchaEnterpriseToken({
+      token: recaptchaToken,
+      expectedAction: 'CHECKOUT',
+      actorHint: customerEmail
+    });
+    if (!recaptchaCheck.allowed) {
+      return res.status(403).json({
+        error: recaptchaCheck.reason || 'Security verification failed. Please reload and try again.'
+      });
+    }
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
@@ -273,7 +403,7 @@ apiRouter.post('/checkout/place-order', async (req: Request, res: Response) => {
         throw new Error(`Invalid quantity for ${product.name}`);
       }
 
-      const unitPrice = Number(product.price);
+      const unitPrice = getEffectiveProductPrice(product);
       const gstRate = typeof product.gstRate === 'number' ? product.gstRate : storeDefaultTaxRate;
       const hsnCode = product.hsnCode || '4202';
       const lineSubtotal = unitPrice * qty;
@@ -436,17 +566,24 @@ apiRouter.post('/checkout/place-order', async (req: Request, res: Response) => {
       billingAddress: normalizedBillingAddress
     });
 
-    // Fire-and-forget transactional confirmation + care guide dispatch
+    // Fire-and-forget transactional confirmation, Support@bharatvarshcrafts.com PDF invoice & care guide dispatch
     dispatchOrderConfirmationAndCareGuide(order)
       .then((delivery) => {
         db.logAudit(
           'integrations',
           'ORDER_NOTIFICATION_DISPATCHED',
           'STORE_MANAGEMENT',
-          `Order ${order.orderNumber} notifications -> Payment:${gatewayResult.mode}, Email:${delivery.emailDelivery.mode}, WhatsApp:${delivery.whatsappDelivery.mode}`
+          `Order ${order.orderNumber} notifications -> Payment:${gatewayResult.mode}, PatronEmail:${delivery.emailDelivery.mode}, SupportInvoice:${delivery.supportEmailDelivery.mode}, WhatsApp:${delivery.whatsappDelivery.mode}`
         );
       })
-      .catch(() => {});
+      .catch((err: any) => {
+        db.logAudit(
+          'integrations',
+          'ORDER_NOTIFICATION_ERROR',
+          'STORE_MANAGEMENT',
+          `Order ${order.orderNumber} email/notification failed: ${err?.message || err}`
+        );
+      });
 
     res.status(201).json({
       success: true,
@@ -572,7 +709,15 @@ apiRouter.post('/personalization-vector', async (req: Request, res: Response) =>
 // Patron Self-Service Registration (Salted scrypt + HMAC-SHA256 JWT + strict Indian phone/address validation)
 apiRouter.post('/auth/register', async (req: Request, res: Response) => {
   try {
-    const { email, password, fullName, phone, street, city, state, pincode, country, address } = req.body || {};
+    const { email, password, fullName, phone, street, city, state, pincode, country, address, recaptchaToken } = req.body || {};
+    const recaptchaCheck = await verifyRecaptchaEnterpriseToken({
+      token: recaptchaToken,
+      expectedAction: 'SIGNUP',
+      actorHint: email
+    });
+    if (!recaptchaCheck.allowed) {
+      return res.status(403).json({ error: recaptchaCheck.reason || 'Security verification failed.' });
+    }
     const errors: Record<string, string> = {};
 
     const cleanName = String(fullName || '').trim();
@@ -692,7 +837,16 @@ apiRouter.post('/auth/register', async (req: Request, res: Response) => {
 // Patron / Admin Credential Authentication Endpoint (Verifies salted scrypt hash; issues HMAC-SHA256 JWT)
 apiRouter.post('/auth/login', async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, recaptchaToken } = req.body;
+    const recaptchaCheck = await verifyRecaptchaEnterpriseToken({
+      token: recaptchaToken,
+      expectedAction: 'LOGIN',
+      actorHint: email
+    });
+    if (!recaptchaCheck.allowed) {
+      return res.status(403).json({ error: recaptchaCheck.reason || 'Security verification failed.' });
+    }
+
     if (!email || !password) {
       return res.status(400).json({ error: 'Email / User ID and password are required.' });
     }
@@ -749,17 +903,31 @@ apiRouter.post('/auth/login', async (req: Request, res: Response) => {
   }
 });
 
-// Google Firebase ID Token Exchange Endpoint
+// Google & Email Firebase ID Token Exchange Endpoint (syncs patron + optional +91 phone & Indian address)
 apiRouter.post('/auth/firebase', async (req: Request, res: Response) => {
   try {
-    const { idToken } = req.body;
+    const { idToken, fullName, phone, street, city, state, pincode, country, address, recaptchaToken, recaptchaAction } = req.body || {};
     if (!idToken || typeof idToken !== 'string') {
       return res.status(400).json({ error: 'Authentication token is required' });
     }
 
+    if (recaptchaToken !== undefined || recaptchaAction !== undefined) {
+      const allowedFirebaseActions = ['LOGIN', 'SIGNUP', 'GOOGLE_LOGIN'];
+      const expectedAction = allowedFirebaseActions.includes(String(recaptchaAction || ''))
+        ? String(recaptchaAction)
+        : 'LOGIN';
+      const recaptchaCheck = await verifyRecaptchaEnterpriseToken({
+        token: recaptchaToken,
+        expectedAction
+      });
+      if (!recaptchaCheck.allowed) {
+        return res.status(403).json({ error: recaptchaCheck.reason || 'Security verification failed.' });
+      }
+    }
+
     const claims = await verifyFirebaseIdToken(idToken);
     if (!claims || !claims.email) {
-      return res.status(401).json({ error: 'Invalid or expired Google authentication token.' });
+      return res.status(401).json({ error: 'Invalid or expired Firebase authentication token.' });
     }
 
     const cleanEmail = claims.email.trim().toLowerCase();
@@ -767,14 +935,76 @@ apiRouter.post('/auth/firebase', async (req: Request, res: Response) => {
     const isMaster = db.isMasterAuthorized(cleanEmail);
     const resolvedRole = isAuthorizedAdmin ? db.getStaffRole(cleanEmail) : 'PATRON';
 
+    const errors: Record<string, string> = {};
+    let validatedPhone = '';
+    if (phone && String(phone).trim()) {
+      const phoneCheck = validateIndianPhone(phone);
+      if (!phoneCheck.valid) {
+        errors.phone = phoneCheck.error!;
+      } else {
+        validatedPhone = phoneCheck.formatted;
+      }
+    }
+
+    const rawStreet = address?.street ?? street;
+    const rawCity = address?.city ?? city;
+    const rawState = address?.state ?? state;
+    const rawPincode = address?.pincode ?? pincode;
+    const rawCountry = address?.country ?? country;
+
+    const hasAnyAddress = Boolean(
+      String(rawStreet || '').trim() ||
+        String(rawCity || '').trim() ||
+        String(rawState || '').trim() ||
+        String(rawPincode || '').trim()
+    );
+
+    let normalizedAddress:
+      | { street: string; city: string; state: string; pincode: string; country: 'India' }
+      | undefined = undefined;
+
+    if (hasAnyAddress) {
+      if (String(rawStreet || '').trim().length < 5) errors.street = 'Street address must be at least 5 characters.';
+      if (String(rawCity || '').trim().length < 2) errors.city = 'City is required (minimum 2 characters).';
+      const normState = normalizeIndianState(rawState);
+      if (!normState) errors.state = 'Please select a valid Indian State or Union Territory.';
+      const pinCheck = validateIndianPincode(rawPincode);
+      if (!pinCheck.valid) errors.pincode = pinCheck.error!;
+      if (rawCountry && String(rawCountry).trim().toLowerCase() !== 'india') {
+        errors.country = 'Shipping destination is currently restricted to India only.';
+      }
+      if (!errors.street && !errors.city && !errors.state && !errors.pincode && !errors.country && normState) {
+        normalizedAddress = {
+          street: String(rawStreet).trim(),
+          city: String(rawCity).trim(),
+          state: normState,
+          pincode: pinCheck.normalized,
+          country: 'India'
+        };
+      }
+    }
+
+    const errKeys = Object.keys(errors);
+    if (errKeys.length > 0) {
+      return res.status(400).json({ error: errors[errKeys[0]], errors });
+    }
+
+    const explicitName = typeof fullName === 'string' && fullName.trim().length >= 2 ? fullName.trim() : '';
+    const resolvedFullName = explicitName || claims.name || cleanEmail.split('@')[0];
+
     const { customer } = await db.runAtomicMutation(() =>
       db.findOrCreateCustomer({
         email: cleanEmail,
-        fullName: claims.name || cleanEmail.split('@')[0],
+        fullName: resolvedFullName,
+        updateFullName: Boolean(explicitName),
+        ...(validatedPhone ? { phone: validatedPhone, updatePhone: true } : {}),
+        ...(normalizedAddress ? { address: normalizedAddress } : {}),
         identityUid: claims.uid,
         role: resolvedRole
       })
     );
+
+    const provider = claims.signInProvider === 'google.com' ? 'GOOGLE' : 'FIREBASE';
 
     res.json({
       success: true,
@@ -782,12 +1012,12 @@ apiRouter.post('/auth/firebase', async (req: Request, res: Response) => {
       user: {
         uid: claims.uid,
         email: customer.email,
-        name: claims.name || customer.fullName,
+        name: explicitName || claims.name || customer.fullName,
         role: resolvedRole,
         isMasterAdmin: isMaster,
         isStoreManagementAuthorized: isAuthorizedAdmin,
         photoURL: claims.picture,
-        authProvider: 'GOOGLE'
+        authProvider: provider
       },
       customer
     });
@@ -1086,23 +1316,80 @@ apiRouter.patch('/crm/leads/:id', requireCrmAccess, async (req: AuthenticatedReq
 
 apiRouter.post('/crm/cart-recovery/trigger', requireCrmAccess, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { cartId, channel } = req.body;
+    const { cartId, channel } = req.body || {};
+    if (!cartId || typeof cartId !== 'string') {
+      return res.status(400).json({ success: false, error: 'cartId is required.' });
+    }
     const chosenChannel: 'EMAIL' | 'WHATSAPP' = channel === 'WHATSAPP' ? 'WHATSAPP' : 'EMAIL';
-    const result = await db.runAtomicMutation(() => cartRecovery.dispatchRecoveryMessage(cartId, chosenChannel));
 
-    let delivery: any = null;
-    if (result.success) {
-      const activePromo = (db.getConfig().promoCodes || []).find(p => p.active)?.code || 'HEIRLOOM10';
-      const baseAppUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
-      const fullCheckoutUrl = result.cart.checkoutUrl.startsWith('http')
-        ? result.cart.checkoutUrl
-        : `${baseAppUrl}${result.cart.checkoutUrl}`;
-      delivery = await dispatchCartRecoveryNotice(result.cart, chosenChannel, activePromo, fullCheckoutUrl);
+    let resolved;
+    try {
+      resolved = cartRecovery.resolveCartRecipient(cartId);
+    } catch (e: any) {
+      return res.status(404).json({ success: false, error: e.message || 'Cart not found.' });
     }
 
-    res.json({ ...result, delivery });
+    if (chosenChannel === 'EMAIL' && (!resolved.email || !resolved.email.includes('@'))) {
+      return res.status(400).json({
+        success: false,
+        error: 'Patron email address is missing or invalid for this cart.'
+      });
+    }
+    if (chosenChannel === 'WHATSAPP' && resolved.phone.replace(/\D/g, '').length < 10) {
+      return res.status(400).json({
+        success: false,
+        error: 'Valid Indian mobile number is missing for WhatsApp recovery.'
+      });
+    }
+
+    if (resolved.inCooldown) {
+      return res.json({
+        success: false,
+        message: `Recovery message already dispatched to ${resolved.email || resolved.phone} within the 2-hour cooldown window.`,
+        cart: resolved.cart,
+        deliveryMode: 'SANDBOX_FALLBACK',
+        fallbackReason: 'Cooldown window active'
+      });
+    }
+
+    const activePromo = (db.getConfig().promoCodes || []).find(p => p.active)?.code || 'HEIRLOOM10';
+    const requestOrigin = req.get('host') ? `${req.protocol}://${req.get('host')}` : 'http://localhost:3000';
+    const baseAppUrl = (process.env.APP_URL || requestOrigin).replace(/\/$/, '');
+    const fullCheckoutUrl = resolved.cart.checkoutUrl.startsWith('http')
+      ? resolved.cart.checkoutUrl
+      : `${baseAppUrl}${resolved.cart.checkoutUrl}`;
+
+    const delivery = await dispatchCartRecoveryNotice(resolved.cart, chosenChannel, activePromo, fullCheckoutUrl);
+
+    if (chosenChannel === 'EMAIL' && (delivery as any)?.smtpConfigured && delivery.mode === 'SANDBOX_FALLBACK') {
+      db.logAudit(
+        req.user!.email,
+        'CART_RECOVERY_EMAIL_ERROR',
+        'STORE_MANAGEMENT',
+        `SMTP failed for abandoned cart ${cartId} (${resolved.email}): ${delivery.fallbackReason || 'Transport error'}`
+      );
+      return res.status(502).json({
+        success: false,
+        error: delivery.fallbackReason || 'Live SMTP delivery failed.',
+        message: delivery.fallbackReason || 'Live SMTP delivery failed.',
+        deliveryMode: delivery.mode,
+        messageId: delivery.messageId,
+        fallbackReason: delivery.fallbackReason,
+        delivery
+      });
+    }
+
+    const result = await db.runAtomicMutation(() => cartRecovery.dispatchRecoveryMessage(cartId, chosenChannel));
+
+    res.json({
+      ...result,
+      deliveryMode: delivery.mode,
+      messageId: delivery.messageId,
+      fallbackReason: delivery.fallbackReason,
+      delivery
+    });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -1357,8 +1644,23 @@ apiRouter.get('/store-management/config', requireStoreManagementAccess, (req: Au
     isMasterSuperAdmin: isMaster,
     mysqlStatus,
     lastPersistError,
+    lastDailyReportDate: db.getLastDailyReportDate() || null,
     integrations
   });
+});
+
+apiRouter.post('/admin/reports/send-daily-orders', requireMasterAdminAccess, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const targetDateIst = typeof req.body?.date === 'string' ? req.body.date.trim() : undefined;
+    const result = await sendDailyOrdersReport({
+      force: true,
+      targetDateIst,
+      actorEmail: req.user!.email
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to generate daily Excel order report.' });
+  }
 });
 
 apiRouter.get('/store-management/integrations-status', requireStoreManagementAccess, (req: AuthenticatedRequest, res: Response) => {
@@ -1505,6 +1807,141 @@ apiRouter.delete('/store-management/permitted-managers', requireMasterAdminAcces
   }
 });
 
+// Upload Product Media (Images: png/jpg/jpeg/webp <= 10MB, Video: mp4/webm <= 50MB) to /assets/images/
+apiRouter.post(
+  '/store-management/upload-media',
+  requireStoreManagementAccess,
+  handleMediaUploadBody,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const contentTypeHeader = String(req.headers['content-type'] || '').toLowerCase();
+      let rawFilename = '';
+      let rawMimeType = '';
+      let fileBuffer: Buffer | null = null;
+
+      if (Buffer.isBuffer(req.body)) {
+        if (contentTypeHeader.includes('multipart/form-data')) {
+          const parsed = parseMultipartSingleFile(req.body, String(req.headers['content-type'] || ''));
+          if (!parsed) {
+            return res.status(400).json({ error: 'No media file found in multipart upload.' });
+          }
+          rawFilename = parsed.filename;
+          rawMimeType = parsed.mimeType;
+          fileBuffer = parsed.buffer;
+        } else {
+          rawFilename = String(req.headers['x-filename'] || req.query.filename || '');
+          rawMimeType = contentTypeHeader.split(';')[0].trim();
+          fileBuffer = req.body;
+        }
+      } else if (req.body && typeof req.body === 'object') {
+        rawFilename = String(req.body.filename || req.body.fileName || req.body.name || '');
+        rawMimeType = String(req.body.mimeType || req.body.contentType || '').toLowerCase().trim();
+        const encoded = String(req.body.dataBase64 || req.body.dataUrl || req.body.data || req.body.base64 || '').trim();
+        const dataUrlMatch = encoded.match(/^data:([^;]+);base64,(.+)$/i);
+        if (dataUrlMatch) {
+          if (!rawMimeType) rawMimeType = dataUrlMatch[1].toLowerCase().trim();
+          fileBuffer = Buffer.from(dataUrlMatch[2], 'base64');
+        } else if (encoded) {
+          fileBuffer = Buffer.from(encoded, 'base64');
+        }
+      }
+
+      if (!fileBuffer || fileBuffer.length === 0) {
+        return res.status(400).json({ error: 'Empty or missing media upload payload.' });
+      }
+
+      const rawExt = path.extname(rawFilename || '').toLowerCase();
+      const isValidImageExt = Boolean(IMAGE_MIME_BY_EXT[rawExt]);
+      const isValidVideoExt = Boolean(VIDEO_MIME_BY_EXT[rawExt]);
+      const normalizedMime = rawMimeType === 'image/jpg' ? 'image/jpeg' : rawMimeType;
+      const mimeExt = normalizedMime ? EXT_BY_MIME[normalizedMime] : undefined;
+
+      // Reject explicitly disallowed extensions even if spoofed, or unknown MIME+ext pairs
+      if (rawExt && !isValidImageExt && !isValidVideoExt) {
+        return res.status(400).json({
+          error: 'Unsupported file extension. Allowed images: png, jpg, jpeg, webp. Allowed videos: mp4, webm.'
+        });
+      }
+      if (normalizedMime && normalizedMime !== 'application/octet-stream' && !mimeExt) {
+        return res.status(400).json({
+          error: 'Unsupported media MIME type. Allowed images: png, jpg, jpeg, webp. Allowed videos: mp4, webm.'
+        });
+      }
+      if (!rawExt && !mimeExt) {
+        return res.status(400).json({
+          error: 'Could not verify media format. Upload a valid png, jpg, jpeg, webp, mp4, or webm file.'
+        });
+      }
+      if (isValidImageExt && mimeExt && !IMAGE_MIME_BY_EXT[mimeExt]) {
+        return res.status(400).json({ error: 'File extension does not match uploaded MIME type.' });
+      }
+      if (isValidVideoExt && mimeExt && !VIDEO_MIME_BY_EXT[mimeExt]) {
+        return res.status(400).json({ error: 'File extension does not match uploaded MIME type.' });
+      }
+
+      const isVideo = isValidVideoExt || Boolean(mimeExt && VIDEO_MIME_BY_EXT[mimeExt]);
+      const canonicalExt =
+        rawExt === '.jpeg'
+          ? '.jpeg'
+          : isValidImageExt || isValidVideoExt
+          ? rawExt
+          : mimeExt!;
+      const resolvedMime =
+        normalizedMime && mimeExt
+          ? normalizedMime
+          : isVideo
+          ? VIDEO_MIME_BY_EXT[canonicalExt]
+          : IMAGE_MIME_BY_EXT[canonicalExt];
+
+      if (!isVideo && fileBuffer.length > MAX_IMAGE_UPLOAD_BYTES) {
+        return res.status(413).json({ error: 'Image file size must not exceed 10MB.' });
+      }
+      if (isVideo && fileBuffer.length > MAX_VIDEO_UPLOAD_BYTES) {
+        return res.status(413).json({ error: 'Video file size must not exceed 50MB.' });
+      }
+
+      const rawBase =
+        path
+          .basename(rawFilename || '', path.extname(rawFilename || ''))
+          .toLowerCase()
+          .replace(/[^a-z0-9_-]+/g, '_')
+          .replace(/^_+|_+$/g, '')
+          .slice(0, 48) || (isVideo ? 'atelier_video' : 'atelier_piece');
+
+      const safeFileName = `${rawBase}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}${canonicalExt}`;
+      const publicImagesDir = path.resolve(process.cwd(), 'public', 'assets', 'images');
+      fs.mkdirSync(publicImagesDir, { recursive: true });
+      fs.writeFileSync(path.join(publicImagesDir, safeFileName), fileBuffer);
+
+      const distDir = path.resolve(process.cwd(), 'dist');
+      if (fs.existsSync(distDir)) {
+        const distImagesDir = path.join(distDir, 'assets', 'images');
+        fs.mkdirSync(distImagesDir, { recursive: true });
+        fs.writeFileSync(path.join(distImagesDir, safeFileName), fileBuffer);
+      }
+
+      const publicUrl = `/assets/images/${safeFileName}`;
+      db.logAudit(
+        req.user!.email,
+        'UPLOAD_MEDIA',
+        'STORE_MANAGEMENT',
+        `Uploaded ${isVideo ? 'video' : 'image'} asset ${publicUrl} (${fileBuffer.length} bytes)`
+      );
+
+      return res.status(201).json({
+        success: true,
+        url: publicUrl,
+        filename: safeFileName,
+        mediaType: isVideo ? 'video' : 'image',
+        mimeType: resolvedMime,
+        sizeBytes: fileBuffer.length
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message || 'Media upload failed.' });
+    }
+  }
+);
+
 // Update Catalog Content (Persisted to MySQL + catalog.json)
 apiRouter.post('/store-management/catalog', requireStoreManagementAccess, async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -1515,8 +1952,14 @@ apiRouter.post('/store-management/catalog', requireStoreManagementAccess, async 
     res.json({ success: true, catalog: updatedCatalog, message: 'Catalog updated successfully' });
   } catch (err: any) {
     const msg = typeof err?.message === 'string' ? err.message : 'Failed to save catalog';
+    const lower = msg.toLowerCase();
     const isValidationError =
-      msg.toLowerCase().includes('duplicate sku') || msg.toLowerCase().includes('cannot be empty');
+      lower.includes('duplicate sku') ||
+      lower.includes('cannot be empty') ||
+      lower.includes('offer price') ||
+      lower.includes('cannot exceed') ||
+      lower.includes('mrp price') ||
+      lower.includes('maximum 4 product images');
     res.status(isValidationError ? 400 : 500).json({ error: msg });
   }
 });

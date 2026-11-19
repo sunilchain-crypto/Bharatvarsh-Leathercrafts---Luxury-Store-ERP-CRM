@@ -416,10 +416,12 @@ var init_mysqlAdapter = __esm({
         name VARCHAR(255) NOT NULL,
         sku VARCHAR(64) NOT NULL UNIQUE,
         price DECIMAL(12,2) NOT NULL DEFAULT 0,
+        offer_price DECIMAL(12,2) NULL DEFAULT NULL,
         currency VARCHAR(16) NOT NULL DEFAULT 'INR',
         description TEXT,
         features_json LONGTEXT,
         images_json LONGTEXT,
+        video_url TEXT NULL,
         hsn_code VARCHAR(32),
         gst_rate DECIMAL(5,4) NULL DEFAULT NULL,
         solution_engine ENUM('EVERYDAY_CARRY', 'TRANSIT_FOLIOS', 'LIFETIME_HEIRLOOM_CARE') NOT NULL DEFAULT 'EVERYDAY_CARRY',
@@ -674,6 +676,8 @@ var init_mysqlAdapter = __esm({
         await this.ensureColumn(conn, "bvl_customers", "acquisition_cost", "DECIMAL(12,2) NOT NULL DEFAULT 0");
         await this.ensureColumn(conn, "bvl_customers", "is_active", "TINYINT(1) NOT NULL DEFAULT 1");
         await this.ensureColumn(conn, "bvl_customers", "deleted_at", "DATETIME NULL");
+        await this.ensureColumn(conn, "bvl_catalog_products", "offer_price", "DECIMAL(12,2) NULL DEFAULT NULL");
+        await this.ensureColumn(conn, "bvl_catalog_products", "video_url", "TEXT NULL");
         await this.ensureColumn(conn, "bvl_catalog_products", "gst_rate", "DECIMAL(5,4) NULL DEFAULT NULL", true);
         await this.ensureColumn(
           conn,
@@ -1837,24 +1841,30 @@ var init_mysqlAdapter = __esm({
             description: row.description || "",
             productTypes: safeJsonParse(row.product_types_json, [])
           }));
-          const products = (prodRows || []).map((row) => ({
-            id: row.id,
-            category: row.category,
-            productType: row.product_type,
-            name: row.name,
-            sku: row.sku,
-            price: Number(row.price),
-            currency: row.currency || "INR",
-            description: row.description || "",
-            features: safeJsonParse(row.features_json, []),
-            images: safeJsonParse(row.images_json, []),
-            hsnCode: row.hsn_code || "4202",
-            ...row.gst_rate !== null && row.gst_rate !== void 0 ? { gstRate: Number(row.gst_rate) } : {},
-            solutionEngine: row.solution_engine || "EVERYDAY_CARRY",
-            inStock: true,
-            allowCustomization: Boolean(row.allow_customization),
-            careKitIncluded: Boolean(row.care_kit_included)
-          }));
+          const products = (prodRows || []).map((row) => {
+            const parsedImages = safeJsonParse(row.images_json, []).filter((u) => typeof u === "string" && u.trim().length > 0).slice(0, 4);
+            return {
+              id: row.id,
+              category: row.category,
+              productType: row.product_type,
+              name: row.name,
+              sku: row.sku,
+              price: Number(row.price),
+              ...row.offer_price !== null && row.offer_price !== void 0 ? { offerPrice: Number(row.offer_price) } : {},
+              currency: row.currency || "INR",
+              description: row.description || "",
+              features: safeJsonParse(row.features_json, []),
+              image: parsedImages[0] || "",
+              images: parsedImages,
+              ...row.video_url ? { videoUrl: String(row.video_url) } : {},
+              hsnCode: row.hsn_code || "4202",
+              ...row.gst_rate !== null && row.gst_rate !== void 0 ? { gstRate: Number(row.gst_rate) } : {},
+              solutionEngine: row.solution_engine || "EVERYDAY_CARRY",
+              inStock: true,
+              allowCustomization: Boolean(row.allow_customization),
+              careKitIncluded: Boolean(row.care_kit_included)
+            };
+          });
           return { categories, products };
         } catch (err) {
           this.lastError = err.message;
@@ -1886,19 +1896,24 @@ var init_mysqlAdapter = __esm({
           }
           const products = Array.isArray(catalog.products) ? catalog.products : [];
           for (const prod of products) {
+            const cleanImages = (Array.isArray(prod.images) ? prod.images : typeof prod.image === "string" && prod.image.trim() ? [prod.image.trim()] : []).filter((u) => typeof u === "string" && u.trim().length > 0).slice(0, 4);
+            const cleanOfferPrice = typeof prod.offerPrice === "number" && Number.isFinite(prod.offerPrice) && prod.offerPrice > 0 ? prod.offerPrice : null;
+            const cleanVideoUrl = typeof prod.videoUrl === "string" && prod.videoUrl.trim().length > 0 ? prod.videoUrl.trim() : null;
             await conn2.query(
-              `INSERT INTO bvl_catalog_products (id, category, product_type, name, sku, price, currency, description, features_json, images_json, hsn_code, gst_rate, solution_engine, allow_customization, care_kit_included)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `INSERT INTO bvl_catalog_products (id, category, product_type, name, sku, price, offer_price, currency, description, features_json, images_json, video_url, hsn_code, gst_rate, solution_engine, allow_customization, care_kit_included)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE
              category = VALUES(category),
              product_type = VALUES(product_type),
              name = VALUES(name),
              sku = VALUES(sku),
              price = VALUES(price),
+             offer_price = VALUES(offer_price),
              currency = VALUES(currency),
              description = VALUES(description),
              features_json = VALUES(features_json),
              images_json = VALUES(images_json),
+             video_url = VALUES(video_url),
              hsn_code = VALUES(hsn_code),
              gst_rate = VALUES(gst_rate),
              solution_engine = VALUES(solution_engine),
@@ -1911,10 +1926,12 @@ var init_mysqlAdapter = __esm({
                 prod.name,
                 prod.sku,
                 prod.price ?? 0,
+                cleanOfferPrice,
                 prod.currency || "INR",
                 prod.description || "",
                 JSON.stringify(prod.features || []),
-                JSON.stringify(prod.images || []),
+                JSON.stringify(cleanImages),
+                cleanVideoUrl,
                 prod.hsnCode || "4202",
                 typeof prod.gstRate === "number" ? prod.gstRate : null,
                 prod.solutionEngine || "EVERYDAY_CARRY",
@@ -2410,6 +2427,13 @@ var init_db = __esm({
       getLastPersistError() {
         return this.lastPersistError;
       }
+      getLastDailyReportDate() {
+        return this.state.lastDailyReportDate;
+      }
+      setLastDailyReportDate(dateKey) {
+        this.state.lastDailyReportDate = dateKey;
+        this.persistState();
+      }
       /**
        * Queues durable persistence to local disk and Hostinger MySQL (if connected).
        * Callers performing API writes should await flushPersistence() or persistStateAsync()
@@ -2491,13 +2515,28 @@ var init_db = __esm({
         }
         let changed = false;
         const products = catalog.products.map((prod) => {
-          if (!Array.isArray(prod.images)) return prod;
-          const nextImages = prod.images.map((img) => {
-            const normalized = this.normalizeImageUrl(img);
-            if (normalized !== img) changed = true;
-            return normalized;
-          });
-          return { ...prod, images: nextImages };
+          const sourceImages = Array.isArray(prod.images) ? prod.images : typeof prod.image === "string" && prod.image.trim() ? [prod.image] : [];
+          const nextImages = sourceImages.map((img) => this.normalizeImageUrl(img)).filter(Boolean).slice(0, 4);
+          const nextPrimaryImage = nextImages[0] || "";
+          const nextVideoUrl = typeof prod.videoUrl === "string" ? this.normalizeImageUrl(prod.videoUrl) : "";
+          const imagesChanged = !Array.isArray(prod.images) || prod.images.length !== nextImages.length || nextImages.some((img, idx) => img !== prod.images[idx]);
+          const primaryChanged = prod.image !== nextPrimaryImage;
+          const videoChanged = Boolean(prod.videoUrl) && nextVideoUrl !== prod.videoUrl;
+          if (!imagesChanged && !primaryChanged && !videoChanged) {
+            return prod;
+          }
+          changed = true;
+          const updated = {
+            ...prod,
+            images: nextImages,
+            image: nextPrimaryImage
+          };
+          if (nextVideoUrl) {
+            updated.videoUrl = nextVideoUrl;
+          } else {
+            delete updated.videoUrl;
+          }
+          return updated;
         });
         return {
           catalog: changed ? { ...catalog, products } : catalog,
@@ -2563,8 +2602,11 @@ var init_db = __esm({
           const mumbaiStock = inv ? inv.stockByLocation.mumbaiWarehouse : 0;
           const totalStock = puneStock + mumbaiStock;
           const isAvailable = totalStock > 0;
+          const images = (Array.isArray(prod.images) ? prod.images : typeof prod.image === "string" && prod.image.trim() ? [prod.image.trim()] : []).slice(0, 4);
           return {
             ...prod,
+            images,
+            image: images[0] || "",
             stockCount: totalStock,
             puneStock,
             mumbaiStock,
@@ -2580,6 +2622,7 @@ var init_db = __esm({
       applyCatalogUpdateInMemory(catalogData, actorEmail) {
         const rawProducts = Array.isArray(catalogData.products) ? catalogData.products : [];
         const seenSkus = /* @__PURE__ */ new Set();
+        const cleanProducts = [];
         for (const rawProd of rawProducts) {
           const normalizedSku = typeof rawProd?.sku === "string" ? rawProd.sku.trim().toUpperCase() : "";
           if (!normalizedSku) {
@@ -2589,16 +2632,59 @@ var init_db = __esm({
             throw new Error(`Duplicate SKU detected: "${rawProd.sku.trim()}". Every catalog piece must have a unique SKU.`);
           }
           seenSkus.add(normalizedSku);
-        }
-        const cleanProducts = rawProducts.map((p) => {
-          const { stockCount, puneStock, mumbaiStock, isActive, initialPuneStock, initialMumbaiStock, ...rest } = p;
-          const normalizedImages = Array.isArray(p.images) ? p.images.map((img) => this.normalizeImageUrl(img)).filter(Boolean) : [];
-          return {
+          const numPrice = Number(rawProd.price);
+          if (!Number.isFinite(numPrice) || numPrice < 0) {
+            throw new Error(`MRP price must be a valid non-negative number for "${rawProd.name || normalizedSku}".`);
+          }
+          let cleanOfferPrice;
+          if (rawProd.offerPrice !== void 0 && rawProd.offerPrice !== null && String(rawProd.offerPrice).trim() !== "") {
+            const parsedOffer = Number(rawProd.offerPrice);
+            if (!Number.isFinite(parsedOffer) || parsedOffer < 0) {
+              throw new Error(`Offer price must be a valid non-negative number for "${rawProd.name || normalizedSku}".`);
+            }
+            if (parsedOffer > 0) {
+              if (parsedOffer > numPrice) {
+                throw new Error(
+                  `Offer price (\u20B9${parsedOffer}) cannot exceed MRP price (\u20B9${numPrice}) for "${rawProd.name || normalizedSku}".`
+                );
+              }
+              cleanOfferPrice = parsedOffer;
+            }
+          }
+          const rawImageList = Array.isArray(rawProd.images) ? rawProd.images : typeof rawProd.image === "string" && rawProd.image.trim() ? [rawProd.image] : [];
+          const normalizedImages = rawImageList.map((img) => this.normalizeImageUrl(img)).filter(Boolean);
+          if (normalizedImages.length > 4) {
+            throw new Error(`Maximum 4 product images allowed for "${rawProd.name || normalizedSku}".`);
+          }
+          const cleanVideoUrl = typeof rawProd.videoUrl === "string" ? this.normalizeImageUrl(rawProd.videoUrl) : "";
+          const {
+            stockCount: _stockCount,
+            puneStock: _puneStock,
+            mumbaiStock: _mumbaiStock,
+            isActive: _isActive,
+            initialPuneStock: _initialPuneStock,
+            initialMumbaiStock: _initialMumbaiStock,
+            offerPrice: _ignoredOffer,
+            videoUrl: _ignoredVideo,
+            image: _ignoredImage,
+            images: _ignoredImages,
+            ...rest
+          } = rawProd;
+          const cleanedProduct = {
             ...rest,
-            sku: String(p.sku).trim(),
-            ...Array.isArray(p.images) ? { images: normalizedImages } : {}
+            sku: String(rawProd.sku).trim(),
+            price: numPrice,
+            images: normalizedImages,
+            image: normalizedImages[0] || ""
           };
-        });
+          if (cleanOfferPrice !== void 0) {
+            cleanedProduct.offerPrice = cleanOfferPrice;
+          }
+          if (cleanVideoUrl) {
+            cleanedProduct.videoUrl = cleanVideoUrl;
+          }
+          cleanProducts.push(cleanedProduct);
+        }
         const cleanCatalog = {
           categories: catalogData.categories || [],
           products: cleanProducts
@@ -3966,7 +4052,7 @@ var init_db = __esm({
         if (existing) {
           if (data.identityUid && !existing.identityUid) existing.identityUid = data.identityUid;
           if (data.phone && (data.updatePhone || !existing.phone)) existing.phone = data.phone;
-          if (data.fullName && (!existing.fullName || existing.fullName === "Valued Patron")) {
+          if (data.fullName && (data.updateFullName || !existing.fullName || existing.fullName === "Valued Patron")) {
             existing.fullName = data.fullName;
           }
           if (this.isStoreManagementAuthorized(cleanEmail)) {
@@ -4432,7 +4518,7 @@ var init_db = __esm({
           existing.phone = cart.phone || existing.phone;
           existing.lastActiveAt = (/* @__PURE__ */ new Date()).toISOString();
           if (!existing.checkoutUrl || existing.checkoutUrl.includes("resume=new")) {
-            existing.checkoutUrl = `/checkout?resume=${encodeURIComponent(existing.id)}`;
+            existing.checkoutUrl = `/?resume=${encodeURIComponent(existing.id)}`;
           }
           this.persistState();
           return existing;
@@ -4449,7 +4535,7 @@ var init_db = __esm({
           isAbandoned: false,
           recoveryStage: "DETECTED",
           recoveryAttempts: 0,
-          checkoutUrl: `/checkout?resume=${encodeURIComponent(resolvedId)}`,
+          checkoutUrl: `/?resume=${encodeURIComponent(resolvedId)}`,
           lastActiveAt: (/* @__PURE__ */ new Date()).toISOString()
         };
         this.state.carts.push(newCart);
@@ -4480,6 +4566,14 @@ var init_db = __esm({
       triggerCartRecovery(cartId, channel) {
         const cart = this.state.carts.find((c) => c.id === cartId);
         if (!cart) throw new Error(`Cart ${cartId} not found`);
+        if (!cart.email && cart.customerId) {
+          const cust = this.getCustomerById(cart.customerId);
+          if (cust?.email) cart.email = cust.email;
+          if (!cart.phone && cust?.phone) cart.phone = cust.phone;
+        }
+        if (channel === "EMAIL" && (!cart.email || !cart.email.includes("@"))) {
+          throw new Error(`Patron email address is missing or invalid for cart ${cartId}.`);
+        }
         const twoHoursMs = 2 * 60 * 60 * 1e3;
         if (cart.lastRecoveryTriggerAt && Date.now() - new Date(cart.lastRecoveryTriggerAt).getTime() < twoHoursMs) {
           return {
@@ -4951,1485 +5045,18 @@ var init_webhooks = __esm({
   }
 });
 
-// src/server/erpSync.ts
-var ERPSynchronizer, erpSync;
-var init_erpSync = __esm({
-  "src/server/erpSync.ts"() {
-    init_db();
-    ERPSynchronizer = class {
-      /**
-       * Pushes a custom quote / B2B corporate gifting lead directly into the ERP as an official Sales Order
-       */
-      async pushCustomQuoteToSalesOrder(payload, actorEmail) {
-        const linkedLead = payload.leadId ? db.getCorporateGiftingLeads().find((l) => l.id === payload.leadId) : void 0;
-        if (payload.leadId && !linkedLead) {
-          throw new Error(`Corporate gifting lead "${payload.leadId}" not found.`);
-        }
-        if (linkedLead?.erpOrderId) {
-          throw new Error(
-            `DUPLICATE_ERP_ORDER: Corporate lead "${linkedLead.companyName}" is already linked to ERP Sales Order ${linkedLead.erpOrderNumber || linkedLead.erpOrderId}.`
-          );
-        }
-        const rawItems = Array.isArray(payload.items) && payload.items.length > 0 ? payload.items : Array.isArray(linkedLead?.items) && linkedLead.items.length > 0 ? linkedLead.items : [];
-        if (rawItems.length === 0) {
-          throw new Error("At least one catalog SKU and quantity must be selected before pushing to ERP Sales Order.");
-        }
-        const catalogProducts = db.getCatalog().products || [];
-        const storeDefaultGstRate = (typeof db.getConfig().gstRatePercent === "number" ? db.getConfig().gstRatePercent : 18) / 100;
-        let subtotal = 0;
-        let totalTaxAmount = 0;
-        const orderItems = rawItems.map((item, idx) => {
-          const matchedProduct = catalogProducts.find(
-            (p) => item.productId && p.id === item.productId || item.sku && p.sku === item.sku
-          );
-          if (!matchedProduct && !item.productId && typeof item.unitPrice !== "number") {
-            throw new Error(`Unknown catalog SKU in quote: ${item.sku}`);
-          }
-          const qty = Math.max(1, Math.floor(Number(item.quantity) || 1));
-          const resolvedUnitPrice = typeof item.unitPrice === "number" && Number.isFinite(item.unitPrice) && item.unitPrice > 0 ? item.unitPrice : Number(matchedProduct?.price || 0);
-          if (!Number.isFinite(resolvedUnitPrice) || resolvedUnitPrice <= 0) {
-            throw new Error(`Invalid unit price for SKU ${item.sku}`);
-          }
-          const gstRate = typeof matchedProduct?.gstRate === "number" ? matchedProduct.gstRate : storeDefaultGstRate;
-          const lineSubtotal = qty * resolvedUnitPrice;
-          const lineTax = Math.round(lineSubtotal * gstRate);
-          subtotal += lineSubtotal;
-          totalTaxAmount += lineTax;
-          return {
-            id: `item_quote_${Date.now()}_${idx}`,
-            orderId: "",
-            productId: item.productId || matchedProduct?.id || `prod_${item.sku}`,
-            productName: item.productName || matchedProduct?.name || item.sku,
-            sku: matchedProduct?.sku || item.sku,
-            category: matchedProduct?.category || "travell",
-            quantity: qty,
-            unitPrice: resolvedUnitPrice,
-            leatherType: item.leatherType === "BIO_SUBSTITUTE_CACTUS" ? "BIO_SUBSTITUTE_CACTUS" : "VEGETABLE_TANNED_HERITAGE",
-            customization: item.monogramInitials ? {
-              monogramInitials: item.monogramInitials,
-              foilType: item.foilType || "GOLD_FOIL",
-              placement: "Custom Specification"
-            } : void 0,
-            hsnCode: matchedProduct?.hsnCode || "4202",
-            gstRate,
-            taxAmount: lineTax,
-            lineTotal: lineSubtotal + lineTax
-          };
-        });
-        const totalAmount = subtotal + totalTaxAmount;
-        const resolvedEmail = (payload.customerEmail || linkedLead?.email || "").trim().toLowerCase();
-        const resolvedName = payload.customerName || (linkedLead ? `${linkedLead.companyName} (${linkedLead.contactPerson})` : "Corporate Patron");
-        const resolvedPhone = payload.customerPhone || linkedLead?.phone || "";
-        let resolvedCustomerId = payload.customerId;
-        if (!resolvedCustomerId && resolvedEmail) {
-          const { customer } = await db.runAtomicMutation(
-            () => db.findOrCreateCustomer({
-              email: resolvedEmail,
-              phone: resolvedPhone,
-              fullName: resolvedName
-            })
-          );
-          resolvedCustomerId = customer.id;
-        }
-        const customerIdFinal = resolvedCustomerId || `cust_corp_${Date.now()}`;
-        const newOrder = await db.createOrderAsync({
-          customerId: customerIdFinal,
-          customerName: resolvedName,
-          customerEmail: resolvedEmail || "corporate@bharatvarshcrafts.com",
-          customerPhone: resolvedPhone,
-          status: "PROCESSING",
-          currency: "INR",
-          subtotal,
-          discountAmount: 0,
-          taxAmount: totalTaxAmount,
-          shippingFee: 0,
-          totalAmount,
-          paymentGateway: "RAZORPAY",
-          paymentId: `quote_pay_${Date.now()}`,
-          paymentStatus: "PAID",
-          items: orderItems,
-          shippingAddress: {
-            id: `addr_quote_${Date.now()}`,
-            customerId: customerIdFinal,
-            street: "Consolidated Commercial Dock, Pune Primary Hub",
-            city: "Pune",
-            state: "Maharashtra",
-            pincode: "411001",
-            country: "India",
-            isDefault: true,
-            addressType: "SHIPPING"
-          },
-          billingAddress: {
-            id: `addr_quote_b_${Date.now()}`,
-            customerId: customerIdFinal,
-            street: "Consolidated Commercial Dock, Pune Primary Hub",
-            city: "Pune",
-            state: "Maharashtra",
-            pincode: "411001",
-            country: "India",
-            isDefault: true,
-            addressType: "BILLING"
-          }
-        });
-        await db.runAtomicMutation(() => {
-          if (payload.leadId) {
-            db.updateCorporateLeadStatus(payload.leadId, "ORDER_CONFIRMED", void 0, {
-              erpOrderId: newOrder.id,
-              erpOrderNumber: newOrder.orderNumber,
-              items: orderItems.map((it) => ({
-                sku: it.sku,
-                productId: it.productId,
-                productName: it.productName,
-                quantity: it.quantity,
-                unitPrice: it.unitPrice,
-                leatherType: it.leatherType
-              })),
-              dealValueInr: totalAmount
-            });
-          }
-          db.logAudit(
-            actorEmail,
-            "ERP_SALES_ORDER_PUSH",
-            "STORE_MANAGEMENT",
-            `CRM quote converted into ERP Sales Order ${newOrder.orderNumber} (Deal: ${payload.dealType || "WHOLESALE_BULK"}, Amount: \u20B9${totalAmount}${linkedLead ? `, Lead: ${linkedLead.companyName}` : ""})`
-          );
-        });
-        return newOrder;
-      }
-      /**
-       * RMA & Return Lifecycle with warehouse inspection & credit note generation
-       */
-      async processRMA(rma) {
-        const existingOrder = db.getOrderById(rma.orderId);
-        if (!existingOrder) throw new Error(`Order ${rma.orderId} not found`);
-        const targetLocation = rma.restockLocation === "mumbaiWarehouse" ? "mumbaiWarehouse" : "punePrimaryHub";
-        const locationLabel = targetLocation === "punePrimaryHub" ? "Pune Primary Hub" : "Mumbai Warehouse";
-        const lockItems = rma.restockInWarehouse ? existingOrder.items.map((it) => ({
-          sku: it.sku,
-          productId: it.productId,
-          productName: it.productName,
-          quantity: it.quantity
-        })) : [];
-        return db.runLockedStockMutation(lockItems, () => {
-          const order = db.getOrderById(rma.orderId);
-          if (!order) throw new Error(`Order ${rma.orderId} not found`);
-          order.status = "RETURNED";
-          order.paymentStatus = "REFUNDED";
-          order.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-          if (rma.restockInWarehouse) {
-            for (const item of order.items) {
-              const inv = db.getInventory().find((i) => i.productId === item.productId || i.sku === item.sku);
-              if (inv) {
-                inv.stockByLocation[targetLocation] += item.quantity;
-                db.logAudit(
-                  rma.actorEmail,
-                  "RESTOCK_INVENTORY",
-                  "INVENTORY_ADJUSTMENT",
-                  `Restocked ${item.quantity} units of ${inv.sku} to ${locationLabel} after RMA inspection.`
-                );
-              }
-            }
-          }
-          let creditNote;
-          if (order.invoiceNumber && db.getConfig().gstInvoicingEnabled) {
-            creditNote = db.issueCreditNote(order.invoiceNumber, "GOODS_RETURN", rma.actorEmail);
-          }
-          db.logAudit(
-            rma.actorEmail,
-            "RMA_PROCESSED",
-            "STORE_MANAGEMENT",
-            `RMA concluded for ${order.orderNumber} (Reason: ${rma.reason}). Credit Note: ${creditNote ? creditNote.creditNoteNumber : "SUSPENDED"}`
-          );
-          return { order, creditNote };
-        });
-      }
-      /**
-       * Syncs real-time courier milestones (In Transit, Out for Delivery, Delivered, RTO) from Shiprocket / Delhivery
-       */
-      async syncCourierMilestone(orderId, milestone, locationName) {
-        return db.runAtomicMutation(() => {
-          const order = db.getOrderById(orderId);
-          if (!order) throw new Error(`Order ${orderId} not found`);
-          order.courierStatus = milestone;
-          if (milestone === "DELIVERED") {
-            order.status = "DELIVERED";
-          }
-          order.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-          db.logAudit(
-            "logistics_sync",
-            "COURIER_MILESTONE_UPDATED",
-            "STORE_MANAGEMENT",
-            `Order ${order.orderNumber} AWB ${order.awbNumber}: Milestone changed to ${milestone} at ${locationName}`
-          );
-          return order;
-        });
-      }
-    };
-    erpSync = new ERPSynchronizer();
-  }
-});
-
-// src/server/cartRecovery.ts
-import crypto4 from "crypto";
+// src/server/invoicePdf.ts
 import fs4 from "fs";
 import path4 from "path";
-var CartRecoveryEngine, cartRecovery;
-var init_cartRecovery = __esm({
-  "src/server/cartRecovery.ts"() {
-    init_db();
-    CartRecoveryEngine = class {
-      constructor() {
-        this.intervalTimer = null;
-        this.cachedSecret = null;
-      }
-      getSigningSecret() {
-        if (process.env.CART_RECOVERY_SECRET) {
-          return process.env.CART_RECOVERY_SECRET;
-        }
-        if (this.cachedSecret) {
-          return this.cachedSecret;
-        }
-        const secretPath = path4.resolve(process.cwd(), "src/server/data/.cart_recovery_key");
-        try {
-          if (fs4.existsSync(secretPath)) {
-            const stored = fs4.readFileSync(secretPath, "utf-8").trim();
-            if (stored.length >= 32) {
-              this.cachedSecret = stored;
-              return stored;
-            }
-          }
-          const generated = crypto4.randomBytes(32).toString("hex");
-          const dir = path4.dirname(secretPath);
-          if (!fs4.existsSync(dir)) fs4.mkdirSync(dir, { recursive: true });
-          fs4.writeFileSync(secretPath, generated, { encoding: "utf-8", mode: 384 });
-          this.cachedSecret = generated;
-          return generated;
-        } catch {
-          this.cachedSecret = crypto4.createHash("sha256").update("bvl-cart-fallback-secret").digest("hex");
-          return this.cachedSecret;
-        }
-      }
-      signResumeToken(cartId) {
-        return crypto4.createHmac("sha256", this.getSigningSecret()).update(`resume:${cartId}`).digest("base64url");
-      }
-      verifyResumeToken(cartId, token) {
-        if (!cartId || !token || typeof token !== "string") return false;
-        const expected = this.signResumeToken(cartId);
-        const actualBuf = Buffer.from(token);
-        const expectedBuf = Buffer.from(expected);
-        if (actualBuf.length !== expectedBuf.length) return false;
-        return crypto4.timingSafeEqual(actualBuf, expectedBuf);
-      }
-      buildCheckoutResumeUrl(cartId) {
-        const token = this.signResumeToken(cartId);
-        return `/checkout?resume=${encodeURIComponent(cartId)}&token=${encodeURIComponent(token)}`;
-      }
-      /**
-       * Starts the background abandonment detection worker.
-       * Sweeps every 60 seconds (or uses the configurable threshold).
-       */
-      startBackgroundWorker(intervalMs = 6e4) {
-        if (this.intervalTimer) return;
-        this.intervalTimer = setInterval(() => {
-          this.runAbandonmentDetectionSweep();
-        }, intervalMs);
-        console.log(`[CartRecoveryEngine] Background worker running (sweep interval: ${intervalMs / 1e3}s)`);
-      }
-      stopBackgroundWorker() {
-        if (this.intervalTimer) {
-          clearInterval(this.intervalTimer);
-          this.intervalTimer = null;
-        }
-      }
-      /**
-       * Scans all carts in the relational store.
-       * If a cart has items, has not placed an order, and is idle beyond the threshold,
-       * flags it as abandoned and emits a checkout.abandoned event.
-       */
-      runAbandonmentDetectionSweep() {
-        const config = db.getConfig();
-        const thresholdMinutes = config.abandonmentThresholdMinutes || 15;
-        const abandonedCarts = db.detectAbandonedCarts(thresholdMinutes);
-        for (const c of abandonedCarts) {
-          c.checkoutUrl = this.buildCheckoutResumeUrl(c.id);
-        }
-        if (abandonedCarts.length > 0) {
-          console.log(`[CartRecoveryEngine] Sweep flagged ${abandonedCarts.length} abandoned cart(s)`);
-        }
-        return {
-          detectedCount: abandonedCarts.length,
-          carts: abandonedCarts
-        };
-      }
-      /**
-       * Persists cart state from storefront (patron or guest) with signed resume link
-       */
-      persistStorefrontCart(data) {
-        const saved = db.saveCartState(data);
-        saved.checkoutUrl = this.buildCheckoutResumeUrl(saved.id);
-        db.persistState();
-        return saved;
-      }
-      /**
-       * Idempotent recovery dispatcher for a specific cart
-       */
-      dispatchRecoveryMessage(cartId, channel) {
-        const res = db.triggerCartRecovery(cartId, channel);
-        res.cart.checkoutUrl = this.buildCheckoutResumeUrl(res.cart.id);
-        db.persistState();
-        return res;
-      }
-      /**
-       * Resolves a resumable cart by cart ID and optional HMAC token.
-       * Supports direct cart ID links as well as signed resume tokens; rejects tampered tokens.
-       */
-      resolveResumableCart(cartId, token) {
-        const cleanId = (cartId || "").trim();
-        if (!cleanId) {
-          return { status: "NOT_FOUND", tokenVerified: false };
-        }
-        let tokenVerified = false;
-        if (token !== void 0 && token !== "") {
-          if (!this.verifyResumeToken(cleanId, token.trim())) {
-            return { status: "INVALID_TOKEN", tokenVerified: false };
-          }
-          tokenVerified = true;
-        }
-        const cart = db.getCartById(cleanId);
-        if (!cart) {
-          return { status: "NOT_FOUND", tokenVerified: false };
-        }
-        return {
-          status: "OK",
-          cart: {
-            ...cart,
-            checkoutUrl: this.buildCheckoutResumeUrl(cart.id)
-          },
-          tokenVerified
-        };
-      }
-    };
-    cartRecovery = new CartRecoveryEngine();
-  }
-});
-
-// src/server/rfm.ts
-function classifyCustomerRFM(customer) {
-  const { totalOrders, lifetimeValue, daysSinceLastOrder, discountOrdersCount } = customer;
-  let recencyScore = 1;
-  if (daysSinceLastOrder <= 30) recencyScore = 5;
-  else if (daysSinceLastOrder <= 60) recencyScore = 4;
-  else if (daysSinceLastOrder <= 90) recencyScore = 3;
-  else if (daysSinceLastOrder <= 180) recencyScore = 2;
-  else recencyScore = 1;
-  let frequencyScore = 1;
-  if (totalOrders >= 5) frequencyScore = 5;
-  else if (totalOrders >= 3) frequencyScore = 4;
-  else if (totalOrders >= 2) frequencyScore = 3;
-  else if (totalOrders === 1) frequencyScore = 2;
-  else frequencyScore = 1;
-  let monetaryScore = 1;
-  if (lifetimeValue >= 5e4) monetaryScore = 5;
-  else if (lifetimeValue >= 25e3) monetaryScore = 4;
-  else if (lifetimeValue >= 1e4) monetaryScore = 3;
-  else if (lifetimeValue >= 3500) monetaryScore = 2;
-  else monetaryScore = 1;
-  let segment = "Promising/Recent";
-  if (totalOrders > 0 && discountOrdersCount >= 2 && discountOrdersCount >= totalOrders) {
-    segment = "Bargain Hunters";
-  } else if (daysSinceLastOrder > 90 && totalOrders > 0) {
-    segment = "At-Risk/Churning";
-  } else if (frequencyScore >= 4 && monetaryScore >= 4 || totalOrders >= 4 && lifetimeValue >= 5e4) {
-    segment = "Champions/VIPs";
-  } else {
-    segment = "Promising/Recent";
-  }
-  return {
-    segment,
-    score: {
-      recency: recencyScore,
-      frequency: frequencyScore,
-      monetary: monetaryScore
-    }
-  };
-}
-function computeUnitEconomics() {
-  const orders = db.getOrders().filter((o) => o.paymentStatus === "PAID");
-  const customers = db.getCustomers().filter((c) => c.role === "PATRON");
-  const totalRevenue = orders.reduce((sum, o) => sum + o.totalAmount, 0);
-  const totalOrders = orders.length;
-  const aov = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
-  const totalMarketingSpend = customers.reduce((sum, c) => sum + (c.acquisitionCost || 0), 0);
-  const totalAcquiredCustomers = customers.filter((c) => (c.acquisitionCost || 0) > 0).length;
-  const cac = totalAcquiredCustomers > 0 ? Math.round(totalMarketingSpend / totalAcquiredCustomers) : 0;
-  const roas = totalMarketingSpend > 0 ? Number((totalRevenue / totalMarketingSpend).toFixed(2)) : 0;
-  const repeatCustomers = customers.filter((c) => c.totalOrders > 1).length;
-  const repeatPurchaseRate = customers.length > 0 ? Number((repeatCustomers / customers.length * 100).toFixed(1)) : 0;
-  return {
-    cac,
-    roas,
-    aov,
-    totalRevenue,
-    totalOrders,
-    activeCustomers: customers.length,
-    repeatPurchaseRate
-  };
-}
-function computeOperationalHealth() {
-  const warranties = db.getWarranties();
-  const orders = db.getOrders();
-  const auditLogs = db.getAuditLogs();
-  const totalOrders = orders.length;
-  const totalUnitsSold = orders.reduce((acc, o) => acc + o.items.reduce((s, it) => s + it.quantity, 0), 0);
-  const totalClaims = warranties.reduce((acc, w) => acc + w.claimCount, 0);
-  const warrantyClaimFrequency = totalUnitsSold > 0 ? Number((totalClaims / totalUnitsSold * 100).toFixed(2)) : 0;
-  const rmaLogs = auditLogs.filter((l) => l.action === "RMA_PROCESSED");
-  const reasonCounts = {
-    COLOR_MISMATCH: 0,
-    TEXTURE_DEFECT: 0,
-    INCORRECT_SIZE: 0,
-    HARDWARE_DAMAGE: 0
-  };
-  for (const log of rmaLogs) {
-    const match = /\(Reason:\s*(COLOR_MISMATCH|TEXTURE_DEFECT|INCORRECT_SIZE|HARDWARE_DAMAGE)\)/i.exec(log.details);
-    if (match) {
-      const key = match[1].toUpperCase();
-      reasonCounts[key] += 1;
-    }
-  }
-  const loggedReturnTotal = reasonCounts.COLOR_MISMATCH + reasonCounts.TEXTURE_DEFECT + reasonCounts.INCORRECT_SIZE + reasonCounts.HARDWARE_DAMAGE;
-  const returnedOrdersCount = orders.filter((o) => o.status === "RETURNED").length;
-  if (returnedOrdersCount > loggedReturnTotal) {
-    reasonCounts.TEXTURE_DEFECT += returnedOrdersCount - loggedReturnTotal;
-  }
-  const denominator = Math.max(1, totalOrders);
-  const toPct = (count) => Number((count / denominator * 100).toFixed(1));
-  const deliveredOrders = orders.filter((o) => o.status === "DELIVERED" || o.courierStatus === "DELIVERED");
-  let averageTransitDays = 0;
-  let onTimeDeliveryRate = 100;
-  if (deliveredOrders.length > 0) {
-    let totalDays = 0;
-    let onTimeCount = 0;
-    for (const ord of deliveredOrders) {
-      const startMs = new Date(ord.createdAt).getTime();
-      const endMs = new Date(ord.updatedAt).getTime();
-      const transitDays = Number.isFinite(startMs) && Number.isFinite(endMs) ? Math.max(0.2, (endMs - startMs) / (1e3 * 60 * 60 * 24)) : 2.5;
-      totalDays += transitDays;
-      if (ord.estimatedDeliveryDate) {
-        const etaMs = new Date(ord.estimatedDeliveryDate).getTime();
-        if (endMs <= etaMs) onTimeCount += 1;
-      } else if (transitDays <= 5) {
-        onTimeCount += 1;
-      }
-    }
-    averageTransitDays = Number((totalDays / deliveredOrders.length).toFixed(1));
-    onTimeDeliveryRate = Number((onTimeCount / deliveredOrders.length * 100).toFixed(1));
-  }
-  return {
-    returnRateByReason: {
-      colorExpectation: toPct(reasonCounts.COLOR_MISMATCH),
-      textureExpectation: toPct(reasonCounts.TEXTURE_DEFECT),
-      sizingFit: toPct(reasonCounts.INCORRECT_SIZE),
-      transitDamage: toPct(reasonCounts.HARDWARE_DAMAGE)
-    },
-    averageTransitDays,
-    warrantyClaimFrequency,
-    onTimeDeliveryRate,
-    totalReturns: Math.max(loggedReturnTotal, returnedOrdersCount),
-    completedDeliveries: deliveredOrders.length
-  };
-}
-function computeCohortRetention() {
-  const patrons = db.getCustomers({ includeArchived: true }).filter((c) => c.role === "PATRON");
-  const orders = db.getOrders().filter((o) => o.paymentStatus === "PAID");
-  const dayMs = 1e3 * 60 * 60 * 24;
-  const cohortsMap = /* @__PURE__ */ new Map();
-  for (const patron of patrons) {
-    const createdDate = new Date(patron.createdAt || Date.now());
-    const year = Number.isNaN(createdDate.getTime()) ? (/* @__PURE__ */ new Date()).getFullYear() : createdDate.getUTCFullYear();
-    const month = Number.isNaN(createdDate.getTime()) ? (/* @__PURE__ */ new Date()).getUTCMonth() : createdDate.getUTCMonth();
-    const quarter = Math.floor(month / 3) + 1;
-    const cohortLabel = `Q${quarter} ${year}`;
-    const sortKey = year * 10 + quarter;
-    if (!cohortsMap.has(cohortLabel)) {
-      cohortsMap.set(cohortLabel, {
-        sortKey,
-        cohort: cohortLabel,
-        totalPatrons: 0,
-        day30: 0,
-        day60: 0,
-        day90: 0
-      });
-    }
-    const bucket = cohortsMap.get(cohortLabel);
-    bucket.totalPatrons += 1;
-    const patronOrders = orders.filter(
-      (o) => o.customerId === patron.id || o.customerEmail.toLowerCase() === patron.email.toLowerCase()
-    );
-    const createdMs = createdDate.getTime();
-    let maxSpanDays = 0;
-    for (const ord of patronOrders) {
-      const ordMs = new Date(ord.createdAt).getTime();
-      if (Number.isFinite(ordMs) && Number.isFinite(createdMs)) {
-        maxSpanDays = Math.max(maxSpanDays, (ordMs - createdMs) / dayMs);
-      }
-    }
-    const totalOrdersCount = Math.max(patron.totalOrders || 0, patronOrders.length);
-    if (totalOrdersCount >= 1 || maxSpanDays >= 30) bucket.day30 += 1;
-    if (totalOrdersCount >= 2 || maxSpanDays >= 60 || patron.daysSinceLastOrder <= 60) bucket.day60 += 1;
-    if (totalOrdersCount >= 3 || maxSpanDays >= 90 || patron.daysSinceLastOrder <= 45) bucket.day90 += 1;
-  }
-  return Array.from(cohortsMap.values()).sort((a, b) => a.sortKey - b.sortKey).map(({ cohort, totalPatrons, day30, day60, day90 }) => ({
-    cohort,
-    totalPatrons,
-    day30,
-    day60,
-    day90
-  }));
-}
-function computeSkuReorderVelocity(nowMs = Date.now()) {
-  const paidOrders = db.getOrders().filter((o) => o.paymentStatus === "PAID");
-  const catalogProducts = db.getCatalog().products || [];
-  const thirtyDaysMs = 30 * 24 * 60 * 60 * 1e3;
-  const sixtyDaysMs = 60 * 24 * 60 * 60 * 1e3;
-  const skuStats = /* @__PURE__ */ new Map();
-  for (const prod of catalogProducts) {
-    skuStats.set(prod.sku, {
-      sku: prod.sku,
-      name: prod.name,
-      unitsSold30d: 0,
-      unitsSoldPrev30d: 0,
-      stockCount: prod.stockCount
-    });
-  }
-  for (const order of paidOrders) {
-    const ordMs = new Date(order.createdAt).getTime();
-    if (!Number.isFinite(ordMs)) continue;
-    const ageMs = nowMs - ordMs;
-    for (const item of order.items) {
-      if (!skuStats.has(item.sku)) {
-        skuStats.set(item.sku, {
-          sku: item.sku,
-          name: item.productName,
-          unitsSold30d: 0,
-          unitsSoldPrev30d: 0
-        });
-      }
-      const stat = skuStats.get(item.sku);
-      if (ageMs <= thirtyDaysMs) {
-        stat.unitsSold30d += item.quantity;
-      } else if (ageMs <= sixtyDaysMs) {
-        stat.unitsSoldPrev30d += item.quantity;
-      }
-    }
-  }
-  return Array.from(skuStats.values()).sort((a, b) => b.unitsSold30d - a.unitsSold30d || a.name.localeCompare(b.name)).slice(0, 6).map((stat) => {
-    let velocityTrend = "0%";
-    if (stat.unitsSoldPrev30d === 0 && stat.unitsSold30d > 0) {
-      velocityTrend = "+100%";
-    } else if (stat.unitsSoldPrev30d > 0) {
-      const pct = Math.round((stat.unitsSold30d - stat.unitsSoldPrev30d) / stat.unitsSoldPrev30d * 100);
-      velocityTrend = `${pct >= 0 ? "+" : ""}${pct}%`;
-    }
-    return {
-      sku: stat.sku,
-      name: stat.name,
-      unitsSold30d: stat.unitsSold30d,
-      velocityTrend,
-      stockCount: stat.stockCount
-    };
-  });
-}
-var init_rfm = __esm({
-  "src/server/rfm.ts"() {
-    init_db();
-  }
-});
-
-// src/server/firebaseAuthVerifier.ts
-import crypto5 from "crypto";
-import fs5 from "fs";
-import path5 from "path";
-function getProjectId() {
-  const envProjectId = (process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || "").trim();
-  if (envProjectId) {
-    return envProjectId;
-  }
-  try {
-    const cfgPath = path5.resolve(process.cwd(), "firebase-applet-config.json");
-    if (fs5.existsSync(cfgPath)) {
-      const cfg = JSON.parse(fs5.readFileSync(cfgPath, "utf-8"));
-      if (cfg.projectId) return cfg.projectId;
-    }
-  } catch {
-  }
-  return "gen-lang-client-0774833728";
-}
-function base64UrlDecode(input) {
-  const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
-  const padLen = (4 - normalized.length % 4) % 4;
-  return Buffer.from(normalized + "=".repeat(padLen), "base64");
-}
-async function fetchGooglePublicCerts() {
-  const now = Date.now();
-  if (now < certsExpiresAt && Object.keys(cachedCerts).length > 0) {
-    return cachedCerts;
-  }
-  const res = await fetch(GOOGLE_CERTS_URL);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch Google public certificates (${res.status})`);
-  }
-  const cacheControl = res.headers.get("cache-control") || "";
-  const maxAgeMatch = cacheControl.match(/max-age=(\d+)/i);
-  const maxAgeSeconds = maxAgeMatch ? parseInt(maxAgeMatch[1], 10) : 3600;
-  cachedCerts = await res.json();
-  certsExpiresAt = now + maxAgeSeconds * 1e3;
-  return cachedCerts;
-}
-async function verifyFirebaseIdToken(idToken) {
-  if (!idToken || typeof idToken !== "string") return null;
-  const nowSeconds = Math.floor(Date.now() / 1e3);
-  const cached = verifiedTokenCache.get(idToken);
-  if (cached && cached.exp > nowSeconds + 15) {
-    return cached;
-  }
-  const parts = idToken.split(".");
-  if (parts.length !== 3) return null;
-  const [headerB64, payloadB64, signatureB64] = parts;
-  let header;
-  let payload;
-  try {
-    header = JSON.parse(base64UrlDecode(headerB64).toString("utf-8"));
-    payload = JSON.parse(base64UrlDecode(payloadB64).toString("utf-8"));
-  } catch {
-    return null;
-  }
-  if (header.alg !== "RS256" || !header.kid) {
-    return null;
-  }
-  const projectId = getProjectId();
-  const expectedIssuer = `https://securetoken.google.com/${projectId}`;
-  if (payload.aud !== projectId) return null;
-  if (payload.iss !== expectedIssuer) return null;
-  if (typeof payload.sub !== "string" || !payload.sub.trim()) return null;
-  if (typeof payload.exp !== "number" || payload.exp <= nowSeconds) return null;
-  if (typeof payload.iat !== "number" || payload.iat > nowSeconds + 300) return null;
-  const certs = await fetchGooglePublicCerts();
-  const pemCert = certs[header.kid];
-  if (!pemCert) {
-    certsExpiresAt = 0;
-    const refreshed = await fetchGooglePublicCerts();
-    if (!refreshed[header.kid]) return null;
-  }
-  const cert = cachedCerts[header.kid];
-  const verifier = crypto5.createVerify("RSA-SHA256");
-  verifier.update(`${headerB64}.${payloadB64}`);
-  verifier.end();
-  const signatureBuf = base64UrlDecode(signatureB64);
-  const isValid = verifier.verify(cert, signatureBuf);
-  if (!isValid) return null;
-  const email = typeof payload.email === "string" ? payload.email.toLowerCase().trim() : "";
-  if (!email) return null;
-  const claims = {
-    uid: payload.sub,
-    email,
-    emailVerified: Boolean(payload.email_verified),
-    name: typeof payload.name === "string" ? payload.name : email.split("@")[0],
-    picture: typeof payload.picture === "string" ? payload.picture : void 0,
-    exp: payload.exp
-  };
-  if (verifiedTokenCache.size > 500) {
-    verifiedTokenCache.clear();
-  }
-  verifiedTokenCache.set(idToken, claims);
-  return claims;
-}
-var GOOGLE_CERTS_URL, cachedCerts, certsExpiresAt, verifiedTokenCache;
-var init_firebaseAuthVerifier = __esm({
-  "src/server/firebaseAuthVerifier.ts"() {
-    GOOGLE_CERTS_URL = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
-    cachedCerts = {};
-    certsExpiresAt = 0;
-    verifiedTokenCache = /* @__PURE__ */ new Map();
-  }
-});
-
-// src/server/authMiddleware.ts
-function isTestAuthTokensEnabled() {
-  return process.env.NODE_ENV !== "production" && (process.env.NODE_ENV === "test" || process.env.ENABLE_TEST_AUTH_TOKENS === "true");
-}
-function resolveAuthToken(authHeader) {
-  if (!authHeader) return null;
-  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-  if (!token) return null;
-  if (isTestAuthTokensEnabled() && TEST_SESSION_CACHE.has(token)) {
-    const cached = TEST_SESSION_CACHE.get(token);
-    const isAuth = db.isStoreManagementAuthorized(cached.email);
-    return {
-      ...cached,
-      role: isAuth ? db.getStaffRole(cached.email) : "PATRON",
-      isMasterAdmin: db.isMasterAuthorized(cached.email),
-      isStoreManagementAuthorized: isAuth
-    };
-  }
-  const claims = verifySessionJwt(token);
-  if (!claims || !claims.email) {
-    return null;
-  }
-  const email = claims.email.trim().toLowerCase();
-  const isMaster = db.isMasterAuthorized(email);
-  const isAdmin = db.isStoreManagementAuthorized(email);
-  const resolvedRole = isAdmin ? db.getStaffRole(email) : "PATRON";
-  return {
-    uid: claims.sub,
-    email,
-    name: claims.name || email.split("@")[0],
-    role: resolvedRole,
-    isMasterAdmin: isMaster,
-    isStoreManagementAuthorized: isAdmin,
-    authProvider: "CREDENTIALS"
-  };
-}
-async function resolveAuthTokenAsync(authHeader) {
-  const syncUser = resolveAuthToken(authHeader);
-  if (syncUser) return syncUser;
-  if (!authHeader) return null;
-  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-  if (!token || token.split(".").length !== 3) return null;
-  try {
-    const claims = await verifyFirebaseIdToken(token);
-    if (!claims || !claims.email) return null;
-    const cleanEmail = claims.email.trim().toLowerCase();
-    const isMaster = db.isMasterAuthorized(cleanEmail);
-    const isAdmin = db.isStoreManagementAuthorized(cleanEmail);
-    const resolvedRole = isAdmin ? db.getStaffRole(cleanEmail) : "PATRON";
-    return {
-      uid: claims.uid,
-      email: cleanEmail,
-      name: claims.name || cleanEmail.split("@")[0],
-      role: resolvedRole,
-      isMasterAdmin: isMaster,
-      isStoreManagementAuthorized: isAdmin,
-      photoURL: claims.picture,
-      authProvider: "GOOGLE"
-    };
-  } catch {
-    return null;
-  }
-}
-async function requireAuth(req, res, next) {
-  const user = await resolveAuthTokenAsync(req.headers.authorization);
-  if (!user) {
-    return res.status(401).json({
-      error: "UNAUTHORIZED",
-      message: "Authentication required. Please sign in to continue."
-    });
-  }
-  req.user = user;
-  next();
-}
-function createRoleGuard(allowedRoles, denialMessage) {
-  return async function enforceRole(req, res, next) {
-    const user = await resolveAuthTokenAsync(req.headers.authorization);
-    if (!user) {
-      return res.status(401).json({
-        error: "UNAUTHORIZED",
-        message: "Authentication required to access admin operations."
-      });
-    }
-    const isStaff = db.isStoreManagementAuthorized(user.email);
-    const effectiveRole = isStaff ? db.getStaffRole(user.email) : "PATRON";
-    if (!isStaff || !allowedRoles.includes(effectiveRole)) {
-      db.logAudit(
-        user.email,
-        "UNAUTHORIZED_ADMIN_ATTEMPT",
-        "AUTH_PERMISSION",
-        `Blocked ${user.email} (role: ${effectiveRole}) from ${req.method} ${req.originalUrl}`,
-        req.ip
-      );
-      return res.status(403).json({
-        error: "FORBIDDEN",
-        message: denialMessage
-      });
-    }
-    req.user = { ...user, role: effectiveRole };
-    next();
-  };
-}
-async function requireMasterAdminAccess(req, res, next) {
-  const user = await resolveAuthTokenAsync(req.headers.authorization);
-  if (!user) {
-    return res.status(401).json({
-      error: "UNAUTHORIZED",
-      message: "Authentication required to perform Master Admin actions."
-    });
-  }
-  if (!db.isMasterAuthorized(user.email)) {
-    db.logAudit(
-      user.email,
-      "UNAUTHORIZED_MASTER_ADMIN_ATTEMPT",
-      "AUTH_PERMISSION",
-      `Blocked non-master user ${user.email} from Master-only endpoint ${req.method} ${req.originalUrl}`,
-      req.ip
-    );
-    return res.status(403).json({
-      error: "FORBIDDEN",
-      message: "Only Founding Master Super-Admins can perform this administrative action."
-    });
-  }
-  req.user = user;
-  next();
-}
-var TEST_SESSION_CACHE, requireStoreManagementAccess, requireCrmAccess, requireErpAccess, requireAnalyticsAccess;
-var init_authMiddleware = __esm({
-  "src/server/authMiddleware.ts"() {
-    init_db();
-    init_firebaseAuthVerifier();
-    init_security();
-    TEST_SESSION_CACHE = /* @__PURE__ */ new Map();
-    TEST_SESSION_CACHE.set("token_sunil", {
-      uid: "uid_admin_sunil",
-      email: "sunilchain@gmail.com",
-      name: "Sunil Chainani",
-      role: "STORE_MANAGER",
-      isMasterAdmin: true,
-      isStoreManagementAuthorized: true
-    });
-    TEST_SESSION_CACHE.set("token_support", {
-      uid: "uid_admin_support",
-      email: "support@bharatvarshcrafts.com",
-      name: "Bharatvarsh Support Desk",
-      role: "STORE_MANAGER",
-      isMasterAdmin: true,
-      isStoreManagementAuthorized: true
-    });
-    TEST_SESSION_CACHE.set("token_patron_vikram", {
-      uid: "uid_patron_01",
-      email: "vikram.singhania@heritagecrafts.in",
-      name: "Vikramaditya Singhania",
-      role: "PATRON",
-      isMasterAdmin: false,
-      isStoreManagementAuthorized: false
-    });
-    requireStoreManagementAccess = createRoleGuard(
-      ["STORE_MANAGER"],
-      "Access denied. Only Store Managers can access store configuration, catalog management, and administrative settings."
-    );
-    requireCrmAccess = createRoleGuard(
-      ["STORE_MANAGER", "SUPPORT_AGENT"],
-      "Access denied. Customer 360, Omnichannel Inbox, and Sales Pipeline require Store Manager or Support Agent privileges."
-    );
-    requireErpAccess = createRoleGuard(
-      ["STORE_MANAGER", "LOGISTICS_COORDINATOR"],
-      "Access denied. ERP Inventory, BOM, Dispatch, and RMA modules require Store Manager or Logistics Coordinator privileges."
-    );
-    requireAnalyticsAccess = createRoleGuard(
-      ["STORE_MANAGER", "SUPPORT_AGENT", "LOGISTICS_COORDINATOR"],
-      "Access denied. Only authorized staff members can view operational analytics."
-    );
-  }
-});
-
-// src/server/integrations.ts
-import nodemailer from "nodemailer";
-function isConfiguredCredential(value) {
-  if (!value) return false;
-  const trimmed = value.trim();
-  if (!trimmed) return false;
-  const lower = trimmed.toLowerCase();
-  if (lower.includes("placeholder") || lower.startsWith("your_") || lower.includes("dummy") || lower.includes("example")) {
-    return false;
-  }
-  return true;
-}
-function getIntegrationsReadiness() {
-  const razorpayConfigured = isConfiguredCredential(process.env.RAZORPAY_KEY_ID) && isConfiguredCredential(process.env.RAZORPAY_KEY_SECRET);
-  const stripeConfigured = isConfiguredCredential(process.env.STRIPE_SECRET_KEY);
-  const shiprocketConfigured = isConfiguredCredential(process.env.SHIPROCKET_API_TOKEN) || isConfiguredCredential(process.env.SHIPROCKET_EMAIL) && isConfiguredCredential(process.env.SHIPROCKET_PASSWORD);
-  const delhiveryConfigured = isConfiguredCredential(process.env.DELHIVERY_API_KEY);
-  const smtpConfigured = isConfiguredCredential(process.env.SMTP_HOST) && isConfiguredCredential(process.env.SMTP_USER) && isConfiguredCredential(process.env.SMTP_PASS);
-  const whatsappConfigured = isConfiguredCredential(process.env.WHATSAPP_BUSINESS_PHONE_NUMBER_ID) && isConfiguredCredential(process.env.WHATSAPP_ACCESS_TOKEN);
-  return [
-    {
-      provider: "Razorpay",
-      category: "PAYMENTS",
-      configured: razorpayConfigured,
-      mode: razorpayConfigured ? "LIVE" : "SANDBOX_FALLBACK",
-      summary: razorpayConfigured ? "Live Razorpay Orders & Payment Links active" : "Missing live RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET \u2014 using sandbox fallback"
-    },
-    {
-      provider: "Stripe",
-      category: "PAYMENTS",
-      configured: stripeConfigured,
-      mode: stripeConfigured ? "LIVE" : "SANDBOX_FALLBACK",
-      summary: stripeConfigured ? "Live Stripe PaymentIntents & Checkout Links active" : "Missing live STRIPE_SECRET_KEY \u2014 using sandbox fallback"
-    },
-    {
-      provider: "Shiprocket",
-      category: "LOGISTICS",
-      configured: shiprocketConfigured,
-      mode: shiprocketConfigured ? "LIVE" : "SANDBOX_FALLBACK",
-      summary: shiprocketConfigured ? "Live Shiprocket AWB dispatch & courier API active" : "Missing live SHIPROCKET credentials \u2014 using Pune hub sandbox AWB"
-    },
-    {
-      provider: "Delhivery",
-      category: "LOGISTICS",
-      configured: delhiveryConfigured,
-      mode: delhiveryConfigured ? "LIVE" : "SANDBOX_FALLBACK",
-      summary: delhiveryConfigured ? "Live Delhivery express surface/air cargo active" : "Missing live DELHIVERY_API_KEY \u2014 using Delhivery sandbox fallback"
-    },
-    {
-      provider: "Transactional SMTP",
-      category: "MESSAGING",
-      configured: smtpConfigured,
-      mode: smtpConfigured ? "LIVE" : "SANDBOX_FALLBACK",
-      summary: smtpConfigured ? `Live SMTP relay configured (${process.env.SMTP_HOST})` : "Missing SMTP_HOST / SMTP_USER / SMTP_PASS \u2014 logging email dispatches locally"
-    },
-    {
-      provider: "WhatsApp Business",
-      category: "MESSAGING",
-      configured: whatsappConfigured,
-      mode: whatsappConfigured ? "LIVE" : "SANDBOX_FALLBACK",
-      summary: whatsappConfigured ? "Live Meta WhatsApp Cloud API active" : "Missing WHATSAPP_ACCESS_TOKEN / PHONE_NUMBER_ID \u2014 logging WhatsApp dispatches locally"
-    }
-  ];
-}
-async function createGatewayOrderOrIntent(params) {
-  if (params.gateway === "CASH_ON_DELIVERY") {
-    return {
-      mode: "SANDBOX_FALLBACK",
-      provider: "CASH_ON_DELIVERY",
-      paymentId: `cod_verified_${Date.now()}`
-    };
-  }
-  const amountPaise = Math.max(100, Math.round(params.amountInr * 100));
-  if (params.gateway === "RAZORPAY") {
-    const keyId = process.env.RAZORPAY_KEY_ID;
-    const keySecret = process.env.RAZORPAY_KEY_SECRET;
-    if (isConfiguredCredential(keyId) && isConfiguredCredential(keySecret)) {
-      try {
-        const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
-        const res = await fetch("https://api.razorpay.com/v1/orders", {
-          method: "POST",
-          headers: {
-            Authorization: `Basic ${auth}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            amount: amountPaise,
-            currency: "INR",
-            receipt: params.receipt.slice(0, 40),
-            notes: {
-              customerEmail: params.customerEmail,
-              customerName: params.customerName
-            }
-          })
-        });
-        const data = await res.json();
-        if (res.ok && data.id) {
-          return {
-            mode: "LIVE",
-            provider: "RAZORPAY",
-            paymentId: data.id
-          };
-        }
-        return {
-          mode: "SANDBOX_FALLBACK",
-          provider: "RAZORPAY",
-          paymentId: `pay_rzp_sbx_${Date.now()}`,
-          fallbackReason: data?.error?.description || `Razorpay HTTP ${res.status}`
-        };
-      } catch (err) {
-        return {
-          mode: "SANDBOX_FALLBACK",
-          provider: "RAZORPAY",
-          paymentId: `pay_rzp_sbx_${Date.now()}`,
-          fallbackReason: err.message
-        };
-      }
-    }
-    return {
-      mode: "SANDBOX_FALLBACK",
-      provider: "RAZORPAY",
-      paymentId: `pay_rzp_sbx_${Date.now()}`,
-      fallbackReason: "Razorpay live credentials not configured"
-    };
-  }
-  const stripeSecret = process.env.STRIPE_SECRET_KEY;
-  if (isConfiguredCredential(stripeSecret)) {
-    try {
-      const form = new URLSearchParams();
-      form.set("amount", String(amountPaise));
-      form.set("currency", "inr");
-      form.set("receipt_email", params.customerEmail);
-      form.set("description", `Bharatvarsh Order ${params.receipt}`);
-      form.set("metadata[customerName]", params.customerName);
-      const res = await fetch("https://api.stripe.com/v1/payment_intents", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${stripeSecret}`,
-          "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body: form.toString()
-      });
-      const data = await res.json();
-      if (res.ok && data.id) {
-        return {
-          mode: "LIVE",
-          provider: "STRIPE",
-          paymentId: data.id,
-          clientSecret: data.client_secret
-        };
-      }
-      return {
-        mode: "SANDBOX_FALLBACK",
-        provider: "STRIPE",
-        paymentId: `pi_str_sbx_${Date.now()}`,
-        fallbackReason: data?.error?.message || `Stripe HTTP ${res.status}`
-      };
-    } catch (err) {
-      return {
-        mode: "SANDBOX_FALLBACK",
-        provider: "STRIPE",
-        paymentId: `pi_str_sbx_${Date.now()}`,
-        fallbackReason: err.message
-      };
-    }
-  }
-  return {
-    mode: "SANDBOX_FALLBACK",
-    provider: "STRIPE",
-    paymentId: `pi_str_sbx_${Date.now()}`,
-    fallbackReason: "Stripe live credentials not configured"
-  };
-}
-async function createPaymentLink(params) {
-  const gateway = params.gateway || "RAZORPAY";
-  const amountPaise = Math.max(100, Math.round(params.amountInr * 100));
-  const ref = params.referenceId || `bvl_lnk_${Date.now().toString(36)}`;
-  const appUrl = (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
-  if (gateway === "RAZORPAY") {
-    const keyId = process.env.RAZORPAY_KEY_ID;
-    const keySecret = process.env.RAZORPAY_KEY_SECRET;
-    if (isConfiguredCredential(keyId) && isConfiguredCredential(keySecret)) {
-      try {
-        const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
-        const res = await fetch("https://api.razorpay.com/v1/payment_links", {
-          method: "POST",
-          headers: {
-            Authorization: `Basic ${auth}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            amount: amountPaise,
-            currency: "INR",
-            reference_id: ref.slice(0, 40),
-            description: params.description.slice(0, 200),
-            customer: {
-              name: params.customerName || "Valued Patron",
-              email: params.customerEmail,
-              ...params.customerPhone ? { contact: params.customerPhone } : {}
-            },
-            notify: {
-              sms: Boolean(params.customerPhone),
-              email: Boolean(params.customerEmail)
-            }
-          })
-        });
-        const data = await res.json();
-        if (res.ok && data.short_url) {
-          return {
-            mode: "LIVE",
-            provider: "RAZORPAY",
-            paymentUrl: data.short_url,
-            referenceId: data.id || ref
-          };
-        }
-        return {
-          mode: "SANDBOX_FALLBACK",
-          provider: "RAZORPAY",
-          paymentUrl: `${appUrl}/?payment_link=${encodeURIComponent(ref)}&gateway=razorpay`,
-          referenceId: ref,
-          fallbackReason: data?.error?.description || `Razorpay HTTP ${res.status}`
-        };
-      } catch (err) {
-        return {
-          mode: "SANDBOX_FALLBACK",
-          provider: "RAZORPAY",
-          paymentUrl: `${appUrl}/?payment_link=${encodeURIComponent(ref)}&gateway=razorpay`,
-          referenceId: ref,
-          fallbackReason: err.message
-        };
-      }
-    }
-    return {
-      mode: "SANDBOX_FALLBACK",
-      provider: "RAZORPAY",
-      paymentUrl: `${appUrl}/?payment_link=${encodeURIComponent(ref)}&gateway=razorpay`,
-      referenceId: ref,
-      fallbackReason: "Razorpay live credentials not configured"
-    };
-  }
-  const stripeSecret = process.env.STRIPE_SECRET_KEY;
-  if (isConfiguredCredential(stripeSecret)) {
-    try {
-      const form = new URLSearchParams();
-      form.set("mode", "payment");
-      form.set("customer_email", params.customerEmail);
-      form.set("line_items[0][price_data][currency]", "inr");
-      form.set("line_items[0][price_data][product_data][name]", params.description.slice(0, 120));
-      form.set("line_items[0][price_data][unit_amount]", String(amountPaise));
-      form.set("line_items[0][quantity]", "1");
-      form.set("success_url", `${appUrl}/?payment_success=${encodeURIComponent(ref)}`);
-      form.set("cancel_url", `${appUrl}/?payment_cancelled=${encodeURIComponent(ref)}`);
-      const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${stripeSecret}`,
-          "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body: form.toString()
-      });
-      const data = await res.json();
-      if (res.ok && data.url) {
-        return {
-          mode: "LIVE",
-          provider: "STRIPE",
-          paymentUrl: data.url,
-          referenceId: data.id || ref
-        };
-      }
-      return {
-        mode: "SANDBOX_FALLBACK",
-        provider: "STRIPE",
-        paymentUrl: `${appUrl}/?payment_link=${encodeURIComponent(ref)}&gateway=stripe`,
-        referenceId: ref,
-        fallbackReason: data?.error?.message || `Stripe HTTP ${res.status}`
-      };
-    } catch (err) {
-      return {
-        mode: "SANDBOX_FALLBACK",
-        provider: "STRIPE",
-        paymentUrl: `${appUrl}/?payment_link=${encodeURIComponent(ref)}&gateway=stripe`,
-        referenceId: ref,
-        fallbackReason: err.message
-      };
-    }
-  }
-  return {
-    mode: "SANDBOX_FALLBACK",
-    provider: "STRIPE",
-    paymentUrl: `${appUrl}/?payment_link=${encodeURIComponent(ref)}&gateway=stripe`,
-    referenceId: ref,
-    fallbackReason: "Stripe live credentials not configured"
-  };
-}
-async function getShiprocketBearerToken() {
-  if (isConfiguredCredential(process.env.SHIPROCKET_API_TOKEN)) {
-    return process.env.SHIPROCKET_API_TOKEN.trim();
-  }
-  const email = process.env.SHIPROCKET_EMAIL;
-  const password = process.env.SHIPROCKET_PASSWORD;
-  if (isConfiguredCredential(email) && isConfiguredCredential(password)) {
-    const res = await fetch("https://apiv2.shiprocket.in/v1/external/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password })
-    });
-    const data = await res.json();
-    if (res.ok && data.token) return data.token;
-  }
-  return null;
-}
-async function allocateCourierAwb(params) {
-  const preferred = params.courierPreference || "SHIPROCKET";
-  const ord = params.order;
-  if (preferred === "DELHIVERY") {
-    const apiKey = process.env.DELHIVERY_API_KEY;
-    if (isConfiguredCredential(apiKey)) {
-      try {
-        const res = await fetch(
-          `https://track.delhivery.com/waybill/api/fetch/json/?token=${encodeURIComponent(apiKey)}&cl=${encodeURIComponent(
-            process.env.DELHIVERY_CLIENT_NAME || "BHARATVARSH_SURFACE"
-          )}`
-        );
-        const text = await res.text();
-        const cleaned = text.replace(/["\s]/g, "");
-        if (res.ok && cleaned.length >= 6) {
-          return {
-            mode: "LIVE",
-            courier: "DELHIVERY",
-            awbNumber: cleaned
-          };
-        }
-      } catch (err) {
-        return {
-          mode: "SANDBOX_FALLBACK",
-          courier: "DELHIVERY",
-          awbNumber: ord.awbNumber || `DLV-PNQ-${Math.floor(1e7 + Math.random() * 9e7)}`,
-          fallbackReason: err.message
-        };
-      }
-    }
-    return {
-      mode: "SANDBOX_FALLBACK",
-      courier: "DELHIVERY",
-      awbNumber: ord.awbNumber || `DLV-PNQ-${Math.floor(1e7 + Math.random() * 9e7)}`,
-      fallbackReason: "Delhivery API key not configured"
-    };
-  }
-  try {
-    const token = await getShiprocketBearerToken();
-    if (token) {
-      const res = await fetch("https://apiv2.shiprocket.in/v1/external/orders/create/adhoc", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          order_id: ord.orderNumber,
-          order_date: ord.createdAt.slice(0, 19).replace("T", " "),
-          pickup_location: "Primary",
-          billing_customer_name: ord.customerName,
-          billing_last_name: "",
-          billing_address: ord.billingAddress?.street || "Pune Primary Hub",
-          billing_city: ord.billingAddress?.city || "Pune",
-          billing_pincode: ord.billingAddress?.pincode || "411019",
-          billing_state: ord.billingAddress?.state || "Maharashtra",
-          billing_country: "India",
-          billing_email: ord.customerEmail,
-          billing_phone: (ord.customerPhone || "9820112345").replace(/\D/g, "").slice(-10) || "9820112345",
-          shipping_is_billing: true,
-          order_items: ord.items.map((it) => ({
-            name: it.productName,
-            sku: it.sku,
-            units: it.quantity,
-            selling_price: it.unitPrice
-          })),
-          payment_method: ord.paymentGateway === "CASH_ON_DELIVERY" ? "COD" : "Prepaid",
-          sub_total: ord.totalAmount,
-          length: 34,
-          breadth: 26,
-          height: 12,
-          weight: 1.4
-        })
-      });
-      const data = await res.json();
-      const awb = data?.awb_code || (data?.shipment_id ? `SR-SHP-${data.shipment_id}` : "");
-      if (res.ok && awb) {
-        return {
-          mode: "LIVE",
-          courier: "SHIPROCKET",
-          awbNumber: String(awb)
-        };
-      }
-      return {
-        mode: "SANDBOX_FALLBACK",
-        courier: "SHIPROCKET",
-        awbNumber: ord.awbNumber || `SR-PNQ-${Math.floor(1e7 + Math.random() * 9e7)}`,
-        fallbackReason: data?.message || `Shiprocket HTTP ${res.status}`
-      };
-    }
-  } catch (err) {
-    return {
-      mode: "SANDBOX_FALLBACK",
-      courier: "SHIPROCKET",
-      awbNumber: ord.awbNumber || `SR-PNQ-${Math.floor(1e7 + Math.random() * 9e7)}`,
-      fallbackReason: err.message
-    };
-  }
-  return {
-    mode: "SANDBOX_FALLBACK",
-    courier: "SHIPROCKET",
-    awbNumber: ord.awbNumber || `SR-PNQ-${Math.floor(1e7 + Math.random() * 9e7)}`,
-    fallbackReason: "Shiprocket credentials not configured"
-  };
-}
-async function sendTransactionalEmail(params) {
-  const host = process.env.SMTP_HOST;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 465;
-  const secure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === "true" : port === 465;
-  const from = process.env.SMTP_SUPPORT_EMAIL || user || "support@bharatvarshcrafts.com";
-  if (isConfiguredCredential(host) && isConfiguredCredential(user) && isConfiguredCredential(pass)) {
-    try {
-      const transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure,
-        auth: { user, pass }
-      });
-      const info = await transporter.sendMail({
-        from: `"Bharatvarsh Leathercrafts LLP" <${from}>`,
-        to: params.to,
-        subject: params.subject,
-        text: params.text,
-        html: params.html || `<p>${params.text.replace(/\n/g, "<br/>")}</p>`
-      });
-      return {
-        mode: "LIVE",
-        channel: "EMAIL",
-        messageId: info.messageId || `smtp_${Date.now()}`
-      };
-    } catch (err) {
-      return {
-        mode: "SANDBOX_FALLBACK",
-        channel: "EMAIL",
-        messageId: `email_sbx_${Date.now()}`,
-        fallbackReason: err.message
-      };
-    }
-  }
-  return {
-    mode: "SANDBOX_FALLBACK",
-    channel: "EMAIL",
-    messageId: `email_sbx_${Date.now()}`,
-    fallbackReason: "SMTP credentials not configured"
-  };
-}
-async function sendWhatsAppMessage(params) {
-  const phoneId = process.env.WHATSAPP_BUSINESS_PHONE_NUMBER_ID;
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-  const cleanPhone = (params.toPhone || "").replace(/[^\d]/g, "");
-  if (isConfiguredCredential(phoneId) && isConfiguredCredential(accessToken) && cleanPhone.length >= 10) {
-    try {
-      const res = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          to: cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone,
-          type: "text",
-          text: { body: params.text.slice(0, 4096) }
-        })
-      });
-      const data = await res.json();
-      const waId = data?.messages?.[0]?.id;
-      if (res.ok && waId) {
-        return {
-          mode: "LIVE",
-          channel: "WHATSAPP",
-          messageId: waId
-        };
-      }
-      return {
-        mode: "SANDBOX_FALLBACK",
-        channel: "WHATSAPP",
-        messageId: `wa_sbx_${Date.now()}`,
-        fallbackReason: data?.error?.message || `WhatsApp API HTTP ${res.status}`
-      };
-    } catch (err) {
-      return {
-        mode: "SANDBOX_FALLBACK",
-        channel: "WHATSAPP",
-        messageId: `wa_sbx_${Date.now()}`,
-        fallbackReason: err.message
-      };
-    }
-  }
-  return {
-    mode: "SANDBOX_FALLBACK",
-    channel: "WHATSAPP",
-    messageId: `wa_sbx_${Date.now()}`,
-    fallbackReason: cleanPhone.length < 10 ? "Valid patron phone number missing" : "WhatsApp Business Cloud API credentials not configured"
-  };
-}
-async function dispatchOrderConfirmationAndCareGuide(order) {
-  const summaryLines = order.items.map(
-    (it) => `\u2022 ${it.productName} (${it.quantity}x) \u2014 \u20B9${it.unitPrice.toLocaleString("en-IN")}${it.customization?.monogramInitials ? ` [Monogram: ${it.customization.monogramInitials}]` : ""}`
-  );
-  const text = [
-    `Dear ${order.customerName},`,
-    "",
-    `Thank you for commissioning Bharatvarsh Leathercrafts LLP (Order ${order.orderNumber}).`,
-    `Total Paid: \u20B9${order.totalAmount.toLocaleString("en-IN")} | Invoice: ${order.invoiceNumber || "Issued"}`,
-    `Logistics Partner: ${order.courierPartner || "SHIPROCKET"} | AWB: ${order.awbNumber || "Pending"}`,
-    "",
-    "Pieces Commissioned:",
-    ...summaryLines,
-    "",
-    "Digital Heirloom Care Guide:",
-    "Apply organic beeswax conditioning balm lightly every 90 days and buff with a soft horsehair brush. Avoid prolonged monsoon moisture; store in your breathable cotton dust bag.",
-    "",
-    "Warm regards,",
-    "Bharatvarsh Atelier \xB7 Pune Primary Hub"
-  ].join("\n");
-  const [emailDelivery, whatsappDelivery] = await Promise.all([
-    sendTransactionalEmail({
-      to: order.customerEmail,
-      subject: `Bharatvarsh Atelier Confirmation \xB7 ${order.orderNumber}`,
-      text
-    }),
-    sendWhatsAppMessage({
-      toPhone: order.customerPhone,
-      text: `Bharatvarsh Atelier: Order ${order.orderNumber} confirmed (\u20B9${order.totalAmount.toLocaleString(
-        "en-IN"
-      )}). AWB: ${order.awbNumber}. Digital Beeswax Care Guide included inside your My Atelier portal.`
-    })
-  ]);
-  return { emailDelivery, whatsappDelivery };
-}
-async function dispatchCartRecoveryNotice(cart, channel, promoCode, fullCheckoutUrl) {
-  const itemNames = cart.items.map((it) => `${it.productName} (x${it.quantity})`).join(", ");
-  if (channel === "WHATSAPP") {
-    return sendWhatsAppMessage({
-      toPhone: cart.phone,
-      text: `Bharatvarsh Atelier: Your reserved leathercraft bag (${itemNames}, \u20B9${cart.subtotal.toLocaleString(
-        "en-IN"
-      )}) awaits at Pune Hub. Use ${promoCode} at checkout: ${fullCheckoutUrl}`
-    });
-  }
-  return sendTransactionalEmail({
-    to: cart.email,
-    subject: "Your Handcrafted Bharatvarsh Atelier Bag Awaits",
-    text: `Your selected pieces (${itemNames}) remain reserved at our Pune Primary Hub.
-
-Complete your commission with code ${promoCode}: ${fullCheckoutUrl}`
-  });
-}
-async function dispatchInboxAgentReply(params) {
-  if (params.channel === "EMAIL") {
-    return sendTransactionalEmail({
-      to: params.ticket.customerEmail,
-      subject: `Re: [${params.ticket.ticketNumber}] ${params.ticket.subject}`,
-      text: params.text
-    });
-  }
-  if (params.channel === "WHATSAPP") {
-    return sendWhatsAppMessage({
-      toPhone: params.toPhone || params.ticket.customerPhone,
-      text: `[${params.ticket.ticketNumber}] ${params.text}`
-    });
-  }
-  return {
-    mode: "SANDBOX_FALLBACK",
-    channel: "LIVE_CHAT",
-    messageId: `chat_${Date.now()}`,
-    fallbackReason: "Delivered via in-app Atelier live chat session"
-  };
-}
-var init_integrations = __esm({
-  "src/server/integrations.ts"() {
-  }
-});
-
-// src/server/invoicePdf.ts
-import fs6 from "fs";
-import path6 from "path";
 import zlib from "zlib";
 function resolveLogoFilePath() {
   const candidates = [
-    path6.resolve(process.cwd(), "public", "assets", "logo.png"),
-    path6.resolve(process.cwd(), "dist", "assets", "logo.png"),
-    path6.resolve(process.cwd(), "public", "assets", "aistudio", "Circular_with_Stitch_and_ring_Bharatvarsh_2405b0e7.png")
+    path4.resolve(process.cwd(), "public", "assets", "logo.png"),
+    path4.resolve(process.cwd(), "dist", "assets", "logo.png"),
+    path4.resolve(process.cwd(), "public", "assets", "aistudio", "Circular_with_Stitch_and_ring_Bharatvarsh_2405b0e7.png")
   ];
   for (const p of candidates) {
-    if (fs6.existsSync(p)) return p;
+    if (fs4.existsSync(p)) return p;
   }
   return null;
 }
@@ -6441,7 +5068,7 @@ function getLogoDataUri() {
       cachedLogoDataUri = null;
       return null;
     }
-    const buf = fs6.readFileSync(filePath);
+    const buf = fs4.readFileSync(filePath);
     cachedLogoDataUri = `data:image/png;base64,${buf.toString("base64")}`;
     return cachedLogoDataUri;
   } catch {
@@ -6554,7 +5181,7 @@ function getLogoPdfImage() {
       cachedLogoPdfImage = null;
       return null;
     }
-    cachedLogoPdfImage = decodePngToPdfRgb(fs6.readFileSync(filePath));
+    cachedLogoPdfImage = decodePngToPdfRgb(fs4.readFileSync(filePath));
     return cachedLogoPdfImage;
   } catch {
     cachedLogoPdfImage = null;
@@ -7040,6 +5667,2017 @@ var init_invoicePdf = __esm({
   }
 });
 
+// src/server/integrations.ts
+import nodemailer from "nodemailer";
+function isConfiguredCredential(value) {
+  if (!value) return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  const lower = trimmed.toLowerCase();
+  if (lower.includes("placeholder") || lower.startsWith("your_") || lower.includes("dummy") || lower.includes("example")) {
+    return false;
+  }
+  return true;
+}
+function getIntegrationsReadiness() {
+  const razorpayConfigured = isConfiguredCredential(process.env.RAZORPAY_KEY_ID) && isConfiguredCredential(process.env.RAZORPAY_KEY_SECRET);
+  const stripeConfigured = isConfiguredCredential(process.env.STRIPE_SECRET_KEY);
+  const shiprocketConfigured = isConfiguredCredential(process.env.SHIPROCKET_API_TOKEN) || isConfiguredCredential(process.env.SHIPROCKET_EMAIL) && isConfiguredCredential(process.env.SHIPROCKET_PASSWORD);
+  const delhiveryConfigured = isConfiguredCredential(process.env.DELHIVERY_API_KEY);
+  const smtpConfigured = isConfiguredCredential(process.env.SMTP_HOST) && isConfiguredCredential(process.env.SMTP_USER) && isConfiguredCredential(process.env.SMTP_PASS);
+  const whatsappConfigured = isConfiguredCredential(process.env.WHATSAPP_BUSINESS_PHONE_NUMBER_ID) && isConfiguredCredential(process.env.WHATSAPP_ACCESS_TOKEN);
+  return [
+    {
+      provider: "Razorpay",
+      category: "PAYMENTS",
+      configured: razorpayConfigured,
+      mode: razorpayConfigured ? "LIVE" : "SANDBOX_FALLBACK",
+      summary: razorpayConfigured ? "Live Razorpay Orders & Payment Links active" : "Missing live RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET \u2014 using sandbox fallback"
+    },
+    {
+      provider: "Stripe",
+      category: "PAYMENTS",
+      configured: stripeConfigured,
+      mode: stripeConfigured ? "LIVE" : "SANDBOX_FALLBACK",
+      summary: stripeConfigured ? "Live Stripe PaymentIntents & Checkout Links active" : "Missing live STRIPE_SECRET_KEY \u2014 using sandbox fallback"
+    },
+    {
+      provider: "Shiprocket",
+      category: "LOGISTICS",
+      configured: shiprocketConfigured,
+      mode: shiprocketConfigured ? "LIVE" : "SANDBOX_FALLBACK",
+      summary: shiprocketConfigured ? "Live Shiprocket AWB dispatch & courier API active" : "Missing live SHIPROCKET credentials \u2014 using Pune hub sandbox AWB"
+    },
+    {
+      provider: "Delhivery",
+      category: "LOGISTICS",
+      configured: delhiveryConfigured,
+      mode: delhiveryConfigured ? "LIVE" : "SANDBOX_FALLBACK",
+      summary: delhiveryConfigured ? "Live Delhivery express surface/air cargo active" : "Missing live DELHIVERY_API_KEY \u2014 using Delhivery sandbox fallback"
+    },
+    {
+      provider: "Transactional SMTP",
+      category: "MESSAGING",
+      configured: smtpConfigured,
+      mode: smtpConfigured ? "LIVE" : "SANDBOX_FALLBACK",
+      summary: smtpConfigured ? `Live SMTP relay configured (${process.env.SMTP_HOST})` : "Missing SMTP_HOST / SMTP_USER / SMTP_PASS \u2014 logging email dispatches locally"
+    },
+    {
+      provider: "WhatsApp Business",
+      category: "MESSAGING",
+      configured: whatsappConfigured,
+      mode: whatsappConfigured ? "LIVE" : "SANDBOX_FALLBACK",
+      summary: whatsappConfigured ? "Live Meta WhatsApp Cloud API active" : "Missing WHATSAPP_ACCESS_TOKEN / PHONE_NUMBER_ID \u2014 logging WhatsApp dispatches locally"
+    }
+  ];
+}
+async function createGatewayOrderOrIntent(params) {
+  if (params.gateway === "CASH_ON_DELIVERY") {
+    return {
+      mode: "SANDBOX_FALLBACK",
+      provider: "CASH_ON_DELIVERY",
+      paymentId: `cod_verified_${Date.now()}`
+    };
+  }
+  const amountPaise = Math.max(100, Math.round(params.amountInr * 100));
+  if (params.gateway === "RAZORPAY") {
+    const keyId = process.env.RAZORPAY_KEY_ID;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (isConfiguredCredential(keyId) && isConfiguredCredential(keySecret)) {
+      try {
+        const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+        const res = await fetch("https://api.razorpay.com/v1/orders", {
+          method: "POST",
+          headers: {
+            Authorization: `Basic ${auth}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            amount: amountPaise,
+            currency: "INR",
+            receipt: params.receipt.slice(0, 40),
+            notes: {
+              customerEmail: params.customerEmail,
+              customerName: params.customerName
+            }
+          })
+        });
+        const data = await res.json();
+        if (res.ok && data.id) {
+          return {
+            mode: "LIVE",
+            provider: "RAZORPAY",
+            paymentId: data.id
+          };
+        }
+        return {
+          mode: "SANDBOX_FALLBACK",
+          provider: "RAZORPAY",
+          paymentId: `pay_rzp_sbx_${Date.now()}`,
+          fallbackReason: data?.error?.description || `Razorpay HTTP ${res.status}`
+        };
+      } catch (err) {
+        return {
+          mode: "SANDBOX_FALLBACK",
+          provider: "RAZORPAY",
+          paymentId: `pay_rzp_sbx_${Date.now()}`,
+          fallbackReason: err.message
+        };
+      }
+    }
+    return {
+      mode: "SANDBOX_FALLBACK",
+      provider: "RAZORPAY",
+      paymentId: `pay_rzp_sbx_${Date.now()}`,
+      fallbackReason: "Razorpay live credentials not configured"
+    };
+  }
+  const stripeSecret = process.env.STRIPE_SECRET_KEY;
+  if (isConfiguredCredential(stripeSecret)) {
+    try {
+      const form = new URLSearchParams();
+      form.set("amount", String(amountPaise));
+      form.set("currency", "inr");
+      form.set("receipt_email", params.customerEmail);
+      form.set("description", `Bharatvarsh Order ${params.receipt}`);
+      form.set("metadata[customerName]", params.customerName);
+      const res = await fetch("https://api.stripe.com/v1/payment_intents", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${stripeSecret}`,
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: form.toString()
+      });
+      const data = await res.json();
+      if (res.ok && data.id) {
+        return {
+          mode: "LIVE",
+          provider: "STRIPE",
+          paymentId: data.id,
+          clientSecret: data.client_secret
+        };
+      }
+      return {
+        mode: "SANDBOX_FALLBACK",
+        provider: "STRIPE",
+        paymentId: `pi_str_sbx_${Date.now()}`,
+        fallbackReason: data?.error?.message || `Stripe HTTP ${res.status}`
+      };
+    } catch (err) {
+      return {
+        mode: "SANDBOX_FALLBACK",
+        provider: "STRIPE",
+        paymentId: `pi_str_sbx_${Date.now()}`,
+        fallbackReason: err.message
+      };
+    }
+  }
+  return {
+    mode: "SANDBOX_FALLBACK",
+    provider: "STRIPE",
+    paymentId: `pi_str_sbx_${Date.now()}`,
+    fallbackReason: "Stripe live credentials not configured"
+  };
+}
+async function createPaymentLink(params) {
+  const gateway = params.gateway || "RAZORPAY";
+  const amountPaise = Math.max(100, Math.round(params.amountInr * 100));
+  const ref = params.referenceId || `bvl_lnk_${Date.now().toString(36)}`;
+  const appUrl = (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
+  if (gateway === "RAZORPAY") {
+    const keyId = process.env.RAZORPAY_KEY_ID;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (isConfiguredCredential(keyId) && isConfiguredCredential(keySecret)) {
+      try {
+        const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+        const res = await fetch("https://api.razorpay.com/v1/payment_links", {
+          method: "POST",
+          headers: {
+            Authorization: `Basic ${auth}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            amount: amountPaise,
+            currency: "INR",
+            reference_id: ref.slice(0, 40),
+            description: params.description.slice(0, 200),
+            customer: {
+              name: params.customerName || "Valued Patron",
+              email: params.customerEmail,
+              ...params.customerPhone ? { contact: params.customerPhone } : {}
+            },
+            notify: {
+              sms: Boolean(params.customerPhone),
+              email: Boolean(params.customerEmail)
+            }
+          })
+        });
+        const data = await res.json();
+        if (res.ok && data.short_url) {
+          return {
+            mode: "LIVE",
+            provider: "RAZORPAY",
+            paymentUrl: data.short_url,
+            referenceId: data.id || ref
+          };
+        }
+        return {
+          mode: "SANDBOX_FALLBACK",
+          provider: "RAZORPAY",
+          paymentUrl: `${appUrl}/?payment_link=${encodeURIComponent(ref)}&gateway=razorpay`,
+          referenceId: ref,
+          fallbackReason: data?.error?.description || `Razorpay HTTP ${res.status}`
+        };
+      } catch (err) {
+        return {
+          mode: "SANDBOX_FALLBACK",
+          provider: "RAZORPAY",
+          paymentUrl: `${appUrl}/?payment_link=${encodeURIComponent(ref)}&gateway=razorpay`,
+          referenceId: ref,
+          fallbackReason: err.message
+        };
+      }
+    }
+    return {
+      mode: "SANDBOX_FALLBACK",
+      provider: "RAZORPAY",
+      paymentUrl: `${appUrl}/?payment_link=${encodeURIComponent(ref)}&gateway=razorpay`,
+      referenceId: ref,
+      fallbackReason: "Razorpay live credentials not configured"
+    };
+  }
+  const stripeSecret = process.env.STRIPE_SECRET_KEY;
+  if (isConfiguredCredential(stripeSecret)) {
+    try {
+      const form = new URLSearchParams();
+      form.set("mode", "payment");
+      form.set("customer_email", params.customerEmail);
+      form.set("line_items[0][price_data][currency]", "inr");
+      form.set("line_items[0][price_data][product_data][name]", params.description.slice(0, 120));
+      form.set("line_items[0][price_data][unit_amount]", String(amountPaise));
+      form.set("line_items[0][quantity]", "1");
+      form.set("success_url", `${appUrl}/?payment_success=${encodeURIComponent(ref)}`);
+      form.set("cancel_url", `${appUrl}/?payment_cancelled=${encodeURIComponent(ref)}`);
+      const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${stripeSecret}`,
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: form.toString()
+      });
+      const data = await res.json();
+      if (res.ok && data.url) {
+        return {
+          mode: "LIVE",
+          provider: "STRIPE",
+          paymentUrl: data.url,
+          referenceId: data.id || ref
+        };
+      }
+      return {
+        mode: "SANDBOX_FALLBACK",
+        provider: "STRIPE",
+        paymentUrl: `${appUrl}/?payment_link=${encodeURIComponent(ref)}&gateway=stripe`,
+        referenceId: ref,
+        fallbackReason: data?.error?.message || `Stripe HTTP ${res.status}`
+      };
+    } catch (err) {
+      return {
+        mode: "SANDBOX_FALLBACK",
+        provider: "STRIPE",
+        paymentUrl: `${appUrl}/?payment_link=${encodeURIComponent(ref)}&gateway=stripe`,
+        referenceId: ref,
+        fallbackReason: err.message
+      };
+    }
+  }
+  return {
+    mode: "SANDBOX_FALLBACK",
+    provider: "STRIPE",
+    paymentUrl: `${appUrl}/?payment_link=${encodeURIComponent(ref)}&gateway=stripe`,
+    referenceId: ref,
+    fallbackReason: "Stripe live credentials not configured"
+  };
+}
+async function getShiprocketBearerToken() {
+  if (isConfiguredCredential(process.env.SHIPROCKET_API_TOKEN)) {
+    return process.env.SHIPROCKET_API_TOKEN.trim();
+  }
+  const email = process.env.SHIPROCKET_EMAIL;
+  const password = process.env.SHIPROCKET_PASSWORD;
+  if (isConfiguredCredential(email) && isConfiguredCredential(password)) {
+    const res = await fetch("https://apiv2.shiprocket.in/v1/external/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if (res.ok && data.token) return data.token;
+  }
+  return null;
+}
+async function allocateCourierAwb(params) {
+  const preferred = params.courierPreference || "SHIPROCKET";
+  const ord = params.order;
+  if (preferred === "DELHIVERY") {
+    const apiKey = process.env.DELHIVERY_API_KEY;
+    if (isConfiguredCredential(apiKey)) {
+      try {
+        const res = await fetch(
+          `https://track.delhivery.com/waybill/api/fetch/json/?token=${encodeURIComponent(apiKey)}&cl=${encodeURIComponent(
+            process.env.DELHIVERY_CLIENT_NAME || "BHARATVARSH_SURFACE"
+          )}`
+        );
+        const text = await res.text();
+        const cleaned = text.replace(/["\s]/g, "");
+        if (res.ok && cleaned.length >= 6) {
+          return {
+            mode: "LIVE",
+            courier: "DELHIVERY",
+            awbNumber: cleaned
+          };
+        }
+      } catch (err) {
+        return {
+          mode: "SANDBOX_FALLBACK",
+          courier: "DELHIVERY",
+          awbNumber: ord.awbNumber || `DLV-PNQ-${Math.floor(1e7 + Math.random() * 9e7)}`,
+          fallbackReason: err.message
+        };
+      }
+    }
+    return {
+      mode: "SANDBOX_FALLBACK",
+      courier: "DELHIVERY",
+      awbNumber: ord.awbNumber || `DLV-PNQ-${Math.floor(1e7 + Math.random() * 9e7)}`,
+      fallbackReason: "Delhivery API key not configured"
+    };
+  }
+  try {
+    const token = await getShiprocketBearerToken();
+    if (token) {
+      const res = await fetch("https://apiv2.shiprocket.in/v1/external/orders/create/adhoc", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          order_id: ord.orderNumber,
+          order_date: ord.createdAt.slice(0, 19).replace("T", " "),
+          pickup_location: "Primary",
+          billing_customer_name: ord.customerName,
+          billing_last_name: "",
+          billing_address: ord.billingAddress?.street || "Pune Primary Hub",
+          billing_city: ord.billingAddress?.city || "Pune",
+          billing_pincode: ord.billingAddress?.pincode || "411019",
+          billing_state: ord.billingAddress?.state || "Maharashtra",
+          billing_country: "India",
+          billing_email: ord.customerEmail,
+          billing_phone: (ord.customerPhone || "9820112345").replace(/\D/g, "").slice(-10) || "9820112345",
+          shipping_is_billing: true,
+          order_items: ord.items.map((it) => ({
+            name: it.productName,
+            sku: it.sku,
+            units: it.quantity,
+            selling_price: it.unitPrice
+          })),
+          payment_method: ord.paymentGateway === "CASH_ON_DELIVERY" ? "COD" : "Prepaid",
+          sub_total: ord.totalAmount,
+          length: 34,
+          breadth: 26,
+          height: 12,
+          weight: 1.4
+        })
+      });
+      const data = await res.json();
+      const awb = data?.awb_code || (data?.shipment_id ? `SR-SHP-${data.shipment_id}` : "");
+      if (res.ok && awb) {
+        return {
+          mode: "LIVE",
+          courier: "SHIPROCKET",
+          awbNumber: String(awb)
+        };
+      }
+      return {
+        mode: "SANDBOX_FALLBACK",
+        courier: "SHIPROCKET",
+        awbNumber: ord.awbNumber || `SR-PNQ-${Math.floor(1e7 + Math.random() * 9e7)}`,
+        fallbackReason: data?.message || `Shiprocket HTTP ${res.status}`
+      };
+    }
+  } catch (err) {
+    return {
+      mode: "SANDBOX_FALLBACK",
+      courier: "SHIPROCKET",
+      awbNumber: ord.awbNumber || `SR-PNQ-${Math.floor(1e7 + Math.random() * 9e7)}`,
+      fallbackReason: err.message
+    };
+  }
+  return {
+    mode: "SANDBOX_FALLBACK",
+    courier: "SHIPROCKET",
+    awbNumber: ord.awbNumber || `SR-PNQ-${Math.floor(1e7 + Math.random() * 9e7)}`,
+    fallbackReason: "Shiprocket credentials not configured"
+  };
+}
+function getSupportOrderEmailRecipient() {
+  const configured = process.env.SUPPORT_ORDER_EMAIL || process.env.SMTP_SUPPORT_EMAIL;
+  if (configured && isConfiguredCredential(configured)) {
+    return configured.trim();
+  }
+  return "Support@bharatvarshcrafts.com";
+}
+function getMissingSmtpReason() {
+  const missing = [];
+  if (!isConfiguredCredential(process.env.SMTP_HOST)) missing.push("SMTP_HOST");
+  if (!isConfiguredCredential(process.env.SMTP_USER)) missing.push("SMTP_USER");
+  if (!isConfiguredCredential(process.env.SMTP_PASS)) missing.push("SMTP_PASS");
+  if (missing.length === 0) return "";
+  return `Missing ${missing.join(", ")} in server environment`;
+}
+async function sendTransactionalEmail(params) {
+  const recipient = (params.to || "").trim();
+  if (!recipient || !recipient.includes("@")) {
+    return {
+      mode: "SANDBOX_FALLBACK",
+      channel: "EMAIL",
+      messageId: `email_err_${Date.now()}`,
+      smtpConfigured: false,
+      fallbackReason: "Missing or invalid recipient email address"
+    };
+  }
+  const host = process.env.SMTP_HOST;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 465;
+  const secure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === "true" : port === 465;
+  const from = process.env.SMTP_SUPPORT_EMAIL || user || "Support@bharatvarshcrafts.com";
+  const smtpConfigured = isConfiguredCredential(host) && isConfiguredCredential(user) && isConfiguredCredential(pass);
+  if (smtpConfigured) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure,
+        auth: { user, pass }
+      });
+      const info = await transporter.sendMail({
+        from: `"Bharatvarsh Leathercrafts LLP" <${from}>`,
+        to: recipient,
+        subject: params.subject,
+        text: params.text,
+        html: params.html || `<p>${params.text.replace(/\n/g, "<br/>")}</p>`,
+        ...Array.isArray(params.attachments) && params.attachments.length > 0 ? { attachments: params.attachments } : {}
+      });
+      return {
+        mode: "LIVE",
+        channel: "EMAIL",
+        messageId: info.messageId || `smtp_${Date.now()}`,
+        smtpConfigured: true
+      };
+    } catch (err) {
+      return {
+        mode: "SANDBOX_FALLBACK",
+        channel: "EMAIL",
+        messageId: `email_sbx_${Date.now()}`,
+        smtpConfigured: true,
+        fallbackReason: `SMTP transport error: ${err.message}`
+      };
+    }
+  }
+  return {
+    mode: "SANDBOX_FALLBACK",
+    channel: "EMAIL",
+    messageId: `email_sbx_${Date.now()}`,
+    smtpConfigured: false,
+    fallbackReason: getMissingSmtpReason() || "SMTP credentials not configured"
+  };
+}
+async function sendWhatsAppMessage(params) {
+  const phoneId = process.env.WHATSAPP_BUSINESS_PHONE_NUMBER_ID;
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const cleanPhone = (params.toPhone || "").replace(/[^\d]/g, "");
+  if (isConfiguredCredential(phoneId) && isConfiguredCredential(accessToken) && cleanPhone.length >= 10) {
+    try {
+      const res = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to: cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone,
+          type: "text",
+          text: { body: params.text.slice(0, 4096) }
+        })
+      });
+      const data = await res.json();
+      const waId = data?.messages?.[0]?.id;
+      if (res.ok && waId) {
+        return {
+          mode: "LIVE",
+          channel: "WHATSAPP",
+          messageId: waId
+        };
+      }
+      return {
+        mode: "SANDBOX_FALLBACK",
+        channel: "WHATSAPP",
+        messageId: `wa_sbx_${Date.now()}`,
+        fallbackReason: data?.error?.message || `WhatsApp API HTTP ${res.status}`
+      };
+    } catch (err) {
+      return {
+        mode: "SANDBOX_FALLBACK",
+        channel: "WHATSAPP",
+        messageId: `wa_sbx_${Date.now()}`,
+        fallbackReason: err.message
+      };
+    }
+  }
+  return {
+    mode: "SANDBOX_FALLBACK",
+    channel: "WHATSAPP",
+    messageId: `wa_sbx_${Date.now()}`,
+    fallbackReason: cleanPhone.length < 10 ? "Valid patron phone number missing" : "WhatsApp Business Cloud API credentials not configured"
+  };
+}
+function resolveOrderInvoiceContext(order) {
+  const config = db.getConfig();
+  const storedInvoice = db.getInvoices().find((inv) => inv.orderId === order.id || order.invoiceNumber && inv.invoiceNumber === order.invoiceNumber);
+  const customer = db.getCustomerById(order.customerId) || db.getCustomerById(order.customerEmail);
+  const defaultAddress = customer ? db.getDefaultCustomerAddress(customer.id) : void 0;
+  const shipState = order.shippingAddress?.state || defaultAddress?.state || "Maharashtra";
+  const isInterState = shipState.trim().toLowerCase() !== "maharashtra";
+  const taxableValue = Math.max(0, order.subtotal - (order.discountAmount || 0));
+  const invoice = storedInvoice || {
+    id: `inv_summary_${order.id}`,
+    invoiceNumber: order.invoiceNumber || order.orderNumber,
+    orderId: order.id,
+    customerId: order.customerId,
+    supplierGstin: config.supplierGstin || "27AABCB1234F1Z8",
+    invoiceDate: order.createdAt,
+    supplyState: "Maharashtra",
+    placeOfSupply: shipState,
+    isInterState,
+    taxableValue,
+    cgstAmount: isInterState ? 0 : Math.round(order.taxAmount / 2),
+    sgstAmount: isInterState ? 0 : order.taxAmount - Math.round(order.taxAmount / 2),
+    igstAmount: isInterState ? order.taxAmount : 0,
+    totalInvoiceAmount: order.totalAmount,
+    status: "ISSUED"
+  };
+  const pdfBuffer = renderTaxInvoicePdf(invoice, order, config, { customer, defaultAddress });
+  const safeFilename = `${invoice.invoiceNumber.replace(/[/\\]/g, "-")}.pdf`;
+  return { config, invoice, customer, defaultAddress, pdfBuffer, safeFilename };
+}
+function escapeEmailHtml(val) {
+  return String(val || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+async function dispatchOrderInvoiceEmailToSupport(order) {
+  const supportTo = getSupportOrderEmailRecipient();
+  const { invoice, defaultAddress, pdfBuffer, safeFilename } = resolveOrderInvoiceContext(order);
+  const addr = order.shippingAddress || defaultAddress;
+  const addrLine = addr ? [addr.street, addr.city, addr.state, addr.pincode ? `PIN ${addr.pincode}` : "", addr.country || "India"].filter(Boolean).join(", ") : invoice.placeOfSupply;
+  const itemsHtml = order.items.map(
+    (it) => `
+      <tr>
+        <td style="padding:8px;border-bottom:1px solid #EFEAE2;">
+          <strong>${escapeEmailHtml(it.productName)}</strong><br/>
+          <span style="font-size:11px;color:#5C4D3E;font-family:monospace;">SKU: ${escapeEmailHtml(it.sku)} \xB7 ${it.leatherType === "BIO_SUBSTITUTE_CACTUS" ? "Bio-Cactus" : "Veg-Tanned Heritage"}</span>
+        </td>
+        <td style="padding:8px;border-bottom:1px solid #EFEAE2;font-size:12px;">${it.customization?.monogramInitials ? `Initials: <strong>${escapeEmailHtml(it.customization.monogramInitials)}</strong> (${escapeEmailHtml(
+      it.customization.foilType
+    )})` : "None"}</td>
+        <td style="padding:8px;border-bottom:1px solid #EFEAE2;text-align:center;font-family:monospace;">${it.quantity}</td>
+        <td style="padding:8px;border-bottom:1px solid #EFEAE2;text-align:right;font-family:monospace;">&#8377;${Math.round(
+      it.lineTotal
+    ).toLocaleString("en-IN")}</td>
+      </tr>`
+  ).join("");
+  const taxSummaryLine = invoice.isInterState ? `IGST: \u20B9${Math.round(invoice.igstAmount).toLocaleString("en-IN")}` : `CGST: \u20B9${Math.round(invoice.cgstAmount).toLocaleString("en-IN")} \xB7 SGST: \u20B9${Math.round(
+    invoice.sgstAmount
+  ).toLocaleString("en-IN")}`;
+  const subject = `New Order Placed: ${order.orderNumber} \u2014 \u20B9${Math.round(order.totalAmount).toLocaleString(
+    "en-IN"
+  )} (${order.customerName})`;
+  const html = `
+  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#FAF7F2;padding:24px;color:#16120E;">
+    <div style="max-width:680px;margin:0 auto;background:#FFFFFF;border:1px solid #D8CFC2;padding:28px;border-radius:8px;">
+      <div style="border-bottom:2px solid #8B4513;padding-bottom:14px;margin-bottom:18px;">
+        <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#8B4513;font-weight:700;">Bharatvarsh Leathercrafts LLP \xB7 New Sales Order</div>
+        <h2 style="margin:6px 0 4px;font-family:Georgia,serif;font-size:20px;">${escapeEmailHtml(order.orderNumber)} \xB7 &#8377;${Math.round(
+    order.totalAmount
+  ).toLocaleString("en-IN")}</h2>
+        <div style="font-size:12px;color:#5C4D3E;">Invoice: <strong>${escapeEmailHtml(invoice.invoiceNumber)}</strong> \xB7 Gateway: <strong>${escapeEmailHtml(
+    order.paymentGateway
+  )}</strong> (${escapeEmailHtml(order.paymentStatus)})</div>
+      </div>
+
+      <div style="background:#FAF7F2;border:1px solid #E5DDD0;padding:14px;border-radius:6px;font-size:12px;line-height:1.6;margin-bottom:18px;">
+        <div><strong>Patron:</strong> ${escapeEmailHtml(order.customerName)} (${escapeEmailHtml(order.customerEmail)})</div>
+        <div><strong>Phone:</strong> ${escapeEmailHtml(order.customerPhone || "N/A")}</div>
+        <div><strong>Shipping Address:</strong> ${escapeEmailHtml(addrLine)}</div>
+        <div><strong>Place of Supply:</strong> ${escapeEmailHtml(invoice.placeOfSupply)} (${invoice.isInterState ? "Inter-State IGST" : "Intra-State CGST + SGST"})</div>
+      </div>
+
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:18px;">
+        <thead>
+          <tr style="background:#FAF7F2;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#5C4D3E;">
+            <th style="padding:8px;">Piece &amp; SKU</th>
+            <th style="padding:8px;">Monogram Specs</th>
+            <th style="padding:8px;text-align:center;">Qty</th>
+            <th style="padding:8px;text-align:right;">Line Total</th>
+          </tr>
+        </thead>
+        <tbody>${itemsHtml}</tbody>
+      </table>
+
+      <div style="font-size:12px;background:#FAF7F2;padding:12px;border-radius:6px;font-family:monospace;">
+        <div>Subtotal: &#8377;${Math.round(order.subtotal).toLocaleString("en-IN")}${order.discountAmount > 0 ? ` \xB7 Discount (${escapeEmailHtml(order.discountCode || "PROMO")}): -&#8377;${Math.round(
+    order.discountAmount
+  ).toLocaleString("en-IN")}` : ""}</div>
+        <div>Taxable Value: &#8377;${Math.round(invoice.taxableValue).toLocaleString("en-IN")} \xB7 ${escapeEmailHtml(
+    taxSummaryLine
+  )}</div>
+        <div style="margin-top:6px;font-size:14px;font-weight:700;">Total Amount: &#8377;${Math.round(
+    order.totalAmount
+  ).toLocaleString("en-IN")}</div>
+      </div>
+
+      <div style="margin-top:16px;font-size:11px;color:#5C4D3E;">
+        Registered Office: ${REGISTERED_OFFICE_ADDRESS_HTML}. Official GST Tax Invoice PDF (${escapeEmailHtml(
+    safeFilename
+  )}) is attached.
+      </div>
+    </div>
+  </div>`;
+  const text = [
+    `New Order Placed: ${order.orderNumber} \u2014 \u20B9${Math.round(order.totalAmount).toLocaleString("en-IN")}`,
+    `Patron: ${order.customerName} | Email: ${order.customerEmail} | Phone: ${order.customerPhone || "N/A"}`,
+    `Shipping Address: ${addrLine}`,
+    `Invoice: ${invoice.invoiceNumber} | Payment: ${order.paymentGateway} (${order.paymentStatus})`,
+    `Tax Breakdown: Taxable \u20B9${invoice.taxableValue} | ${taxSummaryLine}`,
+    "",
+    "Items:",
+    ...order.items.map(
+      (it) => `- ${it.productName} (${it.sku}) x${it.quantity} \u2014 \u20B9${it.lineTotal}${it.customization?.monogramInitials ? ` [Monogram: ${it.customization.monogramInitials} / ${it.customization.foilType}]` : ""}`
+    )
+  ].join("\n");
+  return sendTransactionalEmail({
+    to: supportTo,
+    subject,
+    text,
+    html,
+    attachments: [
+      {
+        filename: safeFilename,
+        content: pdfBuffer,
+        contentType: "application/pdf"
+      }
+    ]
+  });
+}
+async function dispatchOrderConfirmationAndCareGuide(order) {
+  const { pdfBuffer, safeFilename } = resolveOrderInvoiceContext(order);
+  const summaryLines = order.items.map(
+    (it) => `\u2022 ${it.productName} (${it.quantity}x) \u2014 \u20B9${it.unitPrice.toLocaleString("en-IN")}${it.customization?.monogramInitials ? ` [Monogram: ${it.customization.monogramInitials}]` : ""}`
+  );
+  const text = [
+    `Dear ${order.customerName},`,
+    "",
+    `Thank you for commissioning Bharatvarsh Leathercrafts LLP (Order ${order.orderNumber}).`,
+    `Total Paid: \u20B9${order.totalAmount.toLocaleString("en-IN")} | Invoice: ${order.invoiceNumber || "Issued"}`,
+    `Logistics Partner: ${order.courierPartner || "SHIPROCKET"} | AWB: ${order.awbNumber || "Pending"}`,
+    "",
+    "Pieces Commissioned:",
+    ...summaryLines,
+    "",
+    "Digital Heirloom Care Guide:",
+    "Apply organic beeswax conditioning balm lightly every 90 days and buff with a soft horsehair brush. Avoid prolonged monsoon moisture; store in your breathable cotton dust bag.",
+    "",
+    "Warm regards,",
+    "Bharatvarsh Atelier \xB7 Pune Primary Hub"
+  ].join("\n");
+  const [emailDelivery, supportEmailDelivery, whatsappDelivery] = await Promise.all([
+    sendTransactionalEmail({
+      to: order.customerEmail,
+      subject: `Bharatvarsh Atelier Confirmation \xB7 ${order.orderNumber}`,
+      text,
+      attachments: [
+        {
+          filename: safeFilename,
+          content: pdfBuffer,
+          contentType: "application/pdf"
+        }
+      ]
+    }),
+    dispatchOrderInvoiceEmailToSupport(order),
+    sendWhatsAppMessage({
+      toPhone: order.customerPhone,
+      text: `Bharatvarsh Atelier: Order ${order.orderNumber} confirmed (\u20B9${order.totalAmount.toLocaleString(
+        "en-IN"
+      )}). AWB: ${order.awbNumber}. Digital Beeswax Care Guide included inside your My Atelier portal.`
+    })
+  ]);
+  return { emailDelivery, supportEmailDelivery, whatsappDelivery };
+}
+async function dispatchCartRecoveryNotice(cart, channel, promoCode, fullCheckoutUrl) {
+  const itemNames = cart.items.map((it) => `${it.productName} (x${it.quantity})`).join(", ");
+  if (channel === "WHATSAPP") {
+    return sendWhatsAppMessage({
+      toPhone: cart.phone,
+      text: `Bharatvarsh Atelier: Your reserved leathercraft bag (${itemNames}, \u20B9${cart.subtotal.toLocaleString(
+        "en-IN"
+      )}) awaits at Pune Hub. Use ${promoCode} at checkout: ${fullCheckoutUrl}`
+    });
+  }
+  const itemRowsHtml = cart.items.map(
+    (it) => `
+      <tr>
+        <td style="padding:8px;border-bottom:1px solid #EFEAE2;">
+          <strong>${escapeEmailHtml(it.productName)}</strong>
+          <div style="font-size:11px;color:#5C4D3E;font-family:monospace;">SKU: ${escapeEmailHtml(it.sku || "")}</div>
+        </td>
+        <td style="padding:8px;border-bottom:1px solid #EFEAE2;text-align:center;font-family:monospace;">${it.quantity}</td>
+        <td style="padding:8px;border-bottom:1px solid #EFEAE2;text-align:right;font-family:monospace;">&#8377;${Math.round(
+      Number(it.unitPrice || 0) * Math.max(1, Number(it.quantity || 1))
+    ).toLocaleString("en-IN")}</td>
+      </tr>`
+  ).join("");
+  const html = `
+  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#FAF7F2;padding:24px;color:#16120E;">
+    <div style="max-width:600px;margin:0 auto;background:#FFFFFF;border:1px solid #D8CFC2;padding:28px;border-radius:8px;">
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#8B4513;font-weight:700;">Bharatvarsh Leathercrafts LLP</div>
+      <h2 style="font-family:Georgia,serif;font-size:20px;margin:8px 0;">Your Reserved Atelier Bag Awaits</h2>
+      <p style="font-size:13px;color:#5C4D3E;line-height:1.6;">
+        Your handcrafted leathercraft selection remains reserved at our Pune Primary Hub. Complete your commission today using exclusive privilege code <strong style="color:#16120E;font-family:monospace;">${escapeEmailHtml(
+    promoCode
+  )}</strong>.
+      </p>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin:16px 0;">
+        <thead>
+          <tr style="background:#FAF7F2;text-align:left;font-size:10px;text-transform:uppercase;color:#5C4D3E;">
+            <th style="padding:8px;">Selected Piece</th>
+            <th style="padding:8px;text-align:center;">Qty</th>
+            <th style="padding:8px;text-align:right;">Value</th>
+          </tr>
+        </thead>
+        <tbody>${itemRowsHtml}</tbody>
+      </table>
+      <div style="font-size:13px;font-weight:700;text-align:right;margin-bottom:18px;font-family:monospace;">
+        Bag Subtotal: &#8377;${Math.round(cart.subtotal).toLocaleString("en-IN")}
+      </div>
+      <div style="text-align:center;margin:20px 0;">
+        <a href="${escapeEmailHtml(
+    fullCheckoutUrl
+  )}" style="display:inline-block;padding:12px 24px;background:#221C16;color:#FAF7F2;text-decoration:none;font-weight:700;font-size:13px;border-radius:6px;">
+          Resume Reserved Checkout (${escapeEmailHtml(promoCode)})
+        </a>
+      </div>
+      <div style="font-size:11px;color:#5C4D3E;border-top:1px solid #EFEAE2;padding-top:12px;">
+        Direct link: ${escapeEmailHtml(fullCheckoutUrl)}
+      </div>
+    </div>
+  </div>`;
+  return sendEmail({
+    to: cart.email,
+    subject: `Your Handcrafted Bharatvarsh Atelier Bag Awaits (${promoCode})`,
+    text: `Your selected pieces (${itemNames}, Subtotal: \u20B9${Math.round(cart.subtotal).toLocaleString(
+      "en-IN"
+    )}) remain reserved at our Pune Primary Hub.
+
+Complete your commission with code ${promoCode}: ${fullCheckoutUrl}`,
+    html
+  });
+}
+async function dispatchInboxAgentReply(params) {
+  if (params.channel === "EMAIL") {
+    return sendTransactionalEmail({
+      to: params.ticket.customerEmail,
+      subject: `Re: [${params.ticket.ticketNumber}] ${params.ticket.subject}`,
+      text: params.text
+    });
+  }
+  if (params.channel === "WHATSAPP") {
+    return sendWhatsAppMessage({
+      toPhone: params.toPhone || params.ticket.customerPhone,
+      text: `[${params.ticket.ticketNumber}] ${params.text}`
+    });
+  }
+  return {
+    mode: "SANDBOX_FALLBACK",
+    channel: "LIVE_CHAT",
+    messageId: `chat_${Date.now()}`,
+    fallbackReason: "Delivered via in-app Atelier live chat session"
+  };
+}
+var sendEmail;
+var init_integrations = __esm({
+  "src/server/integrations.ts"() {
+    init_db();
+    init_invoicePdf();
+    sendEmail = sendTransactionalEmail;
+  }
+});
+
+// src/server/erpSync.ts
+var ERPSynchronizer, erpSync;
+var init_erpSync = __esm({
+  "src/server/erpSync.ts"() {
+    init_db();
+    init_integrations();
+    ERPSynchronizer = class {
+      /**
+       * Pushes a custom quote / B2B corporate gifting lead directly into the ERP as an official Sales Order
+       */
+      async pushCustomQuoteToSalesOrder(payload, actorEmail) {
+        const linkedLead = payload.leadId ? db.getCorporateGiftingLeads().find((l) => l.id === payload.leadId) : void 0;
+        if (payload.leadId && !linkedLead) {
+          throw new Error(`Corporate gifting lead "${payload.leadId}" not found.`);
+        }
+        if (linkedLead?.erpOrderId) {
+          throw new Error(
+            `DUPLICATE_ERP_ORDER: Corporate lead "${linkedLead.companyName}" is already linked to ERP Sales Order ${linkedLead.erpOrderNumber || linkedLead.erpOrderId}.`
+          );
+        }
+        const rawItems = Array.isArray(payload.items) && payload.items.length > 0 ? payload.items : Array.isArray(linkedLead?.items) && linkedLead.items.length > 0 ? linkedLead.items : [];
+        if (rawItems.length === 0) {
+          throw new Error("At least one catalog SKU and quantity must be selected before pushing to ERP Sales Order.");
+        }
+        const catalogProducts = db.getCatalog().products || [];
+        const storeDefaultGstRate = (typeof db.getConfig().gstRatePercent === "number" ? db.getConfig().gstRatePercent : 18) / 100;
+        let subtotal = 0;
+        let totalTaxAmount = 0;
+        const orderItems = rawItems.map((item, idx) => {
+          const matchedProduct = catalogProducts.find(
+            (p) => item.productId && p.id === item.productId || item.sku && p.sku === item.sku
+          );
+          if (!matchedProduct && !item.productId && typeof item.unitPrice !== "number") {
+            throw new Error(`Unknown catalog SKU in quote: ${item.sku}`);
+          }
+          const qty = Math.max(1, Math.floor(Number(item.quantity) || 1));
+          const resolvedUnitPrice = typeof item.unitPrice === "number" && Number.isFinite(item.unitPrice) && item.unitPrice > 0 ? item.unitPrice : Number(matchedProduct?.price || 0);
+          if (!Number.isFinite(resolvedUnitPrice) || resolvedUnitPrice <= 0) {
+            throw new Error(`Invalid unit price for SKU ${item.sku}`);
+          }
+          const gstRate = typeof matchedProduct?.gstRate === "number" ? matchedProduct.gstRate : storeDefaultGstRate;
+          const lineSubtotal = qty * resolvedUnitPrice;
+          const lineTax = Math.round(lineSubtotal * gstRate);
+          subtotal += lineSubtotal;
+          totalTaxAmount += lineTax;
+          return {
+            id: `item_quote_${Date.now()}_${idx}`,
+            orderId: "",
+            productId: item.productId || matchedProduct?.id || `prod_${item.sku}`,
+            productName: item.productName || matchedProduct?.name || item.sku,
+            sku: matchedProduct?.sku || item.sku,
+            category: matchedProduct?.category || "travell",
+            quantity: qty,
+            unitPrice: resolvedUnitPrice,
+            leatherType: item.leatherType === "BIO_SUBSTITUTE_CACTUS" ? "BIO_SUBSTITUTE_CACTUS" : "VEGETABLE_TANNED_HERITAGE",
+            customization: item.monogramInitials ? {
+              monogramInitials: item.monogramInitials,
+              foilType: item.foilType || "GOLD_FOIL",
+              placement: "Custom Specification"
+            } : void 0,
+            hsnCode: matchedProduct?.hsnCode || "4202",
+            gstRate,
+            taxAmount: lineTax,
+            lineTotal: lineSubtotal + lineTax
+          };
+        });
+        const totalAmount = subtotal + totalTaxAmount;
+        const resolvedEmail = (payload.customerEmail || linkedLead?.email || "").trim().toLowerCase();
+        const resolvedName = payload.customerName || (linkedLead ? `${linkedLead.companyName} (${linkedLead.contactPerson})` : "Corporate Patron");
+        const resolvedPhone = payload.customerPhone || linkedLead?.phone || "";
+        let resolvedCustomerId = payload.customerId;
+        if (!resolvedCustomerId && resolvedEmail) {
+          const { customer } = await db.runAtomicMutation(
+            () => db.findOrCreateCustomer({
+              email: resolvedEmail,
+              phone: resolvedPhone,
+              fullName: resolvedName
+            })
+          );
+          resolvedCustomerId = customer.id;
+        }
+        const customerIdFinal = resolvedCustomerId || `cust_corp_${Date.now()}`;
+        const newOrder = await db.createOrderAsync({
+          customerId: customerIdFinal,
+          customerName: resolvedName,
+          customerEmail: resolvedEmail || "corporate@bharatvarshcrafts.com",
+          customerPhone: resolvedPhone,
+          status: "PROCESSING",
+          currency: "INR",
+          subtotal,
+          discountAmount: 0,
+          taxAmount: totalTaxAmount,
+          shippingFee: 0,
+          totalAmount,
+          paymentGateway: "RAZORPAY",
+          paymentId: `quote_pay_${Date.now()}`,
+          paymentStatus: "PAID",
+          items: orderItems,
+          shippingAddress: {
+            id: `addr_quote_${Date.now()}`,
+            customerId: customerIdFinal,
+            street: "Consolidated Commercial Dock, Pune Primary Hub",
+            city: "Pune",
+            state: "Maharashtra",
+            pincode: "411001",
+            country: "India",
+            isDefault: true,
+            addressType: "SHIPPING"
+          },
+          billingAddress: {
+            id: `addr_quote_b_${Date.now()}`,
+            customerId: customerIdFinal,
+            street: "Consolidated Commercial Dock, Pune Primary Hub",
+            city: "Pune",
+            state: "Maharashtra",
+            pincode: "411001",
+            country: "India",
+            isDefault: true,
+            addressType: "BILLING"
+          }
+        });
+        await db.runAtomicMutation(() => {
+          if (payload.leadId) {
+            db.updateCorporateLeadStatus(payload.leadId, "ORDER_CONFIRMED", void 0, {
+              erpOrderId: newOrder.id,
+              erpOrderNumber: newOrder.orderNumber,
+              items: orderItems.map((it) => ({
+                sku: it.sku,
+                productId: it.productId,
+                productName: it.productName,
+                quantity: it.quantity,
+                unitPrice: it.unitPrice,
+                leatherType: it.leatherType
+              })),
+              dealValueInr: totalAmount
+            });
+          }
+          db.logAudit(
+            actorEmail,
+            "ERP_SALES_ORDER_PUSH",
+            "STORE_MANAGEMENT",
+            `CRM quote converted into ERP Sales Order ${newOrder.orderNumber} (Deal: ${payload.dealType || "WHOLESALE_BULK"}, Amount: \u20B9${totalAmount}${linkedLead ? `, Lead: ${linkedLead.companyName}` : ""})`
+          );
+        });
+        dispatchOrderConfirmationAndCareGuide(newOrder).then((delivery) => {
+          db.logAudit(
+            "integrations",
+            "ORDER_NOTIFICATION_DISPATCHED",
+            "STORE_MANAGEMENT",
+            `ERP Order ${newOrder.orderNumber} notifications -> PatronEmail:${delivery.emailDelivery.mode}, SupportInvoice:${delivery.supportEmailDelivery.mode}, WhatsApp:${delivery.whatsappDelivery.mode}`
+          );
+        }).catch((err) => {
+          db.logAudit(
+            "integrations",
+            "ORDER_NOTIFICATION_ERROR",
+            "STORE_MANAGEMENT",
+            `Failed order notification dispatch for ${newOrder.orderNumber}: ${err?.message || err}`
+          );
+        });
+        return newOrder;
+      }
+      /**
+       * RMA & Return Lifecycle with warehouse inspection & credit note generation
+       */
+      async processRMA(rma) {
+        const existingOrder = db.getOrderById(rma.orderId);
+        if (!existingOrder) throw new Error(`Order ${rma.orderId} not found`);
+        const targetLocation = rma.restockLocation === "mumbaiWarehouse" ? "mumbaiWarehouse" : "punePrimaryHub";
+        const locationLabel = targetLocation === "punePrimaryHub" ? "Pune Primary Hub" : "Mumbai Warehouse";
+        const lockItems = rma.restockInWarehouse ? existingOrder.items.map((it) => ({
+          sku: it.sku,
+          productId: it.productId,
+          productName: it.productName,
+          quantity: it.quantity
+        })) : [];
+        return db.runLockedStockMutation(lockItems, () => {
+          const order = db.getOrderById(rma.orderId);
+          if (!order) throw new Error(`Order ${rma.orderId} not found`);
+          order.status = "RETURNED";
+          order.paymentStatus = "REFUNDED";
+          order.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+          if (rma.restockInWarehouse) {
+            for (const item of order.items) {
+              const inv = db.getInventory().find((i) => i.productId === item.productId || i.sku === item.sku);
+              if (inv) {
+                inv.stockByLocation[targetLocation] += item.quantity;
+                db.logAudit(
+                  rma.actorEmail,
+                  "RESTOCK_INVENTORY",
+                  "INVENTORY_ADJUSTMENT",
+                  `Restocked ${item.quantity} units of ${inv.sku} to ${locationLabel} after RMA inspection.`
+                );
+              }
+            }
+          }
+          let creditNote;
+          if (order.invoiceNumber && db.getConfig().gstInvoicingEnabled) {
+            creditNote = db.issueCreditNote(order.invoiceNumber, "GOODS_RETURN", rma.actorEmail);
+          }
+          db.logAudit(
+            rma.actorEmail,
+            "RMA_PROCESSED",
+            "STORE_MANAGEMENT",
+            `RMA concluded for ${order.orderNumber} (Reason: ${rma.reason}). Credit Note: ${creditNote ? creditNote.creditNoteNumber : "SUSPENDED"}`
+          );
+          return { order, creditNote };
+        });
+      }
+      /**
+       * Syncs real-time courier milestones (In Transit, Out for Delivery, Delivered, RTO) from Shiprocket / Delhivery
+       */
+      async syncCourierMilestone(orderId, milestone, locationName) {
+        return db.runAtomicMutation(() => {
+          const order = db.getOrderById(orderId);
+          if (!order) throw new Error(`Order ${orderId} not found`);
+          order.courierStatus = milestone;
+          if (milestone === "DELIVERED") {
+            order.status = "DELIVERED";
+          }
+          order.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+          db.logAudit(
+            "logistics_sync",
+            "COURIER_MILESTONE_UPDATED",
+            "STORE_MANAGEMENT",
+            `Order ${order.orderNumber} AWB ${order.awbNumber}: Milestone changed to ${milestone} at ${locationName}`
+          );
+          return order;
+        });
+      }
+    };
+    erpSync = new ERPSynchronizer();
+  }
+});
+
+// src/server/cartRecovery.ts
+import crypto4 from "crypto";
+import fs5 from "fs";
+import path5 from "path";
+var CartRecoveryEngine, cartRecovery;
+var init_cartRecovery = __esm({
+  "src/server/cartRecovery.ts"() {
+    init_db();
+    CartRecoveryEngine = class {
+      constructor() {
+        this.intervalTimer = null;
+        this.cachedSecret = null;
+      }
+      getSigningSecret() {
+        if (process.env.CART_RECOVERY_SECRET) {
+          return process.env.CART_RECOVERY_SECRET;
+        }
+        if (this.cachedSecret) {
+          return this.cachedSecret;
+        }
+        const secretPath = path5.resolve(process.cwd(), "src/server/data/.cart_recovery_key");
+        try {
+          if (fs5.existsSync(secretPath)) {
+            const stored = fs5.readFileSync(secretPath, "utf-8").trim();
+            if (stored.length >= 32) {
+              this.cachedSecret = stored;
+              return stored;
+            }
+          }
+          const generated = crypto4.randomBytes(32).toString("hex");
+          const dir = path5.dirname(secretPath);
+          if (!fs5.existsSync(dir)) fs5.mkdirSync(dir, { recursive: true });
+          fs5.writeFileSync(secretPath, generated, { encoding: "utf-8", mode: 384 });
+          this.cachedSecret = generated;
+          return generated;
+        } catch {
+          this.cachedSecret = crypto4.createHash("sha256").update("bvl-cart-fallback-secret").digest("hex");
+          return this.cachedSecret;
+        }
+      }
+      signResumeToken(cartId) {
+        return crypto4.createHmac("sha256", this.getSigningSecret()).update(`resume:${cartId}`).digest("base64url");
+      }
+      verifyResumeToken(cartId, token) {
+        if (!cartId || !token || typeof token !== "string") return false;
+        const expected = this.signResumeToken(cartId);
+        const actualBuf = Buffer.from(token);
+        const expectedBuf = Buffer.from(expected);
+        if (actualBuf.length !== expectedBuf.length) return false;
+        return crypto4.timingSafeEqual(actualBuf, expectedBuf);
+      }
+      buildCheckoutResumeUrl(cartId) {
+        const token = this.signResumeToken(cartId);
+        return `/?resume=${encodeURIComponent(cartId)}&token=${encodeURIComponent(token)}`;
+      }
+      resolveCartRecipient(cartId) {
+        const cart = db.getCartById(cartId);
+        if (!cart) {
+          throw new Error(`Cart ${cartId} not found`);
+        }
+        const matchedCustomer = (cart.customerId ? db.getCustomerById(cart.customerId) : void 0) || (cart.email ? db.getCustomerById(cart.email) : void 0);
+        const resolvedEmail = (cart.email || matchedCustomer?.email || "").trim();
+        const resolvedPhone = (cart.phone || matchedCustomer?.phone || "").trim();
+        const twoHoursMs = 2 * 60 * 60 * 1e3;
+        const inCooldown = Boolean(
+          cart.lastRecoveryTriggerAt && Date.now() - new Date(cart.lastRecoveryTriggerAt).getTime() < twoHoursMs
+        );
+        return {
+          cart: {
+            ...cart,
+            email: resolvedEmail || cart.email,
+            phone: resolvedPhone || cart.phone,
+            checkoutUrl: this.buildCheckoutResumeUrl(cart.id)
+          },
+          email: resolvedEmail,
+          phone: resolvedPhone,
+          inCooldown
+        };
+      }
+      /**
+       * Starts the background abandonment detection worker.
+       * Sweeps every 60 seconds (or uses the configurable threshold).
+       */
+      startBackgroundWorker(intervalMs = 6e4) {
+        if (this.intervalTimer) return;
+        this.intervalTimer = setInterval(() => {
+          this.runAbandonmentDetectionSweep();
+        }, intervalMs);
+        console.log(`[CartRecoveryEngine] Background worker running (sweep interval: ${intervalMs / 1e3}s)`);
+      }
+      stopBackgroundWorker() {
+        if (this.intervalTimer) {
+          clearInterval(this.intervalTimer);
+          this.intervalTimer = null;
+        }
+      }
+      /**
+       * Scans all carts in the relational store.
+       * If a cart has items, has not placed an order, and is idle beyond the threshold,
+       * flags it as abandoned and emits a checkout.abandoned event.
+       */
+      runAbandonmentDetectionSweep() {
+        const config = db.getConfig();
+        const thresholdMinutes = config.abandonmentThresholdMinutes || 15;
+        const abandonedCarts = db.detectAbandonedCarts(thresholdMinutes);
+        for (const c of abandonedCarts) {
+          c.checkoutUrl = this.buildCheckoutResumeUrl(c.id);
+        }
+        if (abandonedCarts.length > 0) {
+          console.log(`[CartRecoveryEngine] Sweep flagged ${abandonedCarts.length} abandoned cart(s)`);
+        }
+        return {
+          detectedCount: abandonedCarts.length,
+          carts: abandonedCarts
+        };
+      }
+      /**
+       * Persists cart state from storefront (patron or guest) with signed resume link
+       */
+      persistStorefrontCart(data) {
+        const saved = db.saveCartState(data);
+        saved.checkoutUrl = this.buildCheckoutResumeUrl(saved.id);
+        db.persistState();
+        return saved;
+      }
+      /**
+       * Idempotent recovery dispatcher for a specific cart
+       */
+      dispatchRecoveryMessage(cartId, channel) {
+        const res = db.triggerCartRecovery(cartId, channel);
+        res.cart.checkoutUrl = this.buildCheckoutResumeUrl(res.cart.id);
+        db.persistState();
+        return res;
+      }
+      /**
+       * Resolves a resumable cart by cart ID and optional HMAC token.
+       * Supports direct cart ID links as well as signed resume tokens; rejects tampered tokens.
+       */
+      resolveResumableCart(cartId, token) {
+        const cleanId = (cartId || "").trim();
+        if (!cleanId) {
+          return { status: "NOT_FOUND", tokenVerified: false };
+        }
+        let tokenVerified = false;
+        if (token !== void 0 && token !== "") {
+          if (!this.verifyResumeToken(cleanId, token.trim())) {
+            return { status: "INVALID_TOKEN", tokenVerified: false };
+          }
+          tokenVerified = true;
+        }
+        const cart = db.getCartById(cleanId);
+        if (!cart) {
+          return { status: "NOT_FOUND", tokenVerified: false };
+        }
+        return {
+          status: "OK",
+          cart: {
+            ...cart,
+            checkoutUrl: this.buildCheckoutResumeUrl(cart.id)
+          },
+          tokenVerified
+        };
+      }
+    };
+    cartRecovery = new CartRecoveryEngine();
+  }
+});
+
+// src/server/rfm.ts
+function classifyCustomerRFM(customer) {
+  const { totalOrders, lifetimeValue, daysSinceLastOrder, discountOrdersCount } = customer;
+  let recencyScore = 1;
+  if (daysSinceLastOrder <= 30) recencyScore = 5;
+  else if (daysSinceLastOrder <= 60) recencyScore = 4;
+  else if (daysSinceLastOrder <= 90) recencyScore = 3;
+  else if (daysSinceLastOrder <= 180) recencyScore = 2;
+  else recencyScore = 1;
+  let frequencyScore = 1;
+  if (totalOrders >= 5) frequencyScore = 5;
+  else if (totalOrders >= 3) frequencyScore = 4;
+  else if (totalOrders >= 2) frequencyScore = 3;
+  else if (totalOrders === 1) frequencyScore = 2;
+  else frequencyScore = 1;
+  let monetaryScore = 1;
+  if (lifetimeValue >= 5e4) monetaryScore = 5;
+  else if (lifetimeValue >= 25e3) monetaryScore = 4;
+  else if (lifetimeValue >= 1e4) monetaryScore = 3;
+  else if (lifetimeValue >= 3500) monetaryScore = 2;
+  else monetaryScore = 1;
+  let segment = "Promising/Recent";
+  if (totalOrders > 0 && discountOrdersCount >= 2 && discountOrdersCount >= totalOrders) {
+    segment = "Bargain Hunters";
+  } else if (daysSinceLastOrder > 90 && totalOrders > 0) {
+    segment = "At-Risk/Churning";
+  } else if (frequencyScore >= 4 && monetaryScore >= 4 || totalOrders >= 4 && lifetimeValue >= 5e4) {
+    segment = "Champions/VIPs";
+  } else {
+    segment = "Promising/Recent";
+  }
+  return {
+    segment,
+    score: {
+      recency: recencyScore,
+      frequency: frequencyScore,
+      monetary: monetaryScore
+    }
+  };
+}
+function computeUnitEconomics() {
+  const orders = db.getOrders().filter((o) => o.paymentStatus === "PAID");
+  const customers = db.getCustomers().filter((c) => c.role === "PATRON");
+  const totalRevenue = orders.reduce((sum, o) => sum + o.totalAmount, 0);
+  const totalOrders = orders.length;
+  const aov = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
+  const totalMarketingSpend = customers.reduce((sum, c) => sum + (c.acquisitionCost || 0), 0);
+  const totalAcquiredCustomers = customers.filter((c) => (c.acquisitionCost || 0) > 0).length;
+  const cac = totalAcquiredCustomers > 0 ? Math.round(totalMarketingSpend / totalAcquiredCustomers) : 0;
+  const roas = totalMarketingSpend > 0 ? Number((totalRevenue / totalMarketingSpend).toFixed(2)) : 0;
+  const repeatCustomers = customers.filter((c) => c.totalOrders > 1).length;
+  const repeatPurchaseRate = customers.length > 0 ? Number((repeatCustomers / customers.length * 100).toFixed(1)) : 0;
+  return {
+    cac,
+    roas,
+    aov,
+    totalRevenue,
+    totalOrders,
+    activeCustomers: customers.length,
+    repeatPurchaseRate
+  };
+}
+function computeOperationalHealth() {
+  const warranties = db.getWarranties();
+  const orders = db.getOrders();
+  const auditLogs = db.getAuditLogs();
+  const totalOrders = orders.length;
+  const totalUnitsSold = orders.reduce((acc, o) => acc + o.items.reduce((s, it) => s + it.quantity, 0), 0);
+  const totalClaims = warranties.reduce((acc, w) => acc + w.claimCount, 0);
+  const warrantyClaimFrequency = totalUnitsSold > 0 ? Number((totalClaims / totalUnitsSold * 100).toFixed(2)) : 0;
+  const rmaLogs = auditLogs.filter((l) => l.action === "RMA_PROCESSED");
+  const reasonCounts = {
+    COLOR_MISMATCH: 0,
+    TEXTURE_DEFECT: 0,
+    INCORRECT_SIZE: 0,
+    HARDWARE_DAMAGE: 0
+  };
+  for (const log of rmaLogs) {
+    const match = /\(Reason:\s*(COLOR_MISMATCH|TEXTURE_DEFECT|INCORRECT_SIZE|HARDWARE_DAMAGE)\)/i.exec(log.details);
+    if (match) {
+      const key = match[1].toUpperCase();
+      reasonCounts[key] += 1;
+    }
+  }
+  const loggedReturnTotal = reasonCounts.COLOR_MISMATCH + reasonCounts.TEXTURE_DEFECT + reasonCounts.INCORRECT_SIZE + reasonCounts.HARDWARE_DAMAGE;
+  const returnedOrdersCount = orders.filter((o) => o.status === "RETURNED").length;
+  if (returnedOrdersCount > loggedReturnTotal) {
+    reasonCounts.TEXTURE_DEFECT += returnedOrdersCount - loggedReturnTotal;
+  }
+  const denominator = Math.max(1, totalOrders);
+  const toPct = (count) => Number((count / denominator * 100).toFixed(1));
+  const deliveredOrders = orders.filter((o) => o.status === "DELIVERED" || o.courierStatus === "DELIVERED");
+  let averageTransitDays = 0;
+  let onTimeDeliveryRate = 100;
+  if (deliveredOrders.length > 0) {
+    let totalDays = 0;
+    let onTimeCount = 0;
+    for (const ord of deliveredOrders) {
+      const startMs = new Date(ord.createdAt).getTime();
+      const endMs = new Date(ord.updatedAt).getTime();
+      const transitDays = Number.isFinite(startMs) && Number.isFinite(endMs) ? Math.max(0.2, (endMs - startMs) / (1e3 * 60 * 60 * 24)) : 2.5;
+      totalDays += transitDays;
+      if (ord.estimatedDeliveryDate) {
+        const etaMs = new Date(ord.estimatedDeliveryDate).getTime();
+        if (endMs <= etaMs) onTimeCount += 1;
+      } else if (transitDays <= 5) {
+        onTimeCount += 1;
+      }
+    }
+    averageTransitDays = Number((totalDays / deliveredOrders.length).toFixed(1));
+    onTimeDeliveryRate = Number((onTimeCount / deliveredOrders.length * 100).toFixed(1));
+  }
+  return {
+    returnRateByReason: {
+      colorExpectation: toPct(reasonCounts.COLOR_MISMATCH),
+      textureExpectation: toPct(reasonCounts.TEXTURE_DEFECT),
+      sizingFit: toPct(reasonCounts.INCORRECT_SIZE),
+      transitDamage: toPct(reasonCounts.HARDWARE_DAMAGE)
+    },
+    averageTransitDays,
+    warrantyClaimFrequency,
+    onTimeDeliveryRate,
+    totalReturns: Math.max(loggedReturnTotal, returnedOrdersCount),
+    completedDeliveries: deliveredOrders.length
+  };
+}
+function computeCohortRetention() {
+  const patrons = db.getCustomers({ includeArchived: true }).filter((c) => c.role === "PATRON");
+  const orders = db.getOrders().filter((o) => o.paymentStatus === "PAID");
+  const dayMs = 1e3 * 60 * 60 * 24;
+  const cohortsMap = /* @__PURE__ */ new Map();
+  for (const patron of patrons) {
+    const createdDate = new Date(patron.createdAt || Date.now());
+    const year = Number.isNaN(createdDate.getTime()) ? (/* @__PURE__ */ new Date()).getFullYear() : createdDate.getUTCFullYear();
+    const month = Number.isNaN(createdDate.getTime()) ? (/* @__PURE__ */ new Date()).getUTCMonth() : createdDate.getUTCMonth();
+    const quarter = Math.floor(month / 3) + 1;
+    const cohortLabel = `Q${quarter} ${year}`;
+    const sortKey = year * 10 + quarter;
+    if (!cohortsMap.has(cohortLabel)) {
+      cohortsMap.set(cohortLabel, {
+        sortKey,
+        cohort: cohortLabel,
+        totalPatrons: 0,
+        day30: 0,
+        day60: 0,
+        day90: 0
+      });
+    }
+    const bucket = cohortsMap.get(cohortLabel);
+    bucket.totalPatrons += 1;
+    const patronOrders = orders.filter(
+      (o) => o.customerId === patron.id || o.customerEmail.toLowerCase() === patron.email.toLowerCase()
+    );
+    const createdMs = createdDate.getTime();
+    let maxSpanDays = 0;
+    for (const ord of patronOrders) {
+      const ordMs = new Date(ord.createdAt).getTime();
+      if (Number.isFinite(ordMs) && Number.isFinite(createdMs)) {
+        maxSpanDays = Math.max(maxSpanDays, (ordMs - createdMs) / dayMs);
+      }
+    }
+    const totalOrdersCount = Math.max(patron.totalOrders || 0, patronOrders.length);
+    if (totalOrdersCount >= 1 || maxSpanDays >= 30) bucket.day30 += 1;
+    if (totalOrdersCount >= 2 || maxSpanDays >= 60 || patron.daysSinceLastOrder <= 60) bucket.day60 += 1;
+    if (totalOrdersCount >= 3 || maxSpanDays >= 90 || patron.daysSinceLastOrder <= 45) bucket.day90 += 1;
+  }
+  return Array.from(cohortsMap.values()).sort((a, b) => a.sortKey - b.sortKey).map(({ cohort, totalPatrons, day30, day60, day90 }) => ({
+    cohort,
+    totalPatrons,
+    day30,
+    day60,
+    day90
+  }));
+}
+function computeSkuReorderVelocity(nowMs = Date.now()) {
+  const paidOrders = db.getOrders().filter((o) => o.paymentStatus === "PAID");
+  const catalogProducts = db.getCatalog().products || [];
+  const thirtyDaysMs = 30 * 24 * 60 * 60 * 1e3;
+  const sixtyDaysMs = 60 * 24 * 60 * 60 * 1e3;
+  const skuStats = /* @__PURE__ */ new Map();
+  for (const prod of catalogProducts) {
+    skuStats.set(prod.sku, {
+      sku: prod.sku,
+      name: prod.name,
+      unitsSold30d: 0,
+      unitsSoldPrev30d: 0,
+      stockCount: prod.stockCount
+    });
+  }
+  for (const order of paidOrders) {
+    const ordMs = new Date(order.createdAt).getTime();
+    if (!Number.isFinite(ordMs)) continue;
+    const ageMs = nowMs - ordMs;
+    for (const item of order.items) {
+      if (!skuStats.has(item.sku)) {
+        skuStats.set(item.sku, {
+          sku: item.sku,
+          name: item.productName,
+          unitsSold30d: 0,
+          unitsSoldPrev30d: 0
+        });
+      }
+      const stat = skuStats.get(item.sku);
+      if (ageMs <= thirtyDaysMs) {
+        stat.unitsSold30d += item.quantity;
+      } else if (ageMs <= sixtyDaysMs) {
+        stat.unitsSoldPrev30d += item.quantity;
+      }
+    }
+  }
+  return Array.from(skuStats.values()).sort((a, b) => b.unitsSold30d - a.unitsSold30d || a.name.localeCompare(b.name)).slice(0, 6).map((stat) => {
+    let velocityTrend = "0%";
+    if (stat.unitsSoldPrev30d === 0 && stat.unitsSold30d > 0) {
+      velocityTrend = "+100%";
+    } else if (stat.unitsSoldPrev30d > 0) {
+      const pct = Math.round((stat.unitsSold30d - stat.unitsSoldPrev30d) / stat.unitsSoldPrev30d * 100);
+      velocityTrend = `${pct >= 0 ? "+" : ""}${pct}%`;
+    }
+    return {
+      sku: stat.sku,
+      name: stat.name,
+      unitsSold30d: stat.unitsSold30d,
+      velocityTrend,
+      stockCount: stat.stockCount
+    };
+  });
+}
+var init_rfm = __esm({
+  "src/server/rfm.ts"() {
+    init_db();
+  }
+});
+
+// src/server/firebaseAuthVerifier.ts
+import crypto5 from "crypto";
+import fs6 from "fs";
+import path6 from "path";
+function getProjectId() {
+  const envProjectId = (process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || "").trim();
+  if (envProjectId) {
+    return envProjectId;
+  }
+  try {
+    const cfgPath = path6.resolve(process.cwd(), "firebase-applet-config.json");
+    if (fs6.existsSync(cfgPath)) {
+      const cfg = JSON.parse(fs6.readFileSync(cfgPath, "utf-8"));
+      if (cfg.projectId) return cfg.projectId;
+    }
+  } catch {
+  }
+  return "gen-lang-client-0774833728";
+}
+function base64UrlDecode(input) {
+  const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
+  const padLen = (4 - normalized.length % 4) % 4;
+  return Buffer.from(normalized + "=".repeat(padLen), "base64");
+}
+async function fetchGooglePublicCerts() {
+  const now = Date.now();
+  if (now < certsExpiresAt && Object.keys(cachedCerts).length > 0) {
+    return cachedCerts;
+  }
+  const res = await fetch(GOOGLE_CERTS_URL);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch Google public certificates (${res.status})`);
+  }
+  const cacheControl = res.headers.get("cache-control") || "";
+  const maxAgeMatch = cacheControl.match(/max-age=(\d+)/i);
+  const maxAgeSeconds = maxAgeMatch ? parseInt(maxAgeMatch[1], 10) : 3600;
+  cachedCerts = await res.json();
+  certsExpiresAt = now + maxAgeSeconds * 1e3;
+  return cachedCerts;
+}
+async function verifyFirebaseIdToken(idToken) {
+  if (!idToken || typeof idToken !== "string") return null;
+  const nowSeconds = Math.floor(Date.now() / 1e3);
+  const cached = verifiedTokenCache.get(idToken);
+  if (cached && cached.exp > nowSeconds + 15) {
+    return cached;
+  }
+  const parts = idToken.split(".");
+  if (parts.length !== 3) return null;
+  const [headerB64, payloadB64, signatureB64] = parts;
+  let header;
+  let payload;
+  try {
+    header = JSON.parse(base64UrlDecode(headerB64).toString("utf-8"));
+    payload = JSON.parse(base64UrlDecode(payloadB64).toString("utf-8"));
+  } catch {
+    return null;
+  }
+  if (header.alg !== "RS256" || !header.kid) {
+    return null;
+  }
+  const projectId = getProjectId();
+  const expectedIssuer = `https://securetoken.google.com/${projectId}`;
+  if (payload.aud !== projectId) return null;
+  if (payload.iss !== expectedIssuer) return null;
+  if (typeof payload.sub !== "string" || !payload.sub.trim()) return null;
+  if (typeof payload.exp !== "number" || payload.exp <= nowSeconds) return null;
+  if (typeof payload.iat !== "number" || payload.iat > nowSeconds + 300) return null;
+  const certs = await fetchGooglePublicCerts();
+  const pemCert = certs[header.kid];
+  if (!pemCert) {
+    certsExpiresAt = 0;
+    const refreshed = await fetchGooglePublicCerts();
+    if (!refreshed[header.kid]) return null;
+  }
+  const cert = cachedCerts[header.kid];
+  const verifier = crypto5.createVerify("RSA-SHA256");
+  verifier.update(`${headerB64}.${payloadB64}`);
+  verifier.end();
+  const signatureBuf = base64UrlDecode(signatureB64);
+  const isValid = verifier.verify(cert, signatureBuf);
+  if (!isValid) return null;
+  const email = typeof payload.email === "string" ? payload.email.toLowerCase().trim() : "";
+  if (!email) return null;
+  const claims = {
+    uid: payload.sub,
+    email,
+    emailVerified: Boolean(payload.email_verified),
+    name: typeof payload.name === "string" ? payload.name : email.split("@")[0],
+    picture: typeof payload.picture === "string" ? payload.picture : void 0,
+    signInProvider: typeof payload.firebase?.sign_in_provider === "string" ? payload.firebase.sign_in_provider : void 0,
+    exp: payload.exp
+  };
+  if (verifiedTokenCache.size > 500) {
+    verifiedTokenCache.clear();
+  }
+  verifiedTokenCache.set(idToken, claims);
+  return claims;
+}
+var GOOGLE_CERTS_URL, cachedCerts, certsExpiresAt, verifiedTokenCache;
+var init_firebaseAuthVerifier = __esm({
+  "src/server/firebaseAuthVerifier.ts"() {
+    GOOGLE_CERTS_URL = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
+    cachedCerts = {};
+    certsExpiresAt = 0;
+    verifiedTokenCache = /* @__PURE__ */ new Map();
+  }
+});
+
+// src/server/authMiddleware.ts
+function isTestAuthTokensEnabled() {
+  return process.env.NODE_ENV !== "production" && (process.env.NODE_ENV === "test" || process.env.ENABLE_TEST_AUTH_TOKENS === "true");
+}
+function resolveAuthToken(authHeader) {
+  if (!authHeader) return null;
+  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  if (!token) return null;
+  if (isTestAuthTokensEnabled() && TEST_SESSION_CACHE.has(token)) {
+    const cached = TEST_SESSION_CACHE.get(token);
+    const isAuth = db.isStoreManagementAuthorized(cached.email);
+    return {
+      ...cached,
+      role: isAuth ? db.getStaffRole(cached.email) : "PATRON",
+      isMasterAdmin: db.isMasterAuthorized(cached.email),
+      isStoreManagementAuthorized: isAuth
+    };
+  }
+  const claims = verifySessionJwt(token);
+  if (!claims || !claims.email) {
+    return null;
+  }
+  const email = claims.email.trim().toLowerCase();
+  const isMaster = db.isMasterAuthorized(email);
+  const isAdmin = db.isStoreManagementAuthorized(email);
+  const resolvedRole = isAdmin ? db.getStaffRole(email) : "PATRON";
+  return {
+    uid: claims.sub,
+    email,
+    name: claims.name || email.split("@")[0],
+    role: resolvedRole,
+    isMasterAdmin: isMaster,
+    isStoreManagementAuthorized: isAdmin,
+    authProvider: "CREDENTIALS"
+  };
+}
+async function resolveAuthTokenAsync(authHeader) {
+  const syncUser = resolveAuthToken(authHeader);
+  if (syncUser) return syncUser;
+  if (!authHeader) return null;
+  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  if (!token || token.split(".").length !== 3) return null;
+  try {
+    const claims = await verifyFirebaseIdToken(token);
+    if (!claims || !claims.email) return null;
+    const cleanEmail = claims.email.trim().toLowerCase();
+    const isMaster = db.isMasterAuthorized(cleanEmail);
+    const isAdmin = db.isStoreManagementAuthorized(cleanEmail);
+    const resolvedRole = isAdmin ? db.getStaffRole(cleanEmail) : "PATRON";
+    return {
+      uid: claims.uid,
+      email: cleanEmail,
+      name: claims.name || cleanEmail.split("@")[0],
+      role: resolvedRole,
+      isMasterAdmin: isMaster,
+      isStoreManagementAuthorized: isAdmin,
+      photoURL: claims.picture,
+      authProvider: "GOOGLE"
+    };
+  } catch {
+    return null;
+  }
+}
+async function requireAuth(req, res, next) {
+  const user = await resolveAuthTokenAsync(req.headers.authorization);
+  if (!user) {
+    return res.status(401).json({
+      error: "UNAUTHORIZED",
+      message: "Authentication required. Please sign in to continue."
+    });
+  }
+  req.user = user;
+  next();
+}
+function createRoleGuard(allowedRoles, denialMessage) {
+  return async function enforceRole(req, res, next) {
+    const user = await resolveAuthTokenAsync(req.headers.authorization);
+    if (!user) {
+      return res.status(401).json({
+        error: "UNAUTHORIZED",
+        message: "Authentication required to access admin operations."
+      });
+    }
+    const isStaff = db.isStoreManagementAuthorized(user.email);
+    const effectiveRole = isStaff ? db.getStaffRole(user.email) : "PATRON";
+    if (!isStaff || !allowedRoles.includes(effectiveRole)) {
+      db.logAudit(
+        user.email,
+        "UNAUTHORIZED_ADMIN_ATTEMPT",
+        "AUTH_PERMISSION",
+        `Blocked ${user.email} (role: ${effectiveRole}) from ${req.method} ${req.originalUrl}`,
+        req.ip
+      );
+      return res.status(403).json({
+        error: "FORBIDDEN",
+        message: denialMessage
+      });
+    }
+    req.user = { ...user, role: effectiveRole };
+    next();
+  };
+}
+async function requireMasterAdminAccess(req, res, next) {
+  const user = await resolveAuthTokenAsync(req.headers.authorization);
+  if (!user) {
+    return res.status(401).json({
+      error: "UNAUTHORIZED",
+      message: "Authentication required to perform Master Admin actions."
+    });
+  }
+  if (!db.isMasterAuthorized(user.email)) {
+    db.logAudit(
+      user.email,
+      "UNAUTHORIZED_MASTER_ADMIN_ATTEMPT",
+      "AUTH_PERMISSION",
+      `Blocked non-master user ${user.email} from Master-only endpoint ${req.method} ${req.originalUrl}`,
+      req.ip
+    );
+    return res.status(403).json({
+      error: "FORBIDDEN",
+      message: "Only Founding Master Super-Admins can perform this administrative action."
+    });
+  }
+  req.user = user;
+  next();
+}
+var TEST_SESSION_CACHE, requireStoreManagementAccess, requireCrmAccess, requireErpAccess, requireAnalyticsAccess;
+var init_authMiddleware = __esm({
+  "src/server/authMiddleware.ts"() {
+    init_db();
+    init_firebaseAuthVerifier();
+    init_security();
+    TEST_SESSION_CACHE = /* @__PURE__ */ new Map();
+    TEST_SESSION_CACHE.set("token_sunil", {
+      uid: "uid_admin_sunil",
+      email: "sunilchain@gmail.com",
+      name: "Sunil Chainani",
+      role: "STORE_MANAGER",
+      isMasterAdmin: true,
+      isStoreManagementAuthorized: true
+    });
+    TEST_SESSION_CACHE.set("token_support", {
+      uid: "uid_admin_support",
+      email: "support@bharatvarshcrafts.com",
+      name: "Bharatvarsh Support Desk",
+      role: "STORE_MANAGER",
+      isMasterAdmin: true,
+      isStoreManagementAuthorized: true
+    });
+    TEST_SESSION_CACHE.set("token_patron_vikram", {
+      uid: "uid_patron_01",
+      email: "vikram.singhania@heritagecrafts.in",
+      name: "Vikramaditya Singhania",
+      role: "PATRON",
+      isMasterAdmin: false,
+      isStoreManagementAuthorized: false
+    });
+    requireStoreManagementAccess = createRoleGuard(
+      ["STORE_MANAGER"],
+      "Access denied. Only Store Managers can access store configuration, catalog management, and administrative settings."
+    );
+    requireCrmAccess = createRoleGuard(
+      ["STORE_MANAGER", "SUPPORT_AGENT"],
+      "Access denied. Customer 360, Omnichannel Inbox, and Sales Pipeline require Store Manager or Support Agent privileges."
+    );
+    requireErpAccess = createRoleGuard(
+      ["STORE_MANAGER", "LOGISTICS_COORDINATOR"],
+      "Access denied. ERP Inventory, BOM, Dispatch, and RMA modules require Store Manager or Logistics Coordinator privileges."
+    );
+    requireAnalyticsAccess = createRoleGuard(
+      ["STORE_MANAGER", "SUPPORT_AGENT", "LOGISTICS_COORDINATOR"],
+      "Access denied. Only authorized staff members can view operational analytics."
+    );
+  }
+});
+
+// src/server/dailyOrderReport.ts
+import * as XLSX from "xlsx";
+function getYesterdayIstDateKey(referenceNow = /* @__PURE__ */ new Date()) {
+  const istNow = new Date(referenceNow.getTime() + IST_OFFSET_MS);
+  const yesterdayUtcMidnight = new Date(
+    Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate() - 1)
+  );
+  return yesterdayUtcMidnight.toISOString().slice(0, 10);
+}
+function getIstDayUtcWindow(dateKey) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+    throw new Error(`Invalid IST date key "${dateKey}". Expected YYYY-MM-DD.`);
+  }
+  const [yr, mo, dy] = dateKey.split("-").map((n) => parseInt(n, 10));
+  const istMidnightAsUtcMs = Date.UTC(yr, mo - 1, dy, 0, 0, 0, 0);
+  const startUtcMs = istMidnightAsUtcMs - IST_OFFSET_MS;
+  const endUtcMs = startUtcMs + 24 * 60 * 60 * 1e3 - 1;
+  return { startUtcMs, endUtcMs };
+}
+function formatIstDateTime(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const ist = new Date(d.getTime() + IST_OFFSET_MS);
+  return `${ist.toISOString().slice(0, 19).replace("T", " ")} IST`;
+}
+function generateDailyOrderWorkbook(targetDateIst) {
+  const dateKey = targetDateIst && /^\d{4}-\d{2}-\d{2}$/.test(targetDateIst) ? targetDateIst : getYesterdayIstDateKey();
+  const { startUtcMs, endUtcMs } = getIstDayUtcWindow(dateKey);
+  const allOrders = db.getOrders();
+  const invoices = db.getInvoices();
+  const dayOrders = allOrders.filter((o) => {
+    const ts = new Date(o.createdAt).getTime();
+    return Number.isFinite(ts) && ts >= startUtcMs && ts <= endUtcMs;
+  }).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  let grossRevenue = 0;
+  let totalDiscount = 0;
+  let totalTaxableValue = 0;
+  let totalCgst = 0;
+  let totalSgst = 0;
+  let totalIgst = 0;
+  let totalTax = 0;
+  const orderRows = dayOrders.map((order) => {
+    const matchedInv = invoices.find(
+      (inv) => inv.orderId === order.id || order.invoiceNumber && inv.invoiceNumber === order.invoiceNumber
+    );
+    const shipCity = order.shippingAddress?.city || order.billingAddress?.city || "";
+    const shipState = order.shippingAddress?.state || order.billingAddress?.state || matchedInv?.placeOfSupply || "";
+    const pincode = order.shippingAddress?.pincode || order.billingAddress?.pincode || "";
+    const taxableValue = matchedInv ? Number(matchedInv.taxableValue) : Math.max(0, Number(order.subtotal || 0) - Number(order.discountAmount || 0));
+    const isInterState = matchedInv ? matchedInv.isInterState : shipState.trim().toLowerCase() !== "maharashtra";
+    const cgst = matchedInv ? Number(matchedInv.cgstAmount || 0) : isInterState ? 0 : Math.round(Number(order.taxAmount || 0) / 2);
+    const sgst = matchedInv ? Number(matchedInv.sgstAmount || 0) : isInterState ? 0 : Number(order.taxAmount || 0) - Math.round(Number(order.taxAmount || 0) / 2);
+    const igst = matchedInv ? Number(matchedInv.igstAmount || 0) : isInterState ? Number(order.taxAmount || 0) : 0;
+    const itemsSummary = (order.items || []).map((it) => `${it.productName} (${it.sku}) x${it.quantity}`).join("; ");
+    const monogramSpecs = (order.items || []).filter((it) => it.customization?.monogramInitials).map((it) => `${it.sku}: ${it.customization.monogramInitials} (${it.customization.foilType})`).join("; ") || "None";
+    grossRevenue += Number(order.totalAmount || 0);
+    totalDiscount += Number(order.discountAmount || 0);
+    totalTaxableValue += taxableValue;
+    totalCgst += cgst;
+    totalSgst += sgst;
+    totalIgst += igst;
+    totalTax += cgst + sgst + igst;
+    return {
+      "Order Number": order.orderNumber,
+      "Order Date/Time (IST)": formatIstDateTime(order.createdAt),
+      "Invoice Number": order.invoiceNumber || "Pending / Exempt",
+      "Customer Name": order.customerName,
+      Email: order.customerEmail,
+      Phone: order.customerPhone || "",
+      "Shipping City & State": [shipCity, shipState].filter(Boolean).join(", "),
+      Pincode: pincode,
+      "Items & SKUs": itemsSummary,
+      "Monogram Specs": monogramSpecs,
+      "Subtotal (INR)": Number(order.subtotal || 0),
+      "Discount (INR)": Number(order.discountAmount || 0),
+      "Taxable Value (INR)": taxableValue,
+      "CGST (INR)": cgst,
+      "SGST (INR)": sgst,
+      "IGST (INR)": igst,
+      "Total Amount (INR)": Number(order.totalAmount || 0),
+      "Payment Gateway": order.paymentGateway,
+      "Payment Status": order.paymentStatus,
+      "Order Status": order.status,
+      "AWB Number": order.awbNumber || "Pending Allocation"
+    };
+  });
+  const summaryRows = [
+    { Metric: "Report Date (IST)", Value: dateKey },
+    { Metric: "Generated At (IST)", Value: formatIstDateTime((/* @__PURE__ */ new Date()).toISOString()) },
+    { Metric: "Total Orders", Value: dayOrders.length },
+    { Metric: "Gross Revenue (INR)", Value: grossRevenue },
+    { Metric: "Total Discounts (INR)", Value: totalDiscount },
+    { Metric: "Total Taxable Value (INR)", Value: totalTaxableValue },
+    { Metric: "Total CGST Collected (INR)", Value: totalCgst },
+    { Metric: "Total SGST Collected (INR)", Value: totalSgst },
+    { Metric: "Total IGST Collected (INR)", Value: totalIgst },
+    { Metric: "Total Tax Collected (INR)", Value: totalTax }
+  ];
+  const wb = XLSX.utils.book_new();
+  const ordersSheet = orderRows.length > 0 ? XLSX.utils.json_to_sheet(orderRows) : XLSX.utils.aoa_to_sheet([
+    [
+      "Order Number",
+      "Order Date/Time (IST)",
+      "Invoice Number",
+      "Customer Name",
+      "Email",
+      "Phone",
+      "Shipping City & State",
+      "Pincode",
+      "Items & SKUs",
+      "Monogram Specs",
+      "Subtotal (INR)",
+      "Discount (INR)",
+      "Taxable Value (INR)",
+      "CGST (INR)",
+      "SGST (INR)",
+      "IGST (INR)",
+      "Total Amount (INR)",
+      "Payment Gateway",
+      "Payment Status",
+      "Order Status",
+      "AWB Number"
+    ]
+  ]);
+  const summarySheet = XLSX.utils.json_to_sheet(summaryRows);
+  XLSX.utils.book_append_sheet(wb, ordersSheet, "Orders");
+  XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
+  const rawOut = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+  const buffer = Buffer.isBuffer(rawOut) ? rawOut : Buffer.from(rawOut);
+  const filename = `Orders_${dateKey}.xlsx`;
+  return {
+    dateKey,
+    filename,
+    buffer,
+    orderCount: dayOrders.length,
+    grossRevenue,
+    totalDiscount,
+    totalTaxableValue,
+    totalTax,
+    orders: dayOrders
+  };
+}
+async function sendDailyOrdersReport(options) {
+  const targetDateKey = options?.targetDateIst && /^\d{4}-\d{2}-\d{2}$/.test(options.targetDateIst) ? options.targetDateIst : getYesterdayIstDateKey();
+  const lastSent = db.getLastDailyReportDate();
+  if (!options?.force && lastSent === targetDateKey) {
+    return {
+      success: true,
+      skipped: true,
+      dateKey: targetDateKey,
+      filename: `Orders_${targetDateKey}.xlsx`,
+      orderCount: 0,
+      grossRevenue: 0,
+      totalTax: 0,
+      deliveryMode: "SANDBOX_FALLBACK",
+      fallbackReason: `Report for ${targetDateKey} already dispatched`
+    };
+  }
+  const report = generateDailyOrderWorkbook(targetDateKey);
+  const recipient = getSupportOrderEmailRecipient();
+  const formattedGross = Math.round(report.grossRevenue).toLocaleString("en-IN");
+  const formattedTax = Math.round(report.totalTax).toLocaleString("en-IN");
+  const subject = `Daily Order Summary (${report.dateKey}) \u2014 ${report.orderCount} Orders | \u20B9${formattedGross}`;
+  const text = [
+    `Bharatvarsh Leathercrafts LLP \u2014 Daily Order Summary (${report.dateKey} IST)`,
+    `Total Orders: ${report.orderCount}`,
+    `Gross Revenue: \u20B9${formattedGross}`,
+    `Total Tax Collected: \u20B9${formattedTax}`,
+    "",
+    `Attached workbook: ${report.filename} (Sheets: Orders, Summary)`
+  ].join("\n");
+  const html = `
+  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#FAF7F2;padding:24px;color:#16120E;">
+    <div style="max-width:600px;margin:0 auto;background:#FFFFFF;border:1px solid #D8CFC2;padding:24px;border-radius:8px;">
+      <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#8B4513;font-weight:700;">Bharatvarsh Leathercrafts LLP \xB7 Automated Ledger</div>
+      <h2 style="font-family:Georgia,serif;font-size:20px;margin:8px 0;">Daily Order Summary (${report.dateKey} IST)</h2>
+      <div style="background:#FAF7F2;border:1px solid #E5DDD0;padding:14px;border-radius:6px;font-size:13px;line-height:1.8;font-family:monospace;">
+        <div><strong>Total Orders:</strong> ${report.orderCount}</div>
+        <div><strong>Gross Revenue:</strong> &#8377;${formattedGross}</div>
+        <div><strong>Total Tax Collected:</strong> &#8377;${formattedTax}</div>
+      </div>
+      <p style="font-size:12px;color:#5C4D3E;margin-top:14px;">
+        Full itemized order &amp; GST breakdown workbook is attached as <strong>${report.filename}</strong>.
+      </p>
+    </div>
+  </div>`;
+  const delivery = await sendEmail({
+    to: recipient,
+    subject,
+    text,
+    html,
+    attachments: [
+      {
+        filename: report.filename,
+        content: report.buffer,
+        contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      }
+    ]
+  });
+  if (delivery.mode === "LIVE" || !delivery.smtpConfigured) {
+    await db.runAtomicMutation(() => {
+      if (!options?.targetDateIst || options.targetDateIst === getYesterdayIstDateKey()) {
+        db.setLastDailyReportDate(report.dateKey);
+      }
+      db.logAudit(
+        options?.actorEmail || "daily_report_scheduler",
+        "DAILY_ORDER_REPORT_SENT",
+        "STORE_MANAGEMENT",
+        `Dispatched ${report.filename} to ${recipient} (${report.orderCount} orders, \u20B9${formattedGross}, Mode: ${delivery.mode})`
+      );
+    });
+  } else {
+    db.logAudit(
+      options?.actorEmail || "daily_report_scheduler",
+      "DAILY_ORDER_REPORT_ERROR",
+      "STORE_MANAGEMENT",
+      `Failed live SMTP dispatch of ${report.filename} to ${recipient}: ${delivery.fallbackReason || "Unknown error"}`
+    );
+  }
+  return {
+    success: true,
+    skipped: false,
+    dateKey: report.dateKey,
+    filename: report.filename,
+    orderCount: report.orderCount,
+    grossRevenue: report.grossRevenue,
+    totalTax: report.totalTax,
+    deliveryMode: delivery.mode,
+    messageId: delivery.messageId,
+    fallbackReason: delivery.fallbackReason
+  };
+}
+async function runScheduledDailyOrderReportIfDue() {
+  if (reportInFlight) return;
+  const yesterdayKey = getYesterdayIstDateKey();
+  if (db.getLastDailyReportDate() === yesterdayKey) return;
+  reportInFlight = true;
+  try {
+    const result = await sendDailyOrdersReport({ force: false, targetDateIst: yesterdayKey });
+    if (!result.skipped) {
+      console.log(
+        `[DailyOrderReport] Dispatched ${result.filename} (${result.orderCount} orders, mode: ${result.deliveryMode})`
+      );
+    }
+  } catch (err) {
+    console.error("[DailyOrderReport] Scheduled report failed:", err?.message || err);
+  } finally {
+    reportInFlight = false;
+  }
+}
+function startDailyOrderReportScheduler(intervalMs = 6e4) {
+  if (reportTimer) return;
+  setTimeout(() => {
+    runScheduledDailyOrderReportIfDue().catch(() => {
+    });
+  }, 5e3);
+  reportTimer = setInterval(() => {
+    runScheduledDailyOrderReportIfDue().catch(() => {
+    });
+  }, intervalMs);
+  console.log(`[DailyOrderReport] Scheduler active (IST post-midnight check every ${intervalMs / 1e3}s)`);
+}
+var IST_OFFSET_MS, reportTimer, reportInFlight;
+var init_dailyOrderReport = __esm({
+  "src/server/dailyOrderReport.ts"() {
+    init_db();
+    init_integrations();
+    IST_OFFSET_MS = 5.5 * 60 * 60 * 1e3;
+    reportTimer = null;
+    reportInFlight = false;
+  }
+});
+
 // src/lib/indianValidation.ts
 function normalizeIndianState(raw) {
   const trimmed = String(raw || "").trim();
@@ -7216,6 +7854,178 @@ var init_indianValidation = __esm({
   }
 });
 
+// src/server/recaptcha.ts
+async function verifyRecaptchaEnterpriseToken(params) {
+  const apiKey = process.env.RECAPTCHA_ENTERPRISE_API_KEY;
+  if (!isConfiguredCredential(apiKey)) {
+    return {
+      allowed: true,
+      mode: "CLIENT_ONLY_PASS",
+      action: params.expectedAction,
+      reason: "RECAPTCHA_ENTERPRISE_API_KEY not configured; client execution active without server assessment blocking."
+    };
+  }
+  const cleanToken = typeof params.token === "string" ? params.token.trim() : "";
+  if (!cleanToken) {
+    db.logAudit(
+      params.actorHint || "anonymous",
+      "RECAPTCHA_BLOCKED",
+      "AUTH_PERMISSION",
+      `Blocked ${params.expectedAction}: missing reCAPTCHA Enterprise token`
+    );
+    return {
+      allowed: false,
+      mode: "LIVE",
+      reason: "Security verification token missing. Please reload the page and try again."
+    };
+  }
+  const projectId = process.env.RECAPTCHA_ENTERPRISE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || "bharatvarsh-auth";
+  const siteKey = process.env.RECAPTCHA_ENTERPRISE_SITE_KEY || DEFAULT_SITE_KEY;
+  const minScore = Number.isFinite(Number(process.env.RECAPTCHA_MIN_SCORE)) ? Number(process.env.RECAPTCHA_MIN_SCORE) : 0.3;
+  try {
+    const endpoint = `https://recaptchaenterprise.googleapis.com/v1/projects/${encodeURIComponent(
+      projectId
+    )}/assessments?key=${encodeURIComponent(apiKey)}`;
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event: {
+          token: cleanToken,
+          expectedAction: params.expectedAction,
+          siteKey
+        }
+      })
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data) {
+      return {
+        allowed: false,
+        mode: "LIVE",
+        reason: data?.error?.message || `reCAPTCHA Enterprise API HTTP ${response.status}`
+      };
+    }
+    const tokenProps = data.tokenProperties || {};
+    const riskAnalysis = data.riskAnalysis || {};
+    const score = typeof riskAnalysis.score === "number" ? riskAnalysis.score : 0;
+    if (!tokenProps.valid) {
+      db.logAudit(
+        params.actorHint || "anonymous",
+        "RECAPTCHA_BLOCKED",
+        "AUTH_PERMISSION",
+        `Blocked ${params.expectedAction}: invalid reCAPTCHA token (${tokenProps.invalidReason || "UNKNOWN"})`
+      );
+      return {
+        allowed: false,
+        mode: "LIVE",
+        score,
+        action: tokenProps.action,
+        reason: `Security check failed (${tokenProps.invalidReason || "invalid token"}). Please try again.`
+      };
+    }
+    if (tokenProps.action && tokenProps.action !== params.expectedAction) {
+      db.logAudit(
+        params.actorHint || "anonymous",
+        "RECAPTCHA_BLOCKED",
+        "AUTH_PERMISSION",
+        `Blocked ${params.expectedAction}: action mismatch (got ${tokenProps.action})`
+      );
+      return {
+        allowed: false,
+        mode: "LIVE",
+        score,
+        action: tokenProps.action,
+        reason: "Security token action mismatch. Please refresh and retry."
+      };
+    }
+    if (score < minScore) {
+      db.logAudit(
+        params.actorHint || "anonymous",
+        "RECAPTCHA_BLOCKED",
+        "AUTH_PERMISSION",
+        `Blocked ${params.expectedAction}: low risk score (${score} < ${minScore})`
+      );
+      return {
+        allowed: false,
+        mode: "LIVE",
+        score,
+        action: tokenProps.action,
+        reason: "Automated or suspicious activity detected. Please retry or contact concierge."
+      };
+    }
+    return {
+      allowed: true,
+      mode: "LIVE",
+      score,
+      action: tokenProps.action || params.expectedAction
+    };
+  } catch (err) {
+    return {
+      allowed: false,
+      mode: "LIVE",
+      reason: `reCAPTCHA Enterprise verification error: ${err?.message || "network failure"}`
+    };
+  }
+}
+var DEFAULT_SITE_KEY;
+var init_recaptcha = __esm({
+  "src/server/recaptcha.ts"() {
+    init_integrations();
+    init_db();
+    DEFAULT_SITE_KEY = "6Le3mCcuAAAAAJCQBRIMvqTGd4RadX5JvnNubovL";
+  }
+});
+
+// src/lib/recaptcha.ts
+async function executeRecaptchaEnterprise(action, timeoutMs = 2500) {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const enterprise = window.grecaptcha?.enterprise;
+  if (!enterprise) {
+    return null;
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = window.setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(null);
+      }
+    }, timeoutMs);
+    try {
+      enterprise.ready(async () => {
+        try {
+          const token = await enterprise.execute(RECAPTCHA_ENTERPRISE_SITE_KEY, { action });
+          if (!settled) {
+            settled = true;
+            window.clearTimeout(timer);
+            resolve(token || null);
+          }
+        } catch {
+          if (!settled) {
+            settled = true;
+            window.clearTimeout(timer);
+            resolve(null);
+          }
+        }
+      });
+    } catch {
+      if (!settled) {
+        settled = true;
+        window.clearTimeout(timer);
+        resolve(null);
+      }
+    }
+  });
+}
+var RECAPTCHA_ENTERPRISE_SITE_KEY;
+var init_recaptcha2 = __esm({
+  "src/lib/recaptcha.ts"() {
+    RECAPTCHA_ENTERPRISE_SITE_KEY = import.meta.env?.VITE_RECAPTCHA_ENTERPRISE_SITE_KEY || "6Le3mCcuAAAAAJCQBRIMvqTGd4RadX5JvnNubovL";
+  }
+});
+
 // src/tests/criticalPaths.test.ts
 var criticalPaths_test_exports = {};
 __export(criticalPaths_test_exports, {
@@ -7225,6 +8035,7 @@ import fs7 from "fs";
 import path7 from "path";
 import crypto6 from "crypto";
 import express from "express";
+import * as XLSX2 from "xlsx";
 async function runCriticalPathTests() {
   const results = [];
   console.log("\n--- STARTING CRITICAL PATH TESTS ---\n");
@@ -9615,7 +10426,9 @@ async function runCriticalPathTests() {
       "is_active TINYINT(1) NOT NULL DEFAULT 1",
       "safety_stock INT NOT NULL DEFAULT 20",
       "recipient_name VARCHAR(191)",
-      "fk_bvl_addr_customer FOREIGN KEY (customer_id) REFERENCES bvl_customers(id) ON DELETE CASCADE"
+      "fk_bvl_addr_customer FOREIGN KEY (customer_id) REFERENCES bvl_customers(id) ON DELETE CASCADE",
+      "offer_price DECIMAL(12,2) NULL DEFAULT NULL",
+      "video_url TEXT NULL"
     ];
     const missingSchemaClauses = expectedChecks.filter((c) => !schemaSql.includes(c));
     const missingAdapterClauses = expectedChecks.filter((c) => !adapterSrc.includes(c));
@@ -9629,7 +10442,9 @@ async function runCriticalPathTests() {
       "ipAddress?: string;",
       "safetyStock?: number;",
       "addresses?: CustomerAddress[];",
-      "recipientName?: string;"
+      "recipientName?: string;",
+      "offerPrice?: number;",
+      "videoUrl?: string;"
     ];
     const missingTypeFields = expectedTypes.filter((f) => !typesSrc.includes(f));
     if (MYSQL_TABLE_NAMES.length === 21 && missingInSchema.length === 0 && missingInAdapter.length === 0 && missingSchemaClauses.length === 0 && missingAdapterClauses.length === 0 && missingTypeFields.length === 0) {
@@ -9735,9 +10550,20 @@ async function runCriticalPathTests() {
       const sampleCatalog = structuredClone(db.getRawCatalog());
       if (sampleCatalog.products[0]) {
         sampleCatalog.products[0].gstRate = 0.05;
+        sampleCatalog.products[0].offerPrice = Math.max(1e3, Math.round(sampleCatalog.products[0].price * 0.85));
+        sampleCatalog.products[0].images = [
+          "/assets/images/rt_slot1.jpg",
+          "/assets/images/rt_slot2.jpg",
+          "/assets/images/rt_slot3.jpg",
+          "/assets/images/rt_slot4.jpg"
+        ];
+        sampleCatalog.products[0].image = "/assets/images/rt_slot1.jpg";
+        sampleCatalog.products[0].videoUrl = "/assets/images/rt_showcase.mp4";
       }
       if (sampleCatalog.products[1]) {
         delete sampleCatalog.products[1].gstRate;
+        delete sampleCatalog.products[1].offerPrice;
+        delete sampleCatalog.products[1].videoUrl;
       }
       const tableStore = /* @__PURE__ */ new Map();
       const pushRow = (tbl, keyCol, rowObj) => {
@@ -9898,15 +10724,17 @@ async function runCriticalPathTests() {
               name: params[3],
               sku: params[4],
               price: params[5],
-              currency: params[6],
-              description: params[7],
-              features_json: params[8],
-              images_json: params[9],
-              hsn_code: params[10],
-              gst_rate: params[11],
-              solution_engine: params[12],
-              allow_customization: params[13],
-              care_kit_included: params[14]
+              offer_price: params[6],
+              currency: params[7],
+              description: params[8],
+              features_json: params[9],
+              images_json: params[10],
+              video_url: params[11],
+              hsn_code: params[12],
+              gst_rate: params[13],
+              solution_engine: params[14],
+              allow_customization: params[15],
+              care_kit_included: params[16]
             });
           }
           return [[]];
@@ -9941,18 +10769,18 @@ async function runCriticalPathTests() {
       const hydratedProd1 = hydratedCatalog?.products?.find((p) => p.id === sampleCatalog.products[1]?.id);
       const hydratedAddr = hydratedState?.addresses?.find((a) => a.customerId === sampleState.customers[0]?.id);
       const hydratedCust0 = hydratedState?.customers?.find((c) => c.id === sampleState.customers[0]?.id);
-      const roundTripOk = addedMissingCols && hydratedAgent?.role === "SUPPORT_AGENT" && hydratedAgent?.passwordHash === testPassHash && hydratedPatronCred?.passwordHash === testPassHash && hydratedSoftDeleted?.isActive === false && Boolean(hydratedSoftDeleted?.deletedAt) && hydratedLead?.erpOrderId === "ord_rt_99" && hydratedLead?.erpOrderNumber === "BVL-2026-9999" && hydratedLead?.items?.[0]?.sku === "BVL-TRV-BRF-01" && hydratedTicket?.customerPhone === "+91 98201 77665" && hydratedAudit?.ipAddress === "203.0.113.42" && hydratedProd0?.gstRate === 0.05 && hydratedProd1?.gstRate === void 0 && Boolean(hydratedAddr?.street) && Boolean(hydratedCust0?.addresses && hydratedCust0.addresses.length > 0);
+      const roundTripOk = addedMissingCols && hydratedAgent?.role === "SUPPORT_AGENT" && hydratedAgent?.passwordHash === testPassHash && hydratedPatronCred?.passwordHash === testPassHash && hydratedSoftDeleted?.isActive === false && Boolean(hydratedSoftDeleted?.deletedAt) && hydratedLead?.erpOrderId === "ord_rt_99" && hydratedLead?.erpOrderNumber === "BVL-2026-9999" && hydratedLead?.items?.[0]?.sku === "BVL-TRV-BRF-01" && hydratedTicket?.customerPhone === "+91 98201 77665" && hydratedAudit?.ipAddress === "203.0.113.42" && hydratedProd0?.gstRate === 0.05 && hydratedProd0?.offerPrice === sampleCatalog.products[0]?.offerPrice && hydratedProd0?.images?.length === 4 && hydratedProd0?.image === hydratedProd0?.images?.[0] && hydratedProd0?.videoUrl === "/assets/images/rt_showcase.mp4" && hydratedProd1?.gstRate === void 0 && hydratedProd1?.offerPrice === void 0 && Boolean(hydratedAddr?.street) && Boolean(hydratedCust0?.addresses && hydratedCust0.addresses.length > 0);
       if (roundTripOk) {
         results.push({
           test: "MySQL ensureTables() Migrations & 21-Table Round-Trip Hydration",
           status: "PASS",
-          message: "Validated INFORMATION_SCHEMA column/ENUM/index migrations and lossless round-trip hydration across RBAC, soft-delete, GST, corporate leads, tickets, and audit logs."
+          message: "Validated INFORMATION_SCHEMA column/ENUM/index migrations and lossless round-trip hydration across RBAC, soft-delete, GST, offerPrice, 4-image+video catalog, corporate leads, tickets, and audit logs."
         });
       } else {
         results.push({
           test: "MySQL ensureTables() Migrations & 21-Table Round-Trip Hydration",
           status: "FAIL",
-          message: `ddl=${addedMissingCols}, agentRole=${hydratedAgent?.role}, patronCred=${Boolean(hydratedPatronCred)}, softDel=${hydratedSoftDeleted?.isActive}, lead=${hydratedLead?.erpOrderId}, ticketPhone=${hydratedTicket?.customerPhone}, gst=${hydratedProd0?.gstRate}/${hydratedProd1?.gstRate}`
+          message: `ddl=${addedMissingCols}, agentRole=${hydratedAgent?.role}, patronCred=${Boolean(hydratedPatronCred)}, softDel=${hydratedSoftDeleted?.isActive}, lead=${hydratedLead?.erpOrderId}, ticketPhone=${hydratedTicket?.customerPhone}, gst=${hydratedProd0?.gstRate}/${hydratedProd1?.gstRate}, offer=${hydratedProd0?.offerPrice}, imgs=${hydratedProd0?.images?.length}, vid=${hydratedProd0?.videoUrl}`
         });
       }
     } finally {
@@ -10277,6 +11105,483 @@ async function runCriticalPathTests() {
       message: e.message
     });
   }
+  try {
+    const dbFile = path7.resolve(process.cwd(), "src/server/data/store_db.json");
+    const catalogFile = path7.resolve(process.cwd(), "src/server/catalog.json");
+    const preTestDbRaw = fs7.existsSync(dbFile) ? fs7.readFileSync(dbFile, "utf-8") : null;
+    const preTestCatalogRaw = fs7.existsSync(catalogFile) ? fs7.readFileSync(catalogFile, "utf-8") : null;
+    const uploadedDiskFiles = [];
+    const app = express();
+    app.use(express.json({ limit: "75mb" }));
+    const publicImagesDir = path7.resolve(process.cwd(), "public", "assets", "images");
+    fs7.mkdirSync(publicImagesDir, { recursive: true });
+    app.use("/assets/images", express.static(publicImagesDir));
+    app.use("/api", apiRouter);
+    const server = await new Promise((resolve) => {
+      const s = app.listen(0, "127.0.0.1", () => resolve(s));
+    });
+    const port = server.address().port;
+    try {
+      const adminJwt = signSessionJwt({
+        sub: "uid_master_sunil",
+        email: "sunilchain@gmail.com",
+        name: "Sunil Chainani",
+        role: "STORE_MANAGER"
+      });
+      const patronJwt = signSessionJwt({
+        sub: "uid_patron_media",
+        email: "patron.media@example.com",
+        name: "Patron Media",
+        role: "PATRON"
+      });
+      const unauthUploadRes = await fetch(`http://127.0.0.1:${port}/api/store-management/upload-media`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: "test.png", mimeType: "image/png", dataBase64: "iVBORw0KGgo=" })
+      });
+      const patronUploadRes = await fetch(`http://127.0.0.1:${port}/api/store-management/upload-media`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${patronJwt}` },
+        body: JSON.stringify({ filename: "test.png", mimeType: "image/png", dataBase64: "iVBORw0KGgo=" })
+      });
+      const invalidExtRes = await fetch(`http://127.0.0.1:${port}/api/store-management/upload-media`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminJwt}` },
+        body: JSON.stringify({ filename: "script.svg", mimeType: "image/svg+xml", dataBase64: "PHN2Zz48L3N2Zz4=" })
+      });
+      const pngBytes = Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWScAAAAASUVORK5CYII=",
+        "base64"
+      );
+      const formData = new FormData();
+      formData.append("file", new Blob([pngBytes], { type: "image/png" }), "Atelier Craft Shot.png");
+      const pngUploadRes = await fetch(`http://127.0.0.1:${port}/api/store-management/upload-media`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${adminJwt}` },
+        body: formData
+      });
+      const pngUploadJson = await pngUploadRes.json();
+      if (pngUploadJson?.filename) {
+        uploadedDiskFiles.push(path7.join(publicImagesDir, pngUploadJson.filename));
+        const distImagesFile = path7.resolve(process.cwd(), "dist", "assets", "images", pngUploadJson.filename);
+        if (fs7.existsSync(distImagesFile)) uploadedDiskFiles.push(distImagesFile);
+      }
+      const servedImgRes = await fetch(`http://127.0.0.1:${port}${pngUploadJson.url}`);
+      const servedImgBuf = Buffer.from(await servedImgRes.arrayBuffer());
+      const mp4Sample = Buffer.from("00000018667479706d703432000000006d70343269736f6d", "hex");
+      const vidUploadRes = await fetch(`http://127.0.0.1:${port}/api/store-management/upload-media`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminJwt}` },
+        body: JSON.stringify({
+          filename: "showcase_reel.mp4",
+          mimeType: "video/mp4",
+          dataBase64: mp4Sample.toString("base64")
+        })
+      });
+      const vidUploadJson = await vidUploadRes.json();
+      if (vidUploadJson?.filename) {
+        uploadedDiskFiles.push(path7.join(publicImagesDir, vidUploadJson.filename));
+        const distVidFile = path7.resolve(process.cwd(), "dist", "assets", "images", vidUploadJson.filename);
+        if (fs7.existsSync(distVidFile)) uploadedDiskFiles.push(distVidFile);
+      }
+      const currentCatalog = structuredClone(db.getRawCatalog());
+      const baseProd = structuredClone(currentCatalog.products[0]);
+      const badOfferCatalog = structuredClone(currentCatalog);
+      badOfferCatalog.products[0] = {
+        ...baseProd,
+        price: 1e4,
+        offerPrice: 12500
+      };
+      const badOfferRes = await fetch(`http://127.0.0.1:${port}/api/store-management/catalog`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminJwt}` },
+        body: JSON.stringify({ catalog: badOfferCatalog })
+      });
+      const badImagesCatalog = structuredClone(currentCatalog);
+      badImagesCatalog.products[0] = {
+        ...baseProd,
+        images: [
+          pngUploadJson.url,
+          "/assets/images/slot2.jpg",
+          "/assets/images/slot3.jpg",
+          "/assets/images/slot4.jpg",
+          "/assets/images/slot5.jpg"
+        ]
+      };
+      const badImagesRes = await fetch(`http://127.0.0.1:${port}/api/store-management/catalog`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminJwt}` },
+        body: JSON.stringify({ catalog: badImagesCatalog })
+      });
+      const validCatalog = structuredClone(currentCatalog);
+      validCatalog.products[0] = {
+        ...baseProd,
+        price: 12e3,
+        offerPrice: 9600,
+        gstRate: 0.18,
+        images: [
+          pngUploadJson.url,
+          "/assets/images/slot_2.jpg",
+          "/assets/images/slot_3.jpg",
+          "/assets/images/slot_4.jpg"
+        ],
+        videoUrl: vidUploadJson.url
+      };
+      delete validCatalog.products[0].image;
+      const saveValidRes = await fetch(`http://127.0.0.1:${port}/api/store-management/catalog`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminJwt}` },
+        body: JSON.stringify({ catalog: validCatalog })
+      });
+      const saveValidJson = await saveValidRes.json();
+      const savedProd0 = saveValidJson?.catalog?.products?.[0];
+      const orderRes = await fetch(`http://127.0.0.1:${port}/api/checkout/place-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerName: "Vikramaditya Joshi",
+          customerEmail: "vikram.offer@example.com",
+          customerPhone: "+919823011223",
+          paymentGateway: "RAZORPAY",
+          discountCode: "HEIRLOOM10",
+          shippingAddress: {
+            street: "Plot 14, Prabhat Road, Deccan Gymkhana",
+            city: "Pune",
+            state: "Maharashtra",
+            pincode: "411004",
+            country: "India"
+          },
+          items: [
+            {
+              productId: savedProd0.id,
+              sku: savedProd0.sku,
+              quantity: 1,
+              unitPrice: 999999
+            }
+          ]
+        })
+      });
+      const orderJson = await orderRes.json();
+      const placedOrder = orderJson.order;
+      const expectedDiscount = 960;
+      const expectedTax = Math.round((9600 - 960) * 0.18);
+      const expectedTotal = 9600 - expectedDiscount + expectedTax;
+      const uploadChecksOk = unauthUploadRes.status === 401 && patronUploadRes.status === 403 && invalidExtRes.status === 400 && pngUploadRes.status === 201 && String(pngUploadJson.url).startsWith("/assets/images/") && servedImgRes.status === 200 && servedImgBuf.equals(pngBytes) && vidUploadRes.status === 201 && vidUploadJson.mediaType === "video" && String(vidUploadJson.url).startsWith("/assets/images/");
+      const catalogAndPricingOk = badOfferRes.status === 400 && badImagesRes.status === 400 && saveValidRes.status === 200 && savedProd0?.images?.length === 4 && savedProd0?.image === pngUploadJson.url && savedProd0?.videoUrl === vidUploadJson.url && savedProd0?.offerPrice === 9600 && orderRes.status === 201 && placedOrder?.subtotal === 9600 && placedOrder?.discountAmount === expectedDiscount && placedOrder?.taxAmount === expectedTax && placedOrder?.totalAmount === expectedTotal;
+      if (uploadChecksOk && catalogAndPricingOk) {
+        results.push({
+          test: "Phase 2: /assets/images/ Media Upload, 4-Image + 1-Video Gallery & Authoritative Offer Pricing",
+          status: "PASS",
+          message: "Verified RBAC-protected PNG/MP4 uploads to /assets/images/, 4-image + 1-video persistence, offerPrice <= MRP enforcement, and server-authoritative offerPrice checkout math."
+        });
+      } else {
+        results.push({
+          test: "Phase 2: /assets/images/ Media Upload, 4-Image + 1-Video Gallery & Authoritative Offer Pricing",
+          status: "FAIL",
+          message: `uploadOk=${uploadChecksOk} (statuses=${unauthUploadRes.status}/${patronUploadRes.status}/${invalidExtRes.status}/${pngUploadRes.status}/${servedImgRes.status}/${vidUploadRes.status}), pricingOk=${catalogAndPricingOk} (badOffer=${badOfferRes.status}, badImgs=${badImagesRes.status}, save=${saveValidRes.status}, subtotal=${placedOrder?.subtotal}, total=${placedOrder?.totalAmount} vs ${expectedTotal})`
+        });
+      }
+    } finally {
+      await new Promise((resolve) => server.close(() => resolve()));
+      for (const f of uploadedDiskFiles) {
+        if (f && fs7.existsSync(f)) {
+          fs7.unlinkSync(f);
+        }
+      }
+      if (preTestDbRaw) {
+        fs7.writeFileSync(dbFile, preTestDbRaw, "utf-8");
+        db.state = JSON.parse(preTestDbRaw);
+      }
+      if (preTestCatalogRaw) {
+        fs7.writeFileSync(catalogFile, preTestCatalogRaw, "utf-8");
+        db.catalogCache = JSON.parse(preTestCatalogRaw);
+      }
+    }
+  } catch (e) {
+    results.push({
+      test: "Phase 2: /assets/images/ Media Upload, 4-Image + 1-Video Gallery & Authoritative Offer Pricing",
+      status: "FAIL",
+      message: e.message
+    });
+  }
+  try {
+    const dbFile = path7.resolve(process.cwd(), "src/server/data/store_db.json");
+    const preTestDbRaw = fs7.existsSync(dbFile) ? fs7.readFileSync(dbFile, "utf-8") : null;
+    const prevSmtpPass = process.env.SMTP_PASS;
+    const app = express();
+    app.use(express.json());
+    app.use("/api", apiRouter);
+    const server = await new Promise((resolve) => {
+      const s = app.listen(0, "127.0.0.1", () => resolve(s));
+    });
+    const port = server.address().port;
+    try {
+      delete process.env.SMTP_PASS;
+      const masterJwt = signSessionJwt({
+        sub: "uid_master_sunil",
+        email: "sunilchain@gmail.com",
+        name: "Sunil Chainani",
+        role: "STORE_MANAGER"
+      });
+      const delegatedManagerJwt = signSessionJwt({
+        sub: "uid_delegated_mgr",
+        email: "delegated.manager@bharatvarshcrafts.com",
+        name: "Delegated Store Manager",
+        role: "STORE_MANAGER"
+      });
+      const badCartId = `cart_bad_email_${Date.now()}`;
+      const goodCartId = `cart_phase3_${Date.now()}`;
+      await db.runAtomicMutation(() => {
+        db.saveCartState({
+          id: badCartId,
+          email: "",
+          phone: "+919820012345",
+          items: [
+            {
+              productId: "prod-m-belt-01",
+              productName: "The Rajputana Bridle Belt",
+              sku: "BVL-MEN-BLT-01",
+              quantity: 1,
+              unitPrice: 3800,
+              leatherType: "VEGETABLE_TANNED_HERITAGE",
+              imageUrl: "/assets/images/mens_collection_editorial_1794461810572.jpg"
+            }
+          ],
+          subtotal: 3800,
+          isAbandoned: true
+        });
+        db.saveCartState({
+          id: goodCartId,
+          email: "aarav.phase3@example.com",
+          phone: "+919820054321",
+          items: [
+            {
+              productId: "prod-m-belt-01",
+              productName: "The Rajputana Bridle Belt",
+              sku: "BVL-MEN-BLT-01",
+              quantity: 1,
+              unitPrice: 3800,
+              leatherType: "VEGETABLE_TANNED_HERITAGE",
+              imageUrl: "/assets/images/mens_collection_editorial_1794461810572.jpg"
+            }
+          ],
+          subtotal: 3800,
+          isAbandoned: true
+        });
+      });
+      const badTriggerRes = await fetch(`http://127.0.0.1:${port}/api/crm/cart-recovery/trigger`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${masterJwt}` },
+        body: JSON.stringify({ cartId: badCartId, channel: "EMAIL" })
+      });
+      const badCartAfter = db.getCarts().find((c) => c.id === badCartId);
+      const goodTriggerRes = await fetch(`http://127.0.0.1:${port}/api/crm/cart-recovery/trigger`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${masterJwt}` },
+        body: JSON.stringify({ cartId: goodCartId, channel: "EMAIL" })
+      });
+      const goodTriggerJson = await goodTriggerRes.json();
+      const cooldownRes = await fetch(`http://127.0.0.1:${port}/api/crm/cart-recovery/trigger`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${masterJwt}` },
+        body: JSON.stringify({ cartId: goodCartId, channel: "EMAIL" })
+      });
+      const cooldownJson = await cooldownRes.json();
+      const orderRes = await fetch(`http://127.0.0.1:${port}/api/checkout/place-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerName: "Vikramaditya Joshi",
+          customerEmail: "vikram.phase3@example.com",
+          customerPhone: "+919811122233",
+          paymentGateway: "RAZORPAY",
+          shippingAddress: {
+            street: "42 Koregaon Park Lane 6",
+            city: "Pune",
+            state: "Maharashtra",
+            pincode: "411001",
+            country: "India"
+          },
+          items: [
+            {
+              productId: "prod-m-belt-01",
+              sku: "BVL-MEN-BLT-01",
+              quantity: 1,
+              unitPrice: 3800
+            }
+          ]
+        })
+      });
+      const orderJson = await orderRes.json();
+      const placedOrder = orderJson.order;
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const supportDirectResult = await dispatchOrderInvoiceEmailToSupport(placedOrder);
+      const supportRecipient = getSupportOrderEmailRecipient();
+      const auditLogsAfterOrder = db.getAuditLogs();
+      const hasNotificationAudit = auditLogsAfterOrder.some(
+        (a) => a.action === "ORDER_NOTIFICATION_DISPATCHED" && a.details.includes(placedOrder.orderNumber) && a.details.includes("SupportInvoice:")
+      );
+      const istOffsetMs = 5.5 * 60 * 60 * 1e3;
+      const orderIstDateKey = new Date(new Date(placedOrder.createdAt).getTime() + istOffsetMs).toISOString().slice(0, 10);
+      const workbookReport = generateDailyOrderWorkbook(orderIstDateKey);
+      const parsedWb = XLSX2.read(workbookReport.buffer, { type: "buffer" });
+      const ordersSheetRows = XLSX2.utils.sheet_to_json(parsedWb.Sheets["Orders"]);
+      const summarySheetRows = XLSX2.utils.sheet_to_json(parsedWb.Sheets["Summary"]);
+      const matchedExcelRow = ordersSheetRows.find((r) => r["Order Number"] === placedOrder.orderNumber);
+      const expectedHeadersPresent = matchedExcelRow && "Order Date/Time (IST)" in matchedExcelRow && "Invoice Number" in matchedExcelRow && "Taxable Value (INR)" in matchedExcelRow && "CGST (INR)" in matchedExcelRow && "SGST (INR)" in matchedExcelRow && "IGST (INR)" in matchedExcelRow && "Total Amount (INR)" in matchedExcelRow && "AWB Number" in matchedExcelRow;
+      const unauthReportRes = await fetch(`http://127.0.0.1:${port}/api/admin/reports/send-daily-orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: orderIstDateKey })
+      });
+      const delegatedReportRes = await fetch(`http://127.0.0.1:${port}/api/admin/reports/send-daily-orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${delegatedManagerJwt}` },
+        body: JSON.stringify({ date: orderIstDateKey })
+      });
+      const masterReportRes = await fetch(`http://127.0.0.1:${port}/api/admin/reports/send-daily-orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${masterJwt}` },
+        body: JSON.stringify({ date: orderIstDateKey })
+      });
+      const masterReportJson = await masterReportRes.json();
+      const yesterdayKey = getYesterdayIstDateKey();
+      await db.runAtomicMutation(() => {
+        db.setLastDailyReportDate(yesterdayKey);
+      });
+      const dupCheck = await sendDailyOrdersReport({ force: false, targetDateIst: yesterdayKey });
+      await runScheduledDailyOrderReportIfDue();
+      const recoveryOk = badTriggerRes.status === 400 && badCartAfter?.recoveryStage === "DETECTED" && goodTriggerRes.status === 200 && goodTriggerJson.success === true && goodTriggerJson.deliveryMode === "SANDBOX_FALLBACK" && Boolean(goodTriggerJson.messageId) && String(goodTriggerJson.fallbackReason || "").includes("SMTP_PASS") && goodTriggerJson.cart?.recoveryStage === "EMAIL_SENT" && String(goodTriggerJson.cart?.checkoutUrl || "").startsWith(`/?resume=${goodCartId}&token=`) && cooldownRes.status === 200 && cooldownJson.success === false;
+      const supportEmailOk = orderRes.status === 201 && supportRecipient === "Support@bharatvarshcrafts.com" && supportDirectResult.channel === "EMAIL" && Boolean(supportDirectResult.messageId) && hasNotificationAudit;
+      const excelReportOk = parsedWb.SheetNames.includes("Orders") && parsedWb.SheetNames.includes("Summary") && workbookReport.filename === `Orders_${orderIstDateKey}.xlsx` && Boolean(expectedHeadersPresent) && summarySheetRows.some((r) => r.Metric === "Total Orders" && Number(r.Value) >= 1) && unauthReportRes.status === 401 && delegatedReportRes.status === 403 && masterReportRes.status === 200 && masterReportJson.success === true && masterReportJson.skipped === false && masterReportJson.filename === `Orders_${orderIstDateKey}.xlsx` && dupCheck.skipped === true;
+      if (recoveryOk && supportEmailOk && excelReportOk) {
+        results.push({
+          test: "Phase 3: Cart Recovery SMTP Telemetry, Support Invoice Email & Daily IST Excel Report",
+          status: "PASS",
+          message: "Verified abandoned cart recovery validation/telemetry & /?resume= links, non-blocking Support@bharatvarshcrafts.com PDF invoice email, SheetJS Orders+Summary .xlsx export, Master Admin RBAC, and lastDailyReportDate duplicate guard."
+        });
+      } else {
+        results.push({
+          test: "Phase 3: Cart Recovery SMTP Telemetry, Support Invoice Email & Daily IST Excel Report",
+          status: "FAIL",
+          message: `recoveryOk=${recoveryOk} (bad=${badTriggerRes.status}, good=${goodTriggerRes.status}/${goodTriggerJson.deliveryMode}, url=${goodTriggerJson.cart?.checkoutUrl}), supportEmailOk=${supportEmailOk} (audit=${hasNotificationAudit}), excelReportOk=${excelReportOk} (rbac=${unauthReportRes.status}/${delegatedReportRes.status}/${masterReportRes.status}, dupSkipped=${dupCheck.skipped})`
+        });
+      }
+    } finally {
+      await new Promise((resolve) => server.close(() => resolve()));
+      if (prevSmtpPass !== void 0) {
+        process.env.SMTP_PASS = prevSmtpPass;
+      } else {
+        delete process.env.SMTP_PASS;
+      }
+      if (preTestDbRaw) {
+        fs7.writeFileSync(dbFile, preTestDbRaw, "utf-8");
+        db.state = JSON.parse(preTestDbRaw);
+      }
+    }
+  } catch (e) {
+    results.push({
+      test: "Phase 3: Cart Recovery SMTP Telemetry, Support Invoice Email & Daily IST Excel Report",
+      status: "FAIL",
+      message: e.message
+    });
+  }
+  try {
+    const htmlContent = fs7.readFileSync(path7.resolve(process.cwd(), "index.html"), "utf-8");
+    const hasScriptTag = htmlContent.includes(
+      "https://www.google.com/recaptcha/enterprise.js?render=6Le3mCcuAAAAAJCQBRIMvqTGd4RadX5JvnNubovL"
+    );
+    const prevKey = process.env.RECAPTCHA_ENTERPRISE_API_KEY;
+    const prevFetch = globalThis.fetch;
+    const prevWindow = globalThis.window;
+    try {
+      let capturedSiteKey = "";
+      let capturedAction = "";
+      globalThis.window = {
+        setTimeout: globalThis.setTimeout,
+        clearTimeout: globalThis.clearTimeout,
+        grecaptcha: {
+          enterprise: {
+            ready: (cb) => cb(),
+            execute: async (siteKey, opts) => {
+              capturedSiteKey = siteKey;
+              capturedAction = opts.action;
+              return "mock_enterprise_token_login_123";
+            }
+          }
+        }
+      };
+      const clientToken = await executeRecaptchaEnterprise("LOGIN");
+      delete process.env.RECAPTCHA_ENTERPRISE_API_KEY;
+      const passThrough = await verifyRecaptchaEnterpriseToken({
+        token: void 0,
+        expectedAction: "LOGIN"
+      });
+      process.env.RECAPTCHA_ENTERPRISE_API_KEY = "AIzaTestEnterpriseServerKey12345";
+      const missingRes = await verifyRecaptchaEnterpriseToken({
+        token: "",
+        expectedAction: "CHECKOUT"
+      });
+      let requestedAssessmentUrl = "";
+      globalThis.fetch = async (url, init) => {
+        requestedAssessmentUrl = url;
+        const parsedBody = JSON.parse(String(init?.body || "{}"));
+        const tok = parsedBody?.event?.token;
+        if (tok === "good_checkout_tok") {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              tokenProperties: { valid: true, action: "CHECKOUT" },
+              riskAnalysis: { score: 0.9 }
+            })
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            tokenProperties: { valid: true, action: "LOGIN" },
+            riskAnalysis: { score: 0.1 }
+          })
+        };
+      };
+      const mismatchRes = await verifyRecaptchaEnterpriseToken({
+        token: "wrong_action_tok",
+        expectedAction: "CHECKOUT"
+      });
+      const validRes = await verifyRecaptchaEnterpriseToken({
+        token: "good_checkout_tok",
+        expectedAction: "CHECKOUT"
+      });
+      const ok = hasScriptTag && clientToken === "mock_enterprise_token_login_123" && capturedSiteKey === "6Le3mCcuAAAAAJCQBRIMvqTGd4RadX5JvnNubovL" && capturedAction === "LOGIN" && passThrough.allowed === true && passThrough.mode === "CLIENT_ONLY_PASS" && missingRes.allowed === false && mismatchRes.allowed === false && validRes.allowed === true && validRes.mode === "LIVE" && validRes.score === 0.9 && requestedAssessmentUrl.includes("recaptchaenterprise.googleapis.com/v1/projects/");
+      if (ok) {
+        results.push({
+          test: "Google reCAPTCHA Enterprise Script, Action Execution & Assessment Verification",
+          status: "PASS",
+          message: "Verified index.html reCAPTCHA Enterprise script, client grecaptcha.enterprise.execute({action: LOGIN}), client-only pass-through when unconfigured, and live Enterprise assessment scoring/action checks."
+        });
+      } else {
+        results.push({
+          test: "Google reCAPTCHA Enterprise Script, Action Execution & Assessment Verification",
+          status: "FAIL",
+          message: `hasScript=${hasScriptTag}, clientToken=${clientToken}, siteKey=${capturedSiteKey}, action=${capturedAction}, missing=${missingRes.allowed}, mismatch=${mismatchRes.allowed}, valid=${validRes.allowed}`
+        });
+      }
+    } finally {
+      if (prevKey !== void 0) process.env.RECAPTCHA_ENTERPRISE_API_KEY = prevKey;
+      else delete process.env.RECAPTCHA_ENTERPRISE_API_KEY;
+      globalThis.fetch = prevFetch;
+      if (prevWindow !== void 0) globalThis.window = prevWindow;
+      else delete globalThis.window;
+    }
+  } catch (e) {
+    results.push({
+      test: "Google reCAPTCHA Enterprise Script, Action Execution & Assessment Verification",
+      status: "FAIL",
+      message: e.message
+    });
+  }
   const allPassed = results.every((r) => r.status === "PASS");
   console.log("CRITICAL PATH TEST SUMMARY:");
   results.forEach((r) => console.log(`[${r.status}] ${r.test}: ${r.message}`));
@@ -10292,12 +11597,15 @@ var init_criticalPaths_test = __esm({
     init_webhooks();
     init_rfm();
     init_integrations();
+    init_dailyOrderReport();
     init_erpSync();
     init_cartRecovery();
     init_firebaseAuthVerifier();
     init_authMiddleware();
     init_security();
     init_api();
+    init_recaptcha();
+    init_recaptcha2();
     if (process.argv[1] && process.argv[1].includes("criticalPaths.test.ts")) {
       runCriticalPathTests();
     }
@@ -10306,7 +11614,71 @@ var init_criticalPaths_test = __esm({
 
 // src/server/api.ts
 import express2 from "express";
-var apiRouter;
+import fs8 from "fs";
+import path8 from "path";
+function getEffectiveProductPrice(product) {
+  const mrp = Number(product?.price || 0);
+  const offer = product?.offerPrice !== void 0 && product?.offerPrice !== null ? Number(product.offerPrice) : 0;
+  if (Number.isFinite(offer) && offer > 0 && offer <= mrp) {
+    return offer;
+  }
+  return mrp;
+}
+function parseMultipartSingleFile(body, contentType) {
+  const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;\s]+))/i);
+  const boundary = boundaryMatch?.[1] || boundaryMatch?.[2];
+  if (!boundary) return null;
+  const delimiter = Buffer.from(`--${boundary}`);
+  const headerEndMarker = Buffer.from("\r\n\r\n");
+  let searchFrom = 0;
+  while (searchFrom < body.length) {
+    const startBoundary = body.indexOf(delimiter, searchFrom);
+    if (startBoundary === -1) break;
+    const afterBoundary = startBoundary + delimiter.length;
+    if (body[afterBoundary] === 45 && body[afterBoundary + 1] === 45) break;
+    let partStart = afterBoundary;
+    if (body[partStart] === 13 && body[partStart + 1] === 10) partStart += 2;
+    else if (body[partStart] === 10) partStart += 1;
+    const nextBoundary = body.indexOf(delimiter, partStart);
+    if (nextBoundary === -1) break;
+    let partEnd = nextBoundary;
+    if (partEnd >= 2 && body[partEnd - 2] === 13 && body[partEnd - 1] === 10) partEnd -= 2;
+    else if (partEnd >= 1 && body[partEnd - 1] === 10) partEnd -= 1;
+    const partBuf = body.subarray(partStart, partEnd);
+    const headerEndIdx = partBuf.indexOf(headerEndMarker);
+    if (headerEndIdx !== -1) {
+      const rawHeaders = partBuf.subarray(0, headerEndIdx).toString("utf8");
+      const filenameMatch = rawHeaders.match(/filename="([^"]+)"/i) || rawHeaders.match(/filename=([^;\r\n]+)/i);
+      if (filenameMatch) {
+        const mimeMatch = rawHeaders.match(/Content-Type:\s*([^\r\n;]+)/i);
+        return {
+          filename: (filenameMatch[1] || "").trim(),
+          mimeType: (mimeMatch?.[1] || "").trim().toLowerCase(),
+          buffer: partBuf.subarray(headerEndIdx + 4)
+        };
+      }
+    }
+    searchFrom = nextBoundary;
+  }
+  return null;
+}
+function handleMediaUploadBody(req, res, next) {
+  if (req.is("application/json") && req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
+    return next();
+  }
+  return rawMediaUploadMiddleware(req, res, (err) => {
+    if (err) {
+      if (err.type === "entity.too.large" || err.status === 413) {
+        return res.status(413).json({
+          error: "Uploaded file exceeds maximum allowed payload size (10MB images, 50MB videos)."
+        });
+      }
+      return res.status(400).json({ error: err.message || "Invalid media upload payload." });
+    }
+    return next();
+  });
+}
+var apiRouter, IMAGE_MIME_BY_EXT, VIDEO_MIME_BY_EXT, EXT_BY_MIME, MAX_IMAGE_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_BYTES, rawMediaUploadMiddleware;
 var init_api = __esm({
   "src/server/api.ts"() {
     init_db();
@@ -10320,8 +11692,34 @@ var init_api = __esm({
     init_security();
     init_integrations();
     init_invoicePdf();
+    init_dailyOrderReport();
     init_indianValidation();
+    init_recaptcha();
     apiRouter = express2.Router();
+    IMAGE_MIME_BY_EXT = {
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".webp": "image/webp"
+    };
+    VIDEO_MIME_BY_EXT = {
+      ".mp4": "video/mp4",
+      ".webm": "video/webm"
+    };
+    EXT_BY_MIME = {
+      "image/png": ".png",
+      "image/jpeg": ".jpg",
+      "image/jpg": ".jpg",
+      "image/webp": ".webp",
+      "video/mp4": ".mp4",
+      "video/webm": ".webm"
+    };
+    MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
+    MAX_VIDEO_UPLOAD_BYTES = 50 * 1024 * 1024;
+    rawMediaUploadMiddleware = express2.raw({
+      type: ["multipart/form-data", "image/*", "video/*", "application/octet-stream"],
+      limit: "55mb"
+    });
     apiRouter.get("/test/critical-paths", requireStoreManagementAccess, async (req, res) => {
       try {
         const { runCriticalPathTests: runCriticalPathTests2 } = await Promise.resolve().then(() => (init_criticalPaths_test(), criticalPaths_test_exports));
@@ -10345,8 +11743,19 @@ var init_api = __esm({
         primaryHubCity: cfg.primaryHubCity || "Pune"
       });
     });
-    apiRouter.post("/checkout/validate-promo", (req, res) => {
-      const { code, subtotal } = req.body || {};
+    apiRouter.post("/checkout/validate-promo", async (req, res) => {
+      const { code, subtotal, recaptchaToken } = req.body || {};
+      const recaptchaCheck = await verifyRecaptchaEnterpriseToken({
+        token: recaptchaToken,
+        expectedAction: "PROMO_VALIDATE"
+      });
+      if (!recaptchaCheck.allowed) {
+        return res.status(403).json({
+          success: false,
+          valid: false,
+          error: recaptchaCheck.reason || "Security verification failed."
+        });
+      }
       const rule = db.validatePromoCode(code);
       if (!rule) {
         return res.status(404).json({
@@ -10421,7 +11830,7 @@ var init_api = __esm({
         const catalog = db.getCatalog();
         const authoritativeSubtotal = items.reduce((sum, item) => {
           const prod = (catalog.products || []).find((p) => p.id === item.productId || p.sku === item.sku);
-          const unitPrice = prod ? Number(prod.price) : 0;
+          const unitPrice = prod ? getEffectiveProductPrice(prod) : 0;
           const qty = Math.max(1, Math.floor(Number(item.quantity) || 1));
           return sum + unitPrice * qty;
         }, 0);
@@ -10464,8 +11873,19 @@ var init_api = __esm({
           discountCode,
           shippingAddress,
           billingAddress,
-          paymentGateway
+          paymentGateway,
+          recaptchaToken
         } = req.body;
+        const recaptchaCheck = await verifyRecaptchaEnterpriseToken({
+          token: recaptchaToken,
+          expectedAction: "CHECKOUT",
+          actorHint: customerEmail
+        });
+        if (!recaptchaCheck.allowed) {
+          return res.status(403).json({
+            error: recaptchaCheck.reason || "Security verification failed. Please reload and try again."
+          });
+        }
         if (!Array.isArray(items) || items.length === 0) {
           return res.status(400).json({
             error: "At least one item in bag is required to place an order.",
@@ -10503,7 +11923,7 @@ var init_api = __esm({
           if (!Number.isFinite(qty) || qty <= 0) {
             throw new Error(`Invalid quantity for ${product.name}`);
           }
-          const unitPrice = Number(product.price);
+          const unitPrice = getEffectiveProductPrice(product);
           const gstRate = typeof product.gstRate === "number" ? product.gstRate : storeDefaultTaxRate;
           const hsnCode = product.hsnCode || "4202";
           const lineSubtotal = unitPrice * qty;
@@ -10636,9 +12056,15 @@ var init_api = __esm({
             "integrations",
             "ORDER_NOTIFICATION_DISPATCHED",
             "STORE_MANAGEMENT",
-            `Order ${order.orderNumber} notifications -> Payment:${gatewayResult.mode}, Email:${delivery.emailDelivery.mode}, WhatsApp:${delivery.whatsappDelivery.mode}`
+            `Order ${order.orderNumber} notifications -> Payment:${gatewayResult.mode}, PatronEmail:${delivery.emailDelivery.mode}, SupportInvoice:${delivery.supportEmailDelivery.mode}, WhatsApp:${delivery.whatsappDelivery.mode}`
           );
-        }).catch(() => {
+        }).catch((err) => {
+          db.logAudit(
+            "integrations",
+            "ORDER_NOTIFICATION_ERROR",
+            "STORE_MANAGEMENT",
+            `Order ${order.orderNumber} email/notification failed: ${err?.message || err}`
+          );
         });
         res.status(201).json({
           success: true,
@@ -10733,7 +12159,15 @@ var init_api = __esm({
     });
     apiRouter.post("/auth/register", async (req, res) => {
       try {
-        const { email, password, fullName, phone, street, city, state, pincode, country, address } = req.body || {};
+        const { email, password, fullName, phone, street, city, state, pincode, country, address, recaptchaToken } = req.body || {};
+        const recaptchaCheck = await verifyRecaptchaEnterpriseToken({
+          token: recaptchaToken,
+          expectedAction: "SIGNUP",
+          actorHint: email
+        });
+        if (!recaptchaCheck.allowed) {
+          return res.status(403).json({ error: recaptchaCheck.reason || "Security verification failed." });
+        }
         const errors = {};
         const cleanName = String(fullName || "").trim();
         if (cleanName.length < 2) {
@@ -10834,7 +12268,15 @@ var init_api = __esm({
     });
     apiRouter.post("/auth/login", async (req, res) => {
       try {
-        const { email, password } = req.body;
+        const { email, password, recaptchaToken } = req.body;
+        const recaptchaCheck = await verifyRecaptchaEnterpriseToken({
+          token: recaptchaToken,
+          expectedAction: "LOGIN",
+          actorHint: email
+        });
+        if (!recaptchaCheck.allowed) {
+          return res.status(403).json({ error: recaptchaCheck.reason || "Security verification failed." });
+        }
         if (!email || !password) {
           return res.status(400).json({ error: "Email / User ID and password are required." });
         }
@@ -10886,38 +12328,98 @@ var init_api = __esm({
     });
     apiRouter.post("/auth/firebase", async (req, res) => {
       try {
-        const { idToken } = req.body;
+        const { idToken, fullName, phone, street, city, state, pincode, country, address, recaptchaToken, recaptchaAction } = req.body || {};
         if (!idToken || typeof idToken !== "string") {
           return res.status(400).json({ error: "Authentication token is required" });
         }
+        if (recaptchaToken !== void 0 || recaptchaAction !== void 0) {
+          const allowedFirebaseActions = ["LOGIN", "SIGNUP", "GOOGLE_LOGIN"];
+          const expectedAction = allowedFirebaseActions.includes(String(recaptchaAction || "")) ? String(recaptchaAction) : "LOGIN";
+          const recaptchaCheck = await verifyRecaptchaEnterpriseToken({
+            token: recaptchaToken,
+            expectedAction
+          });
+          if (!recaptchaCheck.allowed) {
+            return res.status(403).json({ error: recaptchaCheck.reason || "Security verification failed." });
+          }
+        }
         const claims = await verifyFirebaseIdToken(idToken);
         if (!claims || !claims.email) {
-          return res.status(401).json({ error: "Invalid or expired Google authentication token." });
+          return res.status(401).json({ error: "Invalid or expired Firebase authentication token." });
         }
         const cleanEmail = claims.email.trim().toLowerCase();
         const isAuthorizedAdmin = db.isStoreManagementAuthorized(cleanEmail);
         const isMaster = db.isMasterAuthorized(cleanEmail);
         const resolvedRole = isAuthorizedAdmin ? db.getStaffRole(cleanEmail) : "PATRON";
+        const errors = {};
+        let validatedPhone = "";
+        if (phone && String(phone).trim()) {
+          const phoneCheck = validateIndianPhone(phone);
+          if (!phoneCheck.valid) {
+            errors.phone = phoneCheck.error;
+          } else {
+            validatedPhone = phoneCheck.formatted;
+          }
+        }
+        const rawStreet = address?.street ?? street;
+        const rawCity = address?.city ?? city;
+        const rawState = address?.state ?? state;
+        const rawPincode = address?.pincode ?? pincode;
+        const rawCountry = address?.country ?? country;
+        const hasAnyAddress = Boolean(
+          String(rawStreet || "").trim() || String(rawCity || "").trim() || String(rawState || "").trim() || String(rawPincode || "").trim()
+        );
+        let normalizedAddress = void 0;
+        if (hasAnyAddress) {
+          if (String(rawStreet || "").trim().length < 5) errors.street = "Street address must be at least 5 characters.";
+          if (String(rawCity || "").trim().length < 2) errors.city = "City is required (minimum 2 characters).";
+          const normState = normalizeIndianState(rawState);
+          if (!normState) errors.state = "Please select a valid Indian State or Union Territory.";
+          const pinCheck = validateIndianPincode(rawPincode);
+          if (!pinCheck.valid) errors.pincode = pinCheck.error;
+          if (rawCountry && String(rawCountry).trim().toLowerCase() !== "india") {
+            errors.country = "Shipping destination is currently restricted to India only.";
+          }
+          if (!errors.street && !errors.city && !errors.state && !errors.pincode && !errors.country && normState) {
+            normalizedAddress = {
+              street: String(rawStreet).trim(),
+              city: String(rawCity).trim(),
+              state: normState,
+              pincode: pinCheck.normalized,
+              country: "India"
+            };
+          }
+        }
+        const errKeys = Object.keys(errors);
+        if (errKeys.length > 0) {
+          return res.status(400).json({ error: errors[errKeys[0]], errors });
+        }
+        const explicitName = typeof fullName === "string" && fullName.trim().length >= 2 ? fullName.trim() : "";
+        const resolvedFullName = explicitName || claims.name || cleanEmail.split("@")[0];
         const { customer } = await db.runAtomicMutation(
           () => db.findOrCreateCustomer({
             email: cleanEmail,
-            fullName: claims.name || cleanEmail.split("@")[0],
+            fullName: resolvedFullName,
+            updateFullName: Boolean(explicitName),
+            ...validatedPhone ? { phone: validatedPhone, updatePhone: true } : {},
+            ...normalizedAddress ? { address: normalizedAddress } : {},
             identityUid: claims.uid,
             role: resolvedRole
           })
         );
+        const provider = claims.signInProvider === "google.com" ? "GOOGLE" : "FIREBASE";
         res.json({
           success: true,
           token: idToken,
           user: {
             uid: claims.uid,
             email: customer.email,
-            name: claims.name || customer.fullName,
+            name: explicitName || claims.name || customer.fullName,
             role: resolvedRole,
             isMasterAdmin: isMaster,
             isStoreManagementAuthorized: isAuthorizedAdmin,
             photoURL: claims.picture,
-            authProvider: "GOOGLE"
+            authProvider: provider
           },
           customer
         });
@@ -11172,19 +12674,70 @@ var init_api = __esm({
     });
     apiRouter.post("/crm/cart-recovery/trigger", requireCrmAccess, async (req, res) => {
       try {
-        const { cartId, channel } = req.body;
-        const chosenChannel = channel === "WHATSAPP" ? "WHATSAPP" : "EMAIL";
-        const result = await db.runAtomicMutation(() => cartRecovery.dispatchRecoveryMessage(cartId, chosenChannel));
-        let delivery = null;
-        if (result.success) {
-          const activePromo = (db.getConfig().promoCodes || []).find((p) => p.active)?.code || "HEIRLOOM10";
-          const baseAppUrl = (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
-          const fullCheckoutUrl = result.cart.checkoutUrl.startsWith("http") ? result.cart.checkoutUrl : `${baseAppUrl}${result.cart.checkoutUrl}`;
-          delivery = await dispatchCartRecoveryNotice(result.cart, chosenChannel, activePromo, fullCheckoutUrl);
+        const { cartId, channel } = req.body || {};
+        if (!cartId || typeof cartId !== "string") {
+          return res.status(400).json({ success: false, error: "cartId is required." });
         }
-        res.json({ ...result, delivery });
+        const chosenChannel = channel === "WHATSAPP" ? "WHATSAPP" : "EMAIL";
+        let resolved;
+        try {
+          resolved = cartRecovery.resolveCartRecipient(cartId);
+        } catch (e) {
+          return res.status(404).json({ success: false, error: e.message || "Cart not found." });
+        }
+        if (chosenChannel === "EMAIL" && (!resolved.email || !resolved.email.includes("@"))) {
+          return res.status(400).json({
+            success: false,
+            error: "Patron email address is missing or invalid for this cart."
+          });
+        }
+        if (chosenChannel === "WHATSAPP" && resolved.phone.replace(/\D/g, "").length < 10) {
+          return res.status(400).json({
+            success: false,
+            error: "Valid Indian mobile number is missing for WhatsApp recovery."
+          });
+        }
+        if (resolved.inCooldown) {
+          return res.json({
+            success: false,
+            message: `Recovery message already dispatched to ${resolved.email || resolved.phone} within the 2-hour cooldown window.`,
+            cart: resolved.cart,
+            deliveryMode: "SANDBOX_FALLBACK",
+            fallbackReason: "Cooldown window active"
+          });
+        }
+        const activePromo = (db.getConfig().promoCodes || []).find((p) => p.active)?.code || "HEIRLOOM10";
+        const requestOrigin = req.get("host") ? `${req.protocol}://${req.get("host")}` : "http://localhost:3000";
+        const baseAppUrl = (process.env.APP_URL || requestOrigin).replace(/\/$/, "");
+        const fullCheckoutUrl = resolved.cart.checkoutUrl.startsWith("http") ? resolved.cart.checkoutUrl : `${baseAppUrl}${resolved.cart.checkoutUrl}`;
+        const delivery = await dispatchCartRecoveryNotice(resolved.cart, chosenChannel, activePromo, fullCheckoutUrl);
+        if (chosenChannel === "EMAIL" && delivery?.smtpConfigured && delivery.mode === "SANDBOX_FALLBACK") {
+          db.logAudit(
+            req.user.email,
+            "CART_RECOVERY_EMAIL_ERROR",
+            "STORE_MANAGEMENT",
+            `SMTP failed for abandoned cart ${cartId} (${resolved.email}): ${delivery.fallbackReason || "Transport error"}`
+          );
+          return res.status(502).json({
+            success: false,
+            error: delivery.fallbackReason || "Live SMTP delivery failed.",
+            message: delivery.fallbackReason || "Live SMTP delivery failed.",
+            deliveryMode: delivery.mode,
+            messageId: delivery.messageId,
+            fallbackReason: delivery.fallbackReason,
+            delivery
+          });
+        }
+        const result = await db.runAtomicMutation(() => cartRecovery.dispatchRecoveryMessage(cartId, chosenChannel));
+        res.json({
+          ...result,
+          deliveryMode: delivery.mode,
+          messageId: delivery.messageId,
+          fallbackReason: delivery.fallbackReason,
+          delivery
+        });
       } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
       }
     });
     apiRouter.post("/crm/cart/detect-sweep", requireCrmAccess, async (req, res) => {
@@ -11384,8 +12937,22 @@ var init_api = __esm({
         isMasterSuperAdmin: isMaster,
         mysqlStatus,
         lastPersistError,
+        lastDailyReportDate: db.getLastDailyReportDate() || null,
         integrations
       });
+    });
+    apiRouter.post("/admin/reports/send-daily-orders", requireMasterAdminAccess, async (req, res) => {
+      try {
+        const targetDateIst = typeof req.body?.date === "string" ? req.body.date.trim() : void 0;
+        const result = await sendDailyOrdersReport({
+          force: true,
+          targetDateIst,
+          actorEmail: req.user.email
+        });
+        res.json(result);
+      } catch (err) {
+        res.status(500).json({ success: false, error: err.message || "Failed to generate daily Excel order report." });
+      }
     });
     apiRouter.get("/store-management/integrations-status", requireStoreManagementAccess, (req, res) => {
       res.json({ success: true, integrations: getIntegrationsReadiness() });
@@ -11518,6 +13085,111 @@ var init_api = __esm({
         res.status(isDbError ? 500 : 400).json({ error: err.message });
       }
     });
+    apiRouter.post(
+      "/store-management/upload-media",
+      requireStoreManagementAccess,
+      handleMediaUploadBody,
+      async (req, res) => {
+        try {
+          const contentTypeHeader = String(req.headers["content-type"] || "").toLowerCase();
+          let rawFilename = "";
+          let rawMimeType = "";
+          let fileBuffer = null;
+          if (Buffer.isBuffer(req.body)) {
+            if (contentTypeHeader.includes("multipart/form-data")) {
+              const parsed = parseMultipartSingleFile(req.body, String(req.headers["content-type"] || ""));
+              if (!parsed) {
+                return res.status(400).json({ error: "No media file found in multipart upload." });
+              }
+              rawFilename = parsed.filename;
+              rawMimeType = parsed.mimeType;
+              fileBuffer = parsed.buffer;
+            } else {
+              rawFilename = String(req.headers["x-filename"] || req.query.filename || "");
+              rawMimeType = contentTypeHeader.split(";")[0].trim();
+              fileBuffer = req.body;
+            }
+          } else if (req.body && typeof req.body === "object") {
+            rawFilename = String(req.body.filename || req.body.fileName || req.body.name || "");
+            rawMimeType = String(req.body.mimeType || req.body.contentType || "").toLowerCase().trim();
+            const encoded = String(req.body.dataBase64 || req.body.dataUrl || req.body.data || req.body.base64 || "").trim();
+            const dataUrlMatch = encoded.match(/^data:([^;]+);base64,(.+)$/i);
+            if (dataUrlMatch) {
+              if (!rawMimeType) rawMimeType = dataUrlMatch[1].toLowerCase().trim();
+              fileBuffer = Buffer.from(dataUrlMatch[2], "base64");
+            } else if (encoded) {
+              fileBuffer = Buffer.from(encoded, "base64");
+            }
+          }
+          if (!fileBuffer || fileBuffer.length === 0) {
+            return res.status(400).json({ error: "Empty or missing media upload payload." });
+          }
+          const rawExt = path8.extname(rawFilename || "").toLowerCase();
+          const isValidImageExt = Boolean(IMAGE_MIME_BY_EXT[rawExt]);
+          const isValidVideoExt = Boolean(VIDEO_MIME_BY_EXT[rawExt]);
+          const normalizedMime = rawMimeType === "image/jpg" ? "image/jpeg" : rawMimeType;
+          const mimeExt = normalizedMime ? EXT_BY_MIME[normalizedMime] : void 0;
+          if (rawExt && !isValidImageExt && !isValidVideoExt) {
+            return res.status(400).json({
+              error: "Unsupported file extension. Allowed images: png, jpg, jpeg, webp. Allowed videos: mp4, webm."
+            });
+          }
+          if (normalizedMime && normalizedMime !== "application/octet-stream" && !mimeExt) {
+            return res.status(400).json({
+              error: "Unsupported media MIME type. Allowed images: png, jpg, jpeg, webp. Allowed videos: mp4, webm."
+            });
+          }
+          if (!rawExt && !mimeExt) {
+            return res.status(400).json({
+              error: "Could not verify media format. Upload a valid png, jpg, jpeg, webp, mp4, or webm file."
+            });
+          }
+          if (isValidImageExt && mimeExt && !IMAGE_MIME_BY_EXT[mimeExt]) {
+            return res.status(400).json({ error: "File extension does not match uploaded MIME type." });
+          }
+          if (isValidVideoExt && mimeExt && !VIDEO_MIME_BY_EXT[mimeExt]) {
+            return res.status(400).json({ error: "File extension does not match uploaded MIME type." });
+          }
+          const isVideo = isValidVideoExt || Boolean(mimeExt && VIDEO_MIME_BY_EXT[mimeExt]);
+          const canonicalExt = rawExt === ".jpeg" ? ".jpeg" : isValidImageExt || isValidVideoExt ? rawExt : mimeExt;
+          const resolvedMime = normalizedMime && mimeExt ? normalizedMime : isVideo ? VIDEO_MIME_BY_EXT[canonicalExt] : IMAGE_MIME_BY_EXT[canonicalExt];
+          if (!isVideo && fileBuffer.length > MAX_IMAGE_UPLOAD_BYTES) {
+            return res.status(413).json({ error: "Image file size must not exceed 10MB." });
+          }
+          if (isVideo && fileBuffer.length > MAX_VIDEO_UPLOAD_BYTES) {
+            return res.status(413).json({ error: "Video file size must not exceed 50MB." });
+          }
+          const rawBase = path8.basename(rawFilename || "", path8.extname(rawFilename || "")).toLowerCase().replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 48) || (isVideo ? "atelier_video" : "atelier_piece");
+          const safeFileName = `${rawBase}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}${canonicalExt}`;
+          const publicImagesDir = path8.resolve(process.cwd(), "public", "assets", "images");
+          fs8.mkdirSync(publicImagesDir, { recursive: true });
+          fs8.writeFileSync(path8.join(publicImagesDir, safeFileName), fileBuffer);
+          const distDir = path8.resolve(process.cwd(), "dist");
+          if (fs8.existsSync(distDir)) {
+            const distImagesDir = path8.join(distDir, "assets", "images");
+            fs8.mkdirSync(distImagesDir, { recursive: true });
+            fs8.writeFileSync(path8.join(distImagesDir, safeFileName), fileBuffer);
+          }
+          const publicUrl = `/assets/images/${safeFileName}`;
+          db.logAudit(
+            req.user.email,
+            "UPLOAD_MEDIA",
+            "STORE_MANAGEMENT",
+            `Uploaded ${isVideo ? "video" : "image"} asset ${publicUrl} (${fileBuffer.length} bytes)`
+          );
+          return res.status(201).json({
+            success: true,
+            url: publicUrl,
+            filename: safeFileName,
+            mediaType: isVideo ? "video" : "image",
+            mimeType: resolvedMime,
+            sizeBytes: fileBuffer.length
+          });
+        } catch (err) {
+          return res.status(500).json({ error: err.message || "Media upload failed." });
+        }
+      }
+    );
     apiRouter.post("/store-management/catalog", requireStoreManagementAccess, async (req, res) => {
       try {
         const { catalog } = req.body;
@@ -11526,7 +13198,8 @@ var init_api = __esm({
         res.json({ success: true, catalog: updatedCatalog, message: "Catalog updated successfully" });
       } catch (err) {
         const msg = typeof err?.message === "string" ? err.message : "Failed to save catalog";
-        const isValidationError = msg.toLowerCase().includes("duplicate sku") || msg.toLowerCase().includes("cannot be empty");
+        const lower = msg.toLowerCase();
+        const isValidationError = lower.includes("duplicate sku") || lower.includes("cannot be empty") || lower.includes("offer price") || lower.includes("cannot exceed") || lower.includes("mrp price") || lower.includes("maximum 4 product images");
         res.status(isValidationError ? 400 : 500).json({ error: msg });
       }
     });
@@ -11538,19 +13211,20 @@ var init_api = __esm({
 init_api();
 init_cartRecovery();
 init_db();
+init_dailyOrderReport();
 import express3 from "express";
 import http from "http";
-import fs8 from "fs";
-import path8 from "path";
+import fs9 from "fs";
+import path9 from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 dotenv.config();
 var __filename = fileURLToPath(import.meta.url);
-var __dirname = path8.dirname(__filename);
+var __dirname = path9.dirname(__filename);
 async function startServer() {
   const app = express3();
   const httpServer = http.createServer(app);
-  const isBundledServer = path8.basename(__filename) === "server.js";
+  const isBundledServer = path9.basename(__filename) === "server.js";
   const isProduction = process.env.NODE_ENV === "production" || isBundledServer;
   const PORT = !isProduction ? 3e3 : process.env.PORT ? parseInt(process.env.PORT, 10) : 3e3;
   const mysqlInitPromise = db.initializeMySQL().catch((err) => {
@@ -11558,12 +13232,20 @@ async function startServer() {
   });
   app.use(
     express3.json({
+      limit: "75mb",
       verify: (req, _res, buf) => {
         req.rawBody = buf;
       }
     })
   );
-  app.use(express3.urlencoded({ extended: true }));
+  app.use(express3.urlencoded({ extended: true, limit: "75mb" }));
+  const publicImagesDir = path9.resolve(__dirname, "public", "assets", "images");
+  const distDir = path9.resolve(__dirname, "dist");
+  const distImagesDir = path9.resolve(distDir, "assets", "images");
+  fs9.mkdirSync(publicImagesDir, { recursive: true });
+  if (fs9.existsSync(distDir)) {
+    fs9.mkdirSync(distImagesDir, { recursive: true });
+  }
   app.get("/api/health", (_req, res) => {
     res.json({
       status: "healthy",
@@ -11577,9 +13259,19 @@ async function startServer() {
     next();
   });
   app.use("/api", apiRouter);
-  const legacyImagesDir = isProduction ? path8.resolve(__dirname, "dist", "assets", "images") : path8.resolve(__dirname, "public", "assets", "images");
-  app.use("/src/assets/images", express3.static(legacyImagesDir));
+  if (isProduction) {
+    app.use("/assets/images", express3.static(distImagesDir));
+    app.use("/assets/images", express3.static(publicImagesDir));
+    app.use("/src/assets/images", express3.static(distImagesDir));
+    app.use("/src/assets/images", express3.static(publicImagesDir));
+  } else {
+    app.use("/assets/images", express3.static(publicImagesDir));
+    app.use("/src/assets/images", express3.static(publicImagesDir));
+  }
   cartRecovery.startBackgroundWorker(6e4);
+  mysqlInitPromise.finally(() => {
+    startDailyOrderReportScheduler(6e4);
+  });
   if (!isProduction) {
     const hmrDisabled = process.env.DISABLE_HMR === "true";
     const viteReadyPromise = import("vite").then(
@@ -11620,14 +13312,14 @@ async function startServer() {
       }
     });
   } else {
-    const distPath = path8.resolve(__dirname, "dist");
-    const indexPath = path8.resolve(distPath, "index.html");
+    const distPath = path9.resolve(__dirname, "dist");
+    const indexPath = path9.resolve(distPath, "index.html");
     app.use(express3.static(distPath));
     app.get("*", (req, res) => {
       if (req.path.startsWith("/api/")) {
         return res.status(404).json({ error: "API endpoint not found" });
       }
-      if (!fs8.existsSync(indexPath)) {
+      if (!fs9.existsSync(indexPath)) {
         return res.status(503).send("Production bundle missing. Please run npm run build.");
       }
       return res.sendFile(indexPath);

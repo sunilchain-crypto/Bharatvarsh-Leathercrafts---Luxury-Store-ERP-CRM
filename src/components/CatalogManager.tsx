@@ -1,40 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit3, HelpCircle, CheckCircle2, FolderPlus, AlertCircle, X, Upload } from 'lucide-react';
+import {
+  Plus,
+  Trash2,
+  Edit3,
+  HelpCircle,
+  CheckCircle2,
+  FolderPlus,
+  AlertCircle,
+  X,
+  Upload,
+  Film,
+  Image as ImageIcon,
+  Loader2
+} from 'lucide-react';
+import { Category, Product, SolutionEngine } from '../types/index.ts';
 
-interface Category {
-  id: string;
-  name: string;
-  slug: string;
-  description: string;
-  productTypes: string[];
-}
-
-interface Product {
-  id: string;
-  category: string;
-  productType: string;
-  name: string;
-  sku: string;
-  price: number;
-  currency: string;
-  description: string;
-  features: string[];
-  images: string[];
-  hsnCode: string;
-  gstRate?: number;
-  solutionEngine: string;
-  inStock: boolean;
-  allowCustomization: boolean;
-  careKitIncluded: boolean;
-  stockCount?: number;
+interface CMSProduct extends Product {
   initialPuneStock?: number;
   initialMumbaiStock?: number;
 }
 
 interface CatalogManagerProps {
-  catalog: { categories: Category[]; products: Product[] };
+  catalog: { categories: Category[]; products: CMSProduct[] };
   authToken: string;
-  onCatalogUpdated: (newCatalog: { categories: Category[]; products: Product[] }) => void;
+  onCatalogUpdated: (newCatalog: { categories: Category[]; products: CMSProduct[] }) => void;
 }
 
 const DEFAULT_IMAGES = [
@@ -45,11 +34,23 @@ const DEFAULT_IMAGES = [
   { label: 'Custom Monogram Debossing', url: '/assets/images/custom_debossing_monogram_1794461810572.jpg' }
 ];
 
+const EMPTY_IMAGE_SLOTS: [string, string, string, string] = ['', '', '', ''];
+
+function toFourImageSlots(p?: Pick<Product, 'images' | 'image'>): [string, string, string, string] {
+  const source =
+    p?.images && p.images.length > 0
+      ? p.images
+      : p?.image
+      ? [p.image]
+      : [];
+  return [source[0] || '', source[1] || '', source[2] || '', source[3] || ''];
+}
+
 export const CatalogManager: React.FC<CatalogManagerProps> = ({ catalog, authToken, onCatalogUpdated }) => {
   const [categories, setCategories] = useState<Category[]>(catalog.categories || []);
-  const [products, setProducts] = useState<Product[]>(catalog.products || []);
+  const [products, setProducts] = useState<CMSProduct[]>(catalog.products || []);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [confirmDeleteProduct, setConfirmDeleteProduct] = useState<Product | null>(null);
+  const [confirmDeleteProduct, setConfirmDeleteProduct] = useState<CMSProduct | null>(null);
 
   useEffect(() => {
     setCategories(catalog.categories || []);
@@ -64,16 +65,25 @@ export const CatalogManager: React.FC<CatalogManagerProps> = ({ catalog, authTok
   const [prodType, setProdType] = useState('Wallets');
   const [prodSku, setProdSku] = useState('BVL-CUSTOM-01');
   const [prodPrice, setProdPrice] = useState(4500);
+  const [prodOfferPrice, setProdOfferPrice] = useState('');
   const [prodDesc, setProdDesc] = useState('');
   const [prodFeaturesText, setProdFeaturesText] = useState(
     'Full-grain steerhide\nHand-burnished beeswax edges\nSolid brass hardware'
   );
   const [prodHsn, setProdHsn] = useState('4202');
   const [prodGstPercent, setProdGstPercent] = useState('');
-  const [prodSolutionEngine, setProdSolutionEngine] = useState('EVERYDAY_CARRY');
+  const [prodSolutionEngine, setProdSolutionEngine] = useState<SolutionEngine>('EVERYDAY_CARRY');
   const [prodAllowCustomization, setProdAllowCustomization] = useState(true);
   const [prodCareKitIncluded, setProdCareKitIncluded] = useState(true);
-  const [prodImage, setProdImage] = useState(DEFAULT_IMAGES[0].url);
+  const [prodImages, setProdImages] = useState<[string, string, string, string]>([
+    DEFAULT_IMAGES[0].url,
+    '',
+    '',
+    ''
+  ]);
+  const [prodVideoUrl, setProdVideoUrl] = useState('');
+  const [uploadingSlot, setUploadingSlot] = useState<number | 'video' | null>(null);
+  const [uploadNotice, setUploadNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [puneInitStock, setPuneInitStock] = useState(15);
   const [mumbaiInitStock, setMumbaiInitStock] = useState(10);
   const [productModalError, setProductModalError] = useState<string | null>(null);
@@ -88,7 +98,7 @@ export const CatalogManager: React.FC<CatalogManagerProps> = ({ catalog, authTok
   const [confirmDeleteCategory, setConfirmDeleteCategory] = useState<Category | null>(null);
   const [reassignCategorySlug, setReassignCategorySlug] = useState('');
 
-  const handleSaveCatalog = async (updatedCategories: Category[], updatedProducts: Product[]) => {
+  const handleSaveCatalog = async (updatedCategories: Category[], updatedProducts: CMSProduct[]) => {
     try {
       const res = await fetch('/api/store-management/catalog', {
         method: 'POST',
@@ -126,6 +136,7 @@ export const CatalogManager: React.FC<CatalogManagerProps> = ({ catalog, authTok
     setProdType(categories[0]?.productTypes[0] || 'Wallets');
     setProdSku(`BVL-NEW-${Math.floor(100 + Math.random() * 899)}`);
     setProdPrice(4500);
+    setProdOfferPrice('');
     setProdDesc('');
     setProdFeaturesText('Full-grain vegetable-tanned leather\nHand-burnished beeswax edges\nSolid brass hardware');
     setProdHsn('4202');
@@ -133,20 +144,24 @@ export const CatalogManager: React.FC<CatalogManagerProps> = ({ catalog, authTok
     setProdSolutionEngine('EVERYDAY_CARRY');
     setProdAllowCustomization(true);
     setProdCareKitIncluded(true);
-    setProdImage(DEFAULT_IMAGES[0].url);
+    setProdImages([DEFAULT_IMAGES[0].url, '', '', '']);
+    setProdVideoUrl('');
+    setUploadingSlot(null);
+    setUploadNotice(null);
     setPuneInitStock(15);
     setMumbaiInitStock(10);
     setProductModalError(null);
     setShowProductModal(true);
   };
 
-  const openEditProduct = (p: Product) => {
+  const openEditProduct = (p: CMSProduct) => {
     setEditingProductId(p.id);
     setProdName(p.name);
     setProdCategory(p.category);
     setProdType(p.productType);
     setProdSku(p.sku);
     setProdPrice(p.price);
+    setProdOfferPrice(typeof p.offerPrice === 'number' && p.offerPrice > 0 ? String(p.offerPrice) : '');
     setProdDesc(p.description);
     setProdFeaturesText((p.features || []).join('\n'));
     setProdHsn(p.hsnCode);
@@ -154,25 +169,93 @@ export const CatalogManager: React.FC<CatalogManagerProps> = ({ catalog, authTok
     setProdSolutionEngine(p.solutionEngine || 'EVERYDAY_CARRY');
     setProdAllowCustomization(p.allowCustomization !== false);
     setProdCareKitIncluded(p.careKitIncluded !== false);
-    setProdImage(p.images[0] || DEFAULT_IMAGES[0].url);
+    const slots = toFourImageSlots(p);
+    if (!slots[0]) slots[0] = DEFAULT_IMAGES[0].url;
+    setProdImages(slots);
+    setProdVideoUrl(p.videoUrl || '');
+    setUploadingSlot(null);
+    setUploadNotice(null);
     setProductModalError(null);
     setShowProductModal(true);
   };
 
-  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 1.5 * 1024 * 1024) {
-      setFeedback({ type: 'error', message: 'Uploaded product image must be 1.5MB or smaller.' });
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setProdImage(reader.result);
+  const uploadMediaToServer = async (file: File, kind: 'image' | 'video', targetSlot: number | 'video') => {
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    if (kind === 'image') {
+      if (!['png', 'jpg', 'jpeg', 'webp'].includes(ext) && !['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+        setUploadNotice({ type: 'error', message: 'Image must be PNG, JPG, JPEG, or WEBP.' });
+        return;
       }
-    };
-    reader.readAsDataURL(file);
+      if (file.size > 10 * 1024 * 1024) {
+        setUploadNotice({ type: 'error', message: 'Image size must not exceed 10MB.' });
+        return;
+      }
+    } else {
+      if (!['mp4', 'webm'].includes(ext) && !['video/mp4', 'video/webm'].includes(file.type)) {
+        setUploadNotice({ type: 'error', message: 'Video must be MP4 or WEBM.' });
+        return;
+      }
+      if (file.size > 50 * 1024 * 1024) {
+        setUploadNotice({ type: 'error', message: 'Video size must not exceed 50MB.' });
+        return;
+      }
+    }
+
+    setUploadingSlot(targetSlot);
+    setUploadNotice(null);
+    setProductModalError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/store-management/upload-media', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${authToken}`
+        },
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success || !data.url) {
+        throw new Error(data.error || 'Media upload failed');
+      }
+
+      if (targetSlot === 'video') {
+        setProdVideoUrl(data.url);
+      } else {
+        setProdImages((prev) => {
+          const next = [...prev] as [string, string, string, string];
+          next[targetSlot] = data.url;
+          return next;
+        });
+      }
+      setUploadNotice({
+        type: 'success',
+        message: `Uploaded to ${data.url}`
+      });
+    } catch (err: any) {
+      setUploadNotice({
+        type: 'error',
+        message: err?.message || 'Failed to upload media file.'
+      });
+    } finally {
+      setUploadingSlot(null);
+    }
+  };
+
+  const handleImageSlotUpload = (slotIndex: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    uploadMediaToServer(file, 'image', slotIndex);
+  };
+
+  const handleVideoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    uploadMediaToServer(file, 'video', 'video');
   };
 
   const handleSaveProductSubmit = (e: React.FormEvent) => {
@@ -189,6 +272,35 @@ export const CatalogManager: React.FC<CatalogManagerProps> = ({ catalog, authTok
       setProductModalError(`SKU "${trimmedSku}" is already assigned to "${duplicate.name}". Please use a unique SKU.`);
       return;
     }
+
+    if (!Number.isFinite(prodPrice) || prodPrice < 0) {
+      setProductModalError('MRP Price must be a valid non-negative number.');
+      return;
+    }
+
+    const trimmedOffer = prodOfferPrice.trim();
+    let parsedOfferPrice: number | undefined;
+    if (trimmedOffer !== '') {
+      const numOffer = Number(trimmedOffer);
+      if (!Number.isFinite(numOffer) || numOffer < 0) {
+        setProductModalError('Offer Price must be a valid non-negative number.');
+        return;
+      }
+      if (numOffer > 0) {
+        if (numOffer > prodPrice) {
+          setProductModalError(`Offer price (₹${numOffer.toLocaleString('en-IN')}) cannot exceed MRP price (₹${prodPrice.toLocaleString('en-IN')}).`);
+          return;
+        }
+        parsedOfferPrice = numOffer;
+      }
+    }
+
+    const cleanImages = prodImages.map((u) => u.trim()).filter(Boolean).slice(0, 4);
+    if (cleanImages.length === 0) {
+      cleanImages.push(DEFAULT_IMAGES[0].url);
+    }
+    const cleanVideoUrl = prodVideoUrl.trim();
+
     setProductModalError(null);
 
     const parsedFeatures = prodFeaturesText
@@ -217,7 +329,7 @@ export const CatalogManager: React.FC<CatalogManagerProps> = ({ catalog, authTok
     if (editingProductId) {
       const nextProducts = products.map((p) => {
         if (p.id !== editingProductId) return p;
-        const { gstRate: _prevGst, ...restProduct } = p;
+        const { gstRate: _prevGst, offerPrice: _prevOffer, videoUrl: _prevVideo, ...restProduct } = p;
         return {
           ...restProduct,
           name: prodName,
@@ -225,6 +337,7 @@ export const CatalogManager: React.FC<CatalogManagerProps> = ({ catalog, authTok
           productType: prodType.trim(),
           sku: trimmedSku,
           price: prodPrice,
+          ...(typeof parsedOfferPrice === 'number' ? { offerPrice: parsedOfferPrice } : {}),
           description: prodDesc,
           features: resolvedFeatures,
           hsnCode: prodHsn,
@@ -232,22 +345,27 @@ export const CatalogManager: React.FC<CatalogManagerProps> = ({ catalog, authTok
           solutionEngine: prodSolutionEngine,
           allowCustomization: prodAllowCustomization,
           careKitIncluded: prodCareKitIncluded,
-          images: [prodImage.trim() || DEFAULT_IMAGES[0].url, ...p.images.slice(1)]
+          images: cleanImages,
+          image: cleanImages[0] || '',
+          ...(cleanVideoUrl ? { videoUrl: cleanVideoUrl } : {})
         };
       });
       handleSaveCatalog(nextCategories, nextProducts);
     } else {
-      const newProduct: Product = {
+      const newProduct: CMSProduct = {
         id: `prod-${Date.now()}`,
         name: prodName,
         category: prodCategory,
         productType: prodType.trim(),
         sku: trimmedSku,
         price: prodPrice,
+        ...(typeof parsedOfferPrice === 'number' ? { offerPrice: parsedOfferPrice } : {}),
         currency: 'INR',
         description: prodDesc || 'Handcrafted heirloom leather goods crafted from vegetable-tanned hides.',
         features: resolvedFeatures,
-        images: [prodImage.trim() || DEFAULT_IMAGES[0].url],
+        image: cleanImages[0] || '',
+        images: cleanImages,
+        ...(cleanVideoUrl ? { videoUrl: cleanVideoUrl } : {}),
         hsnCode: prodHsn,
         ...(typeof normalizedGstRate === 'number' ? { gstRate: normalizedGstRate } : {}),
         solutionEngine: prodSolutionEngine,
@@ -387,7 +505,7 @@ export const CatalogManager: React.FC<CatalogManagerProps> = ({ catalog, authTok
     handleSaveCatalog(categories, nextProducts);
   };
 
-  const isPresetImage = DEFAULT_IMAGES.some((img) => img.url === prodImage);
+  const isPresetPrimaryImage = DEFAULT_IMAGES.some((img) => img.url === prodImages[0]);
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
@@ -516,57 +634,86 @@ export const CatalogManager: React.FC<CatalogManagerProps> = ({ catalog, authTok
         </div>
 
         <div className="divide-y divide-[#221C16]/5 text-xs">
-          {products.map((p) => (
-            <div key={p.id} className="p-4 flex items-center justify-between gap-4 hover:bg-[#FAF7F2]/50">
-              <div className="flex items-center gap-3 min-w-0">
-                <img
-                  src={p.images[0]}
-                  alt={p.name}
-                  referrerPolicy="no-referrer"
-                  className="w-12 h-12 object-cover rounded bg-[#FAF7F2] border shrink-0"
-                />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-bold text-[#16120E] truncate">{p.name}</h4>
-                    {p.inStock === false && (
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-100 text-red-900">
-                        Out of Stock · Deactivated
+          {products.map((p) => {
+            const mediaCount = (p.images || []).filter(Boolean).length;
+            const hasOffer = typeof p.offerPrice === 'number' && p.offerPrice > 0 && p.offerPrice < p.price;
+            const discountPct = hasOffer ? Math.round(((p.price - p.offerPrice!) / p.price) * 100) : 0;
+            return (
+              <div key={p.id} className="p-4 flex items-center justify-between gap-4 hover:bg-[#FAF7F2]/50">
+                <div className="flex items-center gap-3 min-w-0">
+                  <img
+                    src={p.images?.[0] || p.image || DEFAULT_IMAGES[0].url}
+                    alt={p.name}
+                    referrerPolicy="no-referrer"
+                    className="w-12 h-12 object-cover rounded bg-[#FAF7F2] border shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="font-bold text-[#16120E] truncate">{p.name}</h4>
+                      {hasOffer && discountPct > 0 && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1B332A] text-[#FAF7F2]">
+                          {discountPct}% OFF
+                        </span>
+                      )}
+                      {p.videoUrl && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#EBE4D5] text-[#8B4513] inline-flex items-center gap-1">
+                          <Film className="w-3 h-3" />
+                          Video
+                        </span>
+                      )}
+                      {p.inStock === false && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-100 text-red-900">
+                          Out of Stock · Deactivated
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-[#5C4D3E] font-mono mt-0.5">
+                      Category: <strong className="text-[#16120E]">{p.category}</strong> ({p.productType}) · SKU: {p.sku} · HSN: {p.hsnCode} · GST:{' '}
+                      {typeof p.gstRate === 'number' ? `${Math.round(p.gstRate * 100)}%` : 'Store Default'} · {mediaCount}/4 img
+                      {typeof p.stockCount === 'number' && ` · On Hand: ${p.stockCount} pcs`}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 font-mono">
+                  <div className="text-right mr-2">
+                    {hasOffer ? (
+                      <>
+                        <span className="font-bold text-sm text-[#1B332A] tabular-nums block">
+                          ₹{p.offerPrice!.toLocaleString('en-IN')}
+                        </span>
+                        <span className="text-[11px] text-[#5C4D3E]/70 line-through tabular-nums block">
+                          ₹{p.price.toLocaleString('en-IN')}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="font-bold text-sm text-[#16120E] tabular-nums">
+                        ₹{p.price.toLocaleString('en-IN')}
                       </span>
                     )}
                   </div>
-                  <div className="text-[11px] text-[#5C4D3E] font-mono mt-0.5">
-                    Category: <strong className="text-[#16120E]">{p.category}</strong> ({p.productType}) · SKU: {p.sku} · HSN: {p.hsnCode} · GST:{' '}
-                    {typeof p.gstRate === 'number' ? `${Math.round(p.gstRate * 100)}%` : 'Store Default'}
-                    {typeof p.stockCount === 'number' && ` · On Hand: ${p.stockCount} pcs`}
-                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => openEditProduct(p)}
+                    className="p-1.5 text-[#5C4D3E] hover:text-[#16120E] hover:bg-[#EBE4D5]/60 rounded transition-colors"
+                    title="Edit product"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteProduct(p)}
+                    className="p-1.5 text-red-700 hover:text-red-900 hover:bg-red-50 rounded transition-colors"
+                    title="Remove from catalogue"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
-
-              <div className="flex items-center gap-2 shrink-0 font-mono">
-                <span className="font-bold text-sm text-[#16120E] mr-2 tabular-nums">
-                  ₹{p.price.toLocaleString('en-IN')}
-                </span>
-
-                <button
-                  type="button"
-                  onClick={() => openEditProduct(p)}
-                  className="p-1.5 text-[#5C4D3E] hover:text-[#16120E] hover:bg-[#EBE4D5]/60 rounded transition-colors"
-                  title="Edit product"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setConfirmDeleteProduct(p)}
-                  className="p-1.5 text-red-700 hover:text-red-900 hover:bg-red-50 rounded transition-colors"
-                  title="Remove from catalogue"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -773,8 +920,8 @@ export const CatalogManager: React.FC<CatalogManagerProps> = ({ catalog, authTok
                 </div>
               </div>
 
-              <div className="grid grid-cols-4 gap-2">
-                <div className="col-span-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="col-span-2 sm:col-span-1">
                   <label className="block text-[#5C4D3E] mb-1">SKU</label>
                   <input
                     type="text"
@@ -785,18 +932,33 @@ export const CatalogManager: React.FC<CatalogManagerProps> = ({ catalog, authTok
                   />
                 </div>
                 <div>
-                  <label className="block text-[#5C4D3E] mb-1">Price (₹)</label>
+                  <label className="block text-[#5C4D3E] mb-1">Price / MRP (₹) *</label>
                   <input
                     type="number"
                     required
-                    step={100}
+                    min={0}
+                    step={50}
                     value={prodPrice}
-                    onChange={(e) => setProdPrice(parseInt(e.target.value || '0', 10))}
+                    onChange={(e) => setProdPrice(Math.max(0, parseInt(e.target.value || '0', 10)))}
                     className="w-full px-3 py-1.5 border rounded font-mono font-bold bg-[#FAF7F2]"
                   />
                 </div>
                 <div>
-                  <label className="block text-[#5C4D3E] mb-1">GST % (Blank = Store Default)</label>
+                  <label className="block text-[#5C4D3E] mb-1">Offer Price (₹)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={50}
+                    placeholder="Optional"
+                    value={prodOfferPrice}
+                    onChange={(e) => setProdOfferPrice(e.target.value)}
+                    className={`w-full px-3 py-1.5 border rounded font-mono font-bold bg-[#FAF7F2] ${
+                      prodOfferPrice.trim() && Number(prodOfferPrice) > prodPrice ? 'border-red-500 text-red-800' : ''
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[#5C4D3E] mb-1">GST % (Blank = Default)</label>
                   <input
                     type="number"
                     min={0}
@@ -808,6 +970,27 @@ export const CatalogManager: React.FC<CatalogManagerProps> = ({ catalog, authTok
                   />
                 </div>
               </div>
+
+              {(() => {
+                const trimmed = prodOfferPrice.trim();
+                if (!trimmed) return null;
+                const offerVal = Number(trimmed);
+                if (!Number.isFinite(offerVal) || offerVal <= 0) return null;
+                if (offerVal > prodPrice) {
+                  return (
+                    <div className="px-2.5 py-1.5 rounded bg-red-50 border border-red-200 text-[11px] text-red-800 flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>Offer price (₹{offerVal.toLocaleString('en-IN')}) cannot exceed MRP price (₹{prodPrice.toLocaleString('en-IN')}).</span>
+                    </div>
+                  );
+                }
+                const pct = prodPrice > 0 ? Math.round(((prodPrice - offerVal) / prodPrice) * 100) : 0;
+                return (
+                  <div className="px-2.5 py-1.5 rounded bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-900 font-mono">
+                    Active Offer: ₹{offerVal.toLocaleString('en-IN')} ({pct}% savings off MRP ₹{prodPrice.toLocaleString('en-IN')})
+                  </div>
+                );
+              })()}
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -823,7 +1006,7 @@ export const CatalogManager: React.FC<CatalogManagerProps> = ({ catalog, authTok
                   <label className="block text-[#5C4D3E] mb-1">Solution Collection</label>
                   <select
                     value={prodSolutionEngine}
-                    onChange={(e) => setProdSolutionEngine(e.target.value)}
+                    onChange={(e) => setProdSolutionEngine(e.target.value as SolutionEngine)}
                     className="w-full px-3 py-1.5 border rounded bg-[#FAF7F2]"
                   >
                     <option value="EVERYDAY_CARRY">Everyday Carry</option>
@@ -858,52 +1041,196 @@ export const CatalogManager: React.FC<CatalogManagerProps> = ({ catalog, authTok
                 </div>
               )}
 
-              {/* Product Image: Preset quick-pick OR custom URL OR local upload */}
-              <div className="space-y-2 p-3 bg-[#FAF7F2] rounded-lg border border-[#221C16]/10">
-                <label className="block text-[#5C4D3E] font-semibold">Product Photography</label>
-                <div className="flex items-center gap-3">
-                  {prodImage && (
-                    <img
-                      src={prodImage}
-                      alt="Preview"
-                      referrerPolicy="no-referrer"
-                      className="w-14 h-14 object-cover rounded border bg-white shrink-0"
-                    />
-                  )}
-                  <div className="flex-1 space-y-1.5 min-w-0">
-                    <select
-                      value={isPresetImage ? prodImage : 'CUSTOM'}
-                      onChange={(e) => {
-                        if (e.target.value !== 'CUSTOM') setProdImage(e.target.value);
-                      }}
-                      className="w-full px-2.5 py-1 border rounded bg-white"
-                    >
-                      {DEFAULT_IMAGES.map((img) => (
-                        <option key={img.url} value={img.url}>
-                          Preset: {img.label}
-                        </option>
-                      ))}
-                      {!isPresetImage && <option value="CUSTOM">Custom Image URL / Upload</option>}
-                    </select>
+              {/* Product Multi-Media: Up to 4 Images + 1 Video uploaded to /assets/images/ */}
+              <div className="space-y-3 p-3.5 bg-[#FAF7F2] rounded-lg border border-[#221C16]/10">
+                <div className="flex items-center justify-between">
+                  <label className="text-[#5C4D3E] font-semibold flex items-center gap-1.5">
+                    <ImageIcon className="w-3.5 h-3.5 text-[#8B4513]" />
+                    <span>Product Photography (Up to 4 Images) & 1 Video</span>
+                  </label>
+                  <span className="text-[10px] font-mono text-[#5C4D3E]">
+                    Saved to /assets/images/
+                  </span>
+                </div>
+
+                {uploadNotice && (
+                  <div
+                    className={`p-2 rounded border text-[11px] flex items-center justify-between gap-2 ${
+                      uploadNotice.type === 'error'
+                        ? 'bg-red-50 border-red-200 text-red-900'
+                        : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                    }`}
+                  >
+                    <span className="truncate font-mono">{uploadNotice.message}</span>
+                    <button type="button" onClick={() => setUploadNotice(null)} className="shrink-0 opacity-70 hover:opacity-100">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Image Slot 1 Preset Quick-Pick */}
+                <div>
+                  <select
+                    value={isPresetPrimaryImage ? prodImages[0] : 'CUSTOM'}
+                    onChange={(e) => {
+                      if (e.target.value !== 'CUSTOM') {
+                        setProdImages((prev) => [e.target.value, prev[1], prev[2], prev[3]]);
+                      }
+                    }}
+                    className="w-full px-2.5 py-1 border rounded bg-white text-[11px]"
+                  >
+                    {DEFAULT_IMAGES.map((img) => (
+                      <option key={img.url} value={img.url}>
+                        Primary Preset: {img.label}
+                      </option>
+                    ))}
+                    {!isPresetPrimaryImage && <option value="CUSTOM">Primary Image: Custom URL / Upload</option>}
+                  </select>
+                </div>
+
+                {/* 4 Image Slots */}
+                <div className="space-y-2">
+                  {[0, 1, 2, 3].map((slotIdx) => {
+                    const url = prodImages[slotIdx] || '';
+                    const isUploadingThis = uploadingSlot === slotIdx;
+                    return (
+                      <div key={slotIdx} className="flex items-center gap-2 bg-white p-2 rounded border border-[#221C16]/10">
+                        {url ? (
+                          <img
+                            src={url}
+                            alt={`Slot ${slotIdx + 1}`}
+                            referrerPolicy="no-referrer"
+                            className="w-10 h-10 object-cover rounded border bg-[#FAF7F2] shrink-0"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded border border-dashed border-[#221C16]/20 bg-[#FAF7F2] flex items-center justify-center text-[10px] font-mono text-[#5C4D3E]/60 shrink-0">
+                            {slotIdx + 1}
+                          </div>
+                        )}
+
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[10px] font-mono text-[#5C4D3E] mb-0.5">
+                            {slotIdx === 0 ? 'Image 1 (Primary)' : `Image ${slotIdx + 1} (Gallery)`}
+                          </div>
+                          <input
+                            type="text"
+                            value={url}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setProdImages((prev) => {
+                                const next = [...prev] as [string, string, string, string];
+                                next[slotIdx] = val;
+                                return next;
+                              });
+                            }}
+                            placeholder={slotIdx === 0 ? '/assets/images/... or https://...' : 'Optional gallery image URL or upload'}
+                            className="w-full px-2 py-1 border rounded font-mono text-[11px] bg-[#FAF7F2]"
+                          />
+                        </div>
+
+                        <label className="inline-flex items-center gap-1 px-2 py-1.5 border border-[#221C16]/20 rounded bg-[#FAF7F2] cursor-pointer hover:bg-[#EBE4D5]/50 text-[10px] font-semibold shrink-0">
+                          {isUploadingThis ? (
+                            <>
+                              <Loader2 className="w-3 h-3 text-[#8B4513] animate-spin" />
+                              <span>Uploading</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-3 h-3 text-[#8B4513]" />
+                              <span>Upload Image</span>
+                            </>
+                          )}
+                          <input
+                            type="file"
+                            accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+                            disabled={uploadingSlot !== null}
+                            onChange={(e) => handleImageSlotUpload(slotIdx, e)}
+                            className="hidden"
+                          />
+                        </label>
+
+                        {url && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setProdImages((prev) => {
+                                const next = [...prev] as [string, string, string, string];
+                                next[slotIdx] = '';
+                                return next;
+                              })
+                            }
+                            className="p-1 text-[#5C4D3E] hover:text-red-700 shrink-0"
+                            title="Clear slot"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* 1 Showcase Video Slot */}
+                <div className="pt-2 border-t border-[#221C16]/10 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-[#5C4D3E] flex items-center gap-1.5">
+                      <Film className="w-3.5 h-3.5 text-[#8B4513]" />
+                      <span>Product Showcase Video (Optional · MP4 / WebM ≤ 50MB)</span>
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 bg-white p-2 rounded border border-[#221C16]/10">
                     <input
                       type="text"
-                      value={prodImage}
-                      onChange={(e) => setProdImage(e.target.value)}
-                      placeholder="Paste custom https:// image URL or upload file below"
-                      className="w-full px-2.5 py-1 border rounded font-mono text-[11px] bg-white"
+                      value={prodVideoUrl}
+                      onChange={(e) => setProdVideoUrl(e.target.value)}
+                      placeholder="/assets/images/showcase.mp4 or external MP4 URL"
+                      className="flex-1 px-2 py-1 border rounded font-mono text-[11px] bg-[#FAF7F2]"
                     />
+
+                    <label className="inline-flex items-center gap-1 px-2 py-1.5 border border-[#221C16]/20 rounded bg-[#FAF7F2] cursor-pointer hover:bg-[#EBE4D5]/50 text-[10px] font-semibold shrink-0">
+                      {uploadingSlot === 'video' ? (
+                        <>
+                          <Loader2 className="w-3 h-3 text-[#8B4513] animate-spin" />
+                          <span>Uploading</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-3 h-3 text-[#8B4513]" />
+                          <span>Upload Video</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept=".mp4,.webm,video/mp4,video/webm"
+                        disabled={uploadingSlot !== null}
+                        onChange={handleVideoFileUpload}
+                        className="hidden"
+                      />
+                    </label>
+
+                    {prodVideoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setProdVideoUrl('')}
+                        className="p-1 text-[#5C4D3E] hover:text-red-700 shrink-0"
+                        title="Remove video"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
+
+                  {prodVideoUrl && (
+                    <video
+                      src={prodVideoUrl}
+                      controls
+                      muted
+                      playsInline
+                      className="w-full max-h-36 rounded border bg-[#16120E] object-contain"
+                    />
+                  )}
                 </div>
-                <label className="inline-flex items-center gap-1.5 px-2.5 py-1 border border-[#221C16]/20 rounded bg-white cursor-pointer hover:bg-[#EBE4D5]/40 text-[11px] font-medium">
-                  <Upload className="w-3.5 h-3.5 text-[#8B4513]" />
-                  <span>Upload Image File (≤ 1.5MB)</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageFileUpload}
-                    className="hidden"
-                  />
-                </label>
               </div>
 
               <div>

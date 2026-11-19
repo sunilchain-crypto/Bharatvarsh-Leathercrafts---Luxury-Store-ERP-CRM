@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
-import { X, LogOut, Lock } from 'lucide-react';
+import { X, LogOut, Lock, CheckCircle2 } from 'lucide-react';
 import { AuthUser } from '../types/index.ts';
-import { signInWithGoogle } from '../lib/firebase.ts';
+import {
+  signInWithGoogle,
+  registerWithFirebaseEmail,
+  signInWithFirebaseEmail,
+  requestFirebasePasswordReset,
+  getFirebaseSignInMethods
+} from '../lib/firebase.ts';
 import {
   INDIAN_STATES_AND_UTS,
   coerceIndianPhoneInput,
@@ -10,6 +16,7 @@ import {
   validateIndianPincode,
   normalizeIndianState
 } from '../lib/indianValidation.ts';
+import { executeRecaptchaEnterprise } from '../lib/recaptcha.ts';
 
 interface PatronAuthModalProps {
   isOpen: boolean;
@@ -17,6 +24,43 @@ interface PatronAuthModalProps {
   currentUser: AuthUser | null;
   onLoginSuccess: (user: AuthUser, token: string) => void;
   onLogout: () => void;
+}
+
+function formatFirebaseAuthError(code: string, fallbackMessage?: string, methods: string[] = []): string {
+  const host = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
+  const isGoogleLinked = methods.includes('google.com');
+
+  switch (code) {
+    case 'auth/account-exists-with-different-credential':
+      return "This email is linked to Google Sign-In. Please click 'Continue with Google' or use Forgot Password to set an email password.";
+    case 'auth/email-already-in-use':
+      return isGoogleLinked
+        ? "This email is already linked to Google Sign-In. Please click 'Continue with Google' or use 'Forgot Password?' to set a password."
+        : "An account with this email already exists. Please switch to Sign In, click 'Continue with Google', or use 'Forgot Password?'.";
+    case 'auth/invalid-credential':
+    case 'auth/invalid-login-credentials':
+      return isGoogleLinked
+        ? "This email is linked to Google Sign-In. Please click 'Continue with Google' or use 'Forgot Password?' to set an email password."
+        : "Invalid email or password. If you originally signed in with Google, please click 'Continue with Google' or use 'Forgot Password?' to set an email password.";
+    case 'auth/wrong-password':
+      return isGoogleLinked
+        ? "This email is linked to Google Sign-In. Please click 'Continue with Google' or use 'Forgot Password?' to set an email password."
+        : "Incorrect password. Please try again or click 'Forgot Password?' to reset it.";
+    case 'auth/user-not-found':
+      return "No account exists for this email yet. Click 'Create Account' to register or 'Continue with Google'.";
+    case 'auth/unauthorized-domain':
+      return `Authentication is not yet authorized for "${host}". Add "${host}" under Firebase Console → Authentication → Settings → Authorized domains.`;
+    case 'auth/operation-not-allowed':
+      return 'Email/Password sign-in is disabled on the Firebase project. Please enable Email/Password under Firebase Console → Authentication → Sign-in method, or Continue with Google.';
+    case 'auth/too-many-requests':
+      return "Too many sign-in attempts. Please wait a few minutes or click 'Forgot Password?' to reset access.";
+    case 'auth/weak-password':
+      return 'Password is too weak. Please enter at least 8 characters.';
+    case 'auth/invalid-email':
+      return 'Please enter a valid email address.';
+    default:
+      return fallbackMessage || 'Authentication failed. Please check your credentials and try again.';
+  }
 }
 
 export const PatronAuthModal: React.FC<PatronAuthModalProps> = ({
@@ -38,19 +82,35 @@ export const PatronAuthModal: React.FC<PatronAuthModalProps> = ({
   const [pincode, setPincode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  const resetFormFields = () => {
+    setFullName('');
+    setPhone('+91 ');
+    setEmail('');
+    setPassword('');
+    setStreet('');
+    setCity('');
+    setState('');
+    setPincode('');
+    setShowAddressFields(false);
+  };
 
   const handleGoogleLogin = async () => {
     setIsGoogleSubmitting(true);
     setErrorMessage(null);
+    setInfoMessage(null);
     try {
+      const recaptchaToken = await executeRecaptchaEnterprise('GOOGLE_LOGIN');
       const { idToken } = await signInWithGoogle();
       const res = await fetch('/api/auth/firebase', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken })
+        body: JSON.stringify({ idToken, recaptchaToken, recaptchaAction: 'GOOGLE_LOGIN' })
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -65,26 +125,43 @@ export const PatronAuthModal: React.FC<PatronAuthModalProps> = ({
         setErrorMessage('Google sign-in window was closed before completion.');
       } else if (code === 'auth/popup-blocked') {
         setErrorMessage('Pop-up was blocked by your browser. Please allow pop-ups and try again.');
-      } else if (code === 'auth/unauthorized-domain') {
-        const host = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
-        setErrorMessage(
-          `Google Sign-In is not yet authorized for "${host}". Add "${host}" under Firebase Console → Authentication → Settings → Authorized domains, or sign in with Email & Password below.`
-        );
-      } else if (code === 'auth/operation-not-allowed') {
-        setErrorMessage(
-          'Google Sign-In provider is disabled on the configured Firebase project. Please sign in with Email & Password below.'
-        );
       } else {
-        setErrorMessage(err?.message || 'Google sign-in failed. Please try again.');
+        setErrorMessage(formatFirebaseAuthError(code, err?.message));
       }
     } finally {
       setIsGoogleSubmitting(false);
     }
   };
 
+  const handleForgotPassword = async () => {
+    setErrorMessage(null);
+    setInfoMessage(null);
+    const cleanEmail = email.trim();
+    const emailCheck = validateEmailAddress(cleanEmail);
+    if (!emailCheck.valid) {
+      setErrorMessage('Enter your registered email address first, then click "Forgot Password?".');
+      return;
+    }
+
+    setIsResettingPassword(true);
+    try {
+      await executeRecaptchaEnterprise('PASSWORD_RESET');
+      await requestFirebasePasswordReset(emailCheck.normalized);
+      setInfoMessage(
+        `Password reset email dispatched to ${emailCheck.normalized}. Check your inbox (and spam folder) to set or reset your password.`
+      );
+    } catch (err: any) {
+      const methods = await getFirebaseSignInMethods(emailCheck.normalized);
+      setErrorMessage(formatFirebaseAuthError(err?.code || '', err?.message, methods));
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setInfoMessage(null);
 
     if (authMode === 'SIGN_IN') {
       if (!email.trim() || !password) {
@@ -135,53 +212,127 @@ export const PatronAuthModal: React.FC<PatronAuthModalProps> = ({
     setIsSubmitting(true);
 
     try {
-      const endpoint = authMode === 'SIGN_UP' ? '/api/auth/register' : '/api/auth/login';
       const hasAnyAddr = Boolean(street.trim() || city.trim() || state.trim() || pincode.trim());
-      const bodyPayload =
-        authMode === 'SIGN_UP'
-          ? {
-              fullName: fullName.trim(),
-              phone: validateIndianPhone(phone).formatted,
-              email: email.trim().toLowerCase(),
-              password,
-              ...(hasAnyAddr
-                ? {
-                    street: street.trim(),
-                    city: city.trim(),
-                    state: normalizeIndianState(state) || state.trim(),
-                    pincode: pincode.trim(),
-                    country: 'India'
-                  }
-                : {})
-            }
-          : {
-              email: email.trim(),
-              password
-            };
 
-      const res = await fetch(endpoint, {
+      if (authMode === 'SIGN_UP') {
+        const cleanEmail = email.trim().toLowerCase();
+        const cleanName = fullName.trim();
+        const formattedPhone = validateIndianPhone(phone).formatted;
+
+        const recaptchaToken = await executeRecaptchaEnterprise('SIGNUP');
+        const { idToken } = await registerWithFirebaseEmail(cleanEmail, password, cleanName);
+        const res = await fetch('/api/auth/firebase', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            idToken,
+            recaptchaToken,
+            recaptchaAction: 'SIGNUP',
+            fullName: cleanName,
+            phone: formattedPhone,
+            ...(hasAnyAddr
+              ? {
+                  street: street.trim(),
+                  city: city.trim(),
+                  state: normalizeIndianState(state) || state.trim(),
+                  pincode: pincode.trim(),
+                  country: 'India'
+                }
+              : {})
+          })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          onLoginSuccess(data.user, data.token);
+          resetFormFields();
+          onClose();
+        } else {
+          setErrorMessage(data.error || 'Account created in Firebase, but profile sync failed.');
+        }
+        return;
+      }
+
+      // SIGN_IN mode:
+      const cleanIdentifier = email.trim();
+      const looksLikeEmail = cleanIdentifier.includes('@');
+      const recaptchaToken = await executeRecaptchaEnterprise('LOGIN');
+
+      if (looksLikeEmail) {
+        try {
+          const { idToken } = await signInWithFirebaseEmail(cleanIdentifier.toLowerCase(), password);
+          const res = await fetch('/api/auth/firebase', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken, recaptchaToken, recaptchaAction: 'LOGIN' })
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            onLoginSuccess(data.user, data.token);
+            resetFormFields();
+            onClose();
+            return;
+          }
+          setErrorMessage(data.error || 'Firebase session verification failed.');
+          return;
+        } catch (fbErr: any) {
+          const fbCode = fbErr?.code || '';
+          // Keep backend credential login as fallback for Store Management staff/admin accounts & legacy credentials
+          const canFallbackToBackend =
+            fbCode === 'auth/invalid-credential' ||
+            fbCode === 'auth/invalid-login-credentials' ||
+            fbCode === 'auth/user-not-found' ||
+            fbCode === 'auth/wrong-password' ||
+            fbCode === 'auth/operation-not-allowed';
+
+          if (canFallbackToBackend) {
+            const backendRes = await fetch('/api/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                email: cleanIdentifier,
+                password,
+                recaptchaToken,
+                recaptchaAction: 'LOGIN'
+              })
+            });
+            const backendData = await backendRes.json().catch(() => null);
+            if (backendRes.ok && backendData?.success) {
+              onLoginSuccess(backendData.user, backendData.token);
+              resetFormFields();
+              onClose();
+              return;
+            }
+          }
+
+          const methods = await getFirebaseSignInMethods(cleanIdentifier);
+          setErrorMessage(formatFirebaseAuthError(fbCode, fbErr?.message, methods));
+          return;
+        }
+      }
+
+      // Non-email Staff User ID login directly via backend credential verification
+      const staffRes = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bodyPayload)
+        body: JSON.stringify({
+          email: cleanIdentifier,
+          password,
+          recaptchaToken,
+          recaptchaAction: 'LOGIN'
+        })
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        onLoginSuccess(data.user, data.token);
-        setFullName('');
-        setPhone('+91 ');
-        setEmail('');
-        setPassword('');
-        setStreet('');
-        setCity('');
-        setState('');
-        setPincode('');
-        setShowAddressFields(false);
+      const staffData = await staffRes.json();
+      if (staffRes.ok && staffData.success) {
+        onLoginSuccess(staffData.user, staffData.token);
+        resetFormFields();
         onClose();
       } else {
-        setErrorMessage(data.error || 'Authentication failed. Please check your credentials.');
+        setErrorMessage(staffData.error || 'Authentication failed. Please check your User ID and password.');
       }
     } catch (err: any) {
-      setErrorMessage(err.message);
+      const code = err?.code || '';
+      const methods = email.includes('@') ? await getFirebaseSignInMethods(email) : [];
+      setErrorMessage(formatFirebaseAuthError(code, err?.message, methods));
     } finally {
       setIsSubmitting(false);
     }
@@ -189,7 +340,7 @@ export const PatronAuthModal: React.FC<PatronAuthModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#16120E]/70 backdrop-blur-sm animate-fadeIn">
-      <div className="relative w-full max-w-md bg-white rounded-xl border border-[#221C16]/15 shadow-2xl p-6 space-y-5 text-[#221C16]">
+      <div className="relative w-full max-w-md bg-white rounded-xl border border-[#221C16]/15 shadow-2xl p-6 space-y-5 text-[#221C16] max-h-[92vh] overflow-y-auto">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-2 text-[#5C4D3E] hover:text-[#16120E] bg-[#FAF7F2] rounded-full"
@@ -203,8 +354,8 @@ export const PatronAuthModal: React.FC<PatronAuthModalProps> = ({
           </h2>
           <p className="text-xs text-[#5C4D3E] mt-1">
             {authMode === 'SIGN_IN'
-              ? 'Sign in with Google or your account credentials to manage orders and atelier preferences.'
-              : 'Register a personal atelier account to save monogramming preferences and checkout faster.'}
+              ? 'Sign in with Google or your Firebase-secured email and password to manage orders and atelier preferences.'
+              : 'Register with Firebase Auth and save your +91 mobile & delivery details for faster checkout.'}
           </p>
         </div>
 
@@ -242,8 +393,15 @@ export const PatronAuthModal: React.FC<PatronAuthModalProps> = ({
         )}
 
         {errorMessage && (
-          <div className="p-3 bg-red-50 text-red-900 border border-red-200 rounded text-xs">
+          <div className="p-3 bg-red-50 text-red-900 border border-red-200 rounded text-xs leading-relaxed">
             {errorMessage}
+          </div>
+        )}
+
+        {infoMessage && (
+          <div className="p-3 bg-emerald-50 text-emerald-900 border border-emerald-200 rounded text-xs leading-relaxed flex items-start gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+            <span>{infoMessage}</span>
           </div>
         )}
 
@@ -282,6 +440,7 @@ export const PatronAuthModal: React.FC<PatronAuthModalProps> = ({
             onClick={() => {
               setAuthMode('SIGN_IN');
               setErrorMessage(null);
+              setInfoMessage(null);
             }}
             className={`py-1.5 rounded-md transition-colors ${
               authMode === 'SIGN_IN' ? 'bg-white text-[#16120E] shadow-sm' : 'text-[#5C4D3E] hover:text-[#16120E]'
@@ -294,6 +453,7 @@ export const PatronAuthModal: React.FC<PatronAuthModalProps> = ({
             onClick={() => {
               setAuthMode('SIGN_UP');
               setErrorMessage(null);
+              setInfoMessage(null);
             }}
             className={`py-1.5 rounded-md transition-colors ${
               authMode === 'SIGN_UP' ? 'bg-white text-[#16120E] shadow-sm' : 'text-[#5C4D3E] hover:text-[#16120E]'
@@ -397,7 +557,7 @@ export const PatronAuthModal: React.FC<PatronAuthModalProps> = ({
 
           <div>
             <label className="block text-[#5C4D3E] font-medium mb-1">
-              {authMode === 'SIGN_IN' ? 'Email or User ID' : 'Email Address'}
+              {authMode === 'SIGN_IN' ? 'Email or Staff User ID' : 'Email Address'}
             </label>
             <input
               type={authMode === 'SIGN_UP' ? 'email' : 'text'}
@@ -410,9 +570,21 @@ export const PatronAuthModal: React.FC<PatronAuthModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-[#5C4D3E] font-medium mb-1">
-              Password {authMode === 'SIGN_UP' && <span className="text-[10px] font-normal">(min 8 chars)</span>}
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-[#5C4D3E] font-medium">
+                Password {authMode === 'SIGN_UP' && <span className="text-[10px] font-normal">(min 8 chars)</span>}
+              </label>
+              {authMode === 'SIGN_IN' && (
+                <button
+                  type="button"
+                  disabled={isResettingPassword || isSubmitting}
+                  onClick={handleForgotPassword}
+                  className="text-[11px] font-semibold text-[#8B4513] hover:underline disabled:opacity-50"
+                >
+                  {isResettingPassword ? 'Sending reset link...' : 'Forgot Password?'}
+                </button>
+              )}
+            </div>
             <input
               type="password"
               required
@@ -434,10 +606,10 @@ export const PatronAuthModal: React.FC<PatronAuthModalProps> = ({
               {isSubmitting
                 ? authMode === 'SIGN_UP'
                   ? 'Creating Account...'
-                  : 'Verifying Credentials...'
+                  : 'Signing In...'
                 : authMode === 'SIGN_UP'
                 ? 'Create Patron Account'
-                : 'Sign In with Credentials'}
+                : 'Sign In with Email / Credentials'}
             </span>
           </button>
         </form>

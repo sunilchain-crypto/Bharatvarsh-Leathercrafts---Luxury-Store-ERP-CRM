@@ -506,10 +506,12 @@ class MySQLAdapter {
         name VARCHAR(255) NOT NULL,
         sku VARCHAR(64) NOT NULL UNIQUE,
         price DECIMAL(12,2) NOT NULL DEFAULT 0,
+        offer_price DECIMAL(12,2) NULL DEFAULT NULL,
         currency VARCHAR(16) NOT NULL DEFAULT 'INR',
         description TEXT,
         features_json LONGTEXT,
         images_json LONGTEXT,
+        video_url TEXT NULL,
         hsn_code VARCHAR(32),
         gst_rate DECIMAL(5,4) NULL DEFAULT NULL,
         solution_engine ENUM('EVERYDAY_CARRY', 'TRANSIT_FOLIOS', 'LIFETIME_HEIRLOOM_CARE') NOT NULL DEFAULT 'EVERYDAY_CARRY',
@@ -795,7 +797,9 @@ class MySQLAdapter {
     await this.ensureColumn(conn, 'bvl_customers', 'is_active', 'TINYINT(1) NOT NULL DEFAULT 1');
     await this.ensureColumn(conn, 'bvl_customers', 'deleted_at', 'DATETIME NULL');
 
-    // bvl_catalog_products nullable per-SKU GST rate & enum alignment
+    // bvl_catalog_products nullable per-SKU GST rate, offer pricing, video showcase & enum alignment
+    await this.ensureColumn(conn, 'bvl_catalog_products', 'offer_price', 'DECIMAL(12,2) NULL DEFAULT NULL');
+    await this.ensureColumn(conn, 'bvl_catalog_products', 'video_url', 'TEXT NULL');
     await this.ensureColumn(conn, 'bvl_catalog_products', 'gst_rate', 'DECIMAL(5,4) NULL DEFAULT NULL', true);
     await this.ensureColumn(
       conn,
@@ -2059,24 +2063,32 @@ class MySQLAdapter {
         productTypes: safeJsonParse(row.product_types_json, [])
       }));
 
-      const products = (prodRows || []).map((row: any) => ({
-        id: row.id,
-        category: row.category,
-        productType: row.product_type,
-        name: row.name,
-        sku: row.sku,
-        price: Number(row.price),
-        currency: row.currency || 'INR',
-        description: row.description || '',
-        features: safeJsonParse(row.features_json, []),
-        images: safeJsonParse(row.images_json, []),
-        hsnCode: row.hsn_code || '4202',
-        ...(row.gst_rate !== null && row.gst_rate !== undefined ? { gstRate: Number(row.gst_rate) } : {}),
-        solutionEngine: row.solution_engine || 'EVERYDAY_CARRY',
-        inStock: true,
-        allowCustomization: Boolean(row.allow_customization),
-        careKitIncluded: Boolean(row.care_kit_included)
-      }));
+      const products = (prodRows || []).map((row: any) => {
+        const parsedImages = safeJsonParse<string[]>(row.images_json, [])
+          .filter((u: any) => typeof u === 'string' && u.trim().length > 0)
+          .slice(0, 4);
+        return {
+          id: row.id,
+          category: row.category,
+          productType: row.product_type,
+          name: row.name,
+          sku: row.sku,
+          price: Number(row.price),
+          ...(row.offer_price !== null && row.offer_price !== undefined ? { offerPrice: Number(row.offer_price) } : {}),
+          currency: row.currency || 'INR',
+          description: row.description || '',
+          features: safeJsonParse(row.features_json, []),
+          image: parsedImages[0] || '',
+          images: parsedImages,
+          ...(row.video_url ? { videoUrl: String(row.video_url) } : {}),
+          hsnCode: row.hsn_code || '4202',
+          ...(row.gst_rate !== null && row.gst_rate !== undefined ? { gstRate: Number(row.gst_rate) } : {}),
+          solutionEngine: row.solution_engine || 'EVERYDAY_CARRY',
+          inStock: true,
+          allowCustomization: Boolean(row.allow_customization),
+          careKitIncluded: Boolean(row.care_kit_included)
+        };
+      });
 
       return { categories, products };
     } catch (err: any) {
@@ -2115,19 +2127,38 @@ class MySQLAdapter {
 
       const products = Array.isArray(catalog.products) ? catalog.products : [];
       for (const prod of products) {
+        const cleanImages = (
+          Array.isArray(prod.images)
+            ? prod.images
+            : typeof prod.image === 'string' && prod.image.trim()
+            ? [prod.image.trim()]
+            : []
+        )
+          .filter((u: any) => typeof u === 'string' && u.trim().length > 0)
+          .slice(0, 4);
+
+        const cleanOfferPrice =
+          typeof prod.offerPrice === 'number' && Number.isFinite(prod.offerPrice) && prod.offerPrice > 0
+            ? prod.offerPrice
+            : null;
+        const cleanVideoUrl =
+          typeof prod.videoUrl === 'string' && prod.videoUrl.trim().length > 0 ? prod.videoUrl.trim() : null;
+
         await conn.query(
-          `INSERT INTO bvl_catalog_products (id, category, product_type, name, sku, price, currency, description, features_json, images_json, hsn_code, gst_rate, solution_engine, allow_customization, care_kit_included)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO bvl_catalog_products (id, category, product_type, name, sku, price, offer_price, currency, description, features_json, images_json, video_url, hsn_code, gst_rate, solution_engine, allow_customization, care_kit_included)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE
              category = VALUES(category),
              product_type = VALUES(product_type),
              name = VALUES(name),
              sku = VALUES(sku),
              price = VALUES(price),
+             offer_price = VALUES(offer_price),
              currency = VALUES(currency),
              description = VALUES(description),
              features_json = VALUES(features_json),
              images_json = VALUES(images_json),
+             video_url = VALUES(video_url),
              hsn_code = VALUES(hsn_code),
              gst_rate = VALUES(gst_rate),
              solution_engine = VALUES(solution_engine),
@@ -2140,10 +2171,12 @@ class MySQLAdapter {
             prod.name,
             prod.sku,
             prod.price ?? 0,
+            cleanOfferPrice,
             prod.currency || 'INR',
             prod.description || '',
             JSON.stringify(prod.features || []),
-            JSON.stringify(prod.images || []),
+            JSON.stringify(cleanImages),
+            cleanVideoUrl,
             prod.hsnCode || '4202',
             typeof prod.gstRate === 'number' ? prod.gstRate : null,
             prod.solutionEngine || 'EVERYDAY_CARRY',

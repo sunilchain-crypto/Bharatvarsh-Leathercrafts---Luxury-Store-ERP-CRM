@@ -22,14 +22,23 @@ import {
   computeCohortRetention,
   computeSkuReorderVelocity
 } from '../server/rfm.ts';
+import * as XLSX from 'xlsx';
 import {
   isConfiguredCredential,
   createPaymentLink,
   createGatewayOrderOrIntent,
   allocateCourierAwb,
   sendTransactionalEmail,
-  sendWhatsAppMessage
+  sendWhatsAppMessage,
+  dispatchOrderInvoiceEmailToSupport,
+  getSupportOrderEmailRecipient
 } from '../server/integrations.ts';
+import {
+  generateDailyOrderWorkbook,
+  sendDailyOrdersReport,
+  runScheduledDailyOrderReportIfDue,
+  getYesterdayIstDateKey
+} from '../server/dailyOrderReport.ts';
 import { erpSync } from '../server/erpSync.ts';
 import { cartRecovery } from '../server/cartRecovery.ts';
 import { verifyFirebaseIdToken } from '../server/firebaseAuthVerifier.ts';
@@ -40,6 +49,8 @@ import {
 } from '../server/authMiddleware.ts';
 import { hashPassword, verifyPassword, signSessionJwt, verifySessionJwt } from '../server/security.ts';
 import { apiRouter } from '../server/api.ts';
+import { verifyRecaptchaEnterpriseToken } from '../server/recaptcha.ts';
+import { executeRecaptchaEnterprise } from '../lib/recaptcha.ts';
 
 export async function runCriticalPathTests(): Promise<{ passed: boolean; results: Array<{ test: string; status: 'PASS' | 'FAIL'; message: string }> }> {
   const results: Array<{ test: string; status: 'PASS' | 'FAIL'; message: string }> = [];
@@ -3016,7 +3027,9 @@ export async function runCriticalPathTests(): Promise<{ passed: boolean; results
       'is_active TINYINT(1) NOT NULL DEFAULT 1',
       'safety_stock INT NOT NULL DEFAULT 20',
       'recipient_name VARCHAR(191)',
-      'fk_bvl_addr_customer FOREIGN KEY (customer_id) REFERENCES bvl_customers(id) ON DELETE CASCADE'
+      'fk_bvl_addr_customer FOREIGN KEY (customer_id) REFERENCES bvl_customers(id) ON DELETE CASCADE',
+      'offer_price DECIMAL(12,2) NULL DEFAULT NULL',
+      'video_url TEXT NULL'
     ];
     const missingSchemaClauses = expectedChecks.filter(c => !schemaSql.includes(c));
     const missingAdapterClauses = expectedChecks.filter(c => !adapterSrc.includes(c));
@@ -3031,7 +3044,9 @@ export async function runCriticalPathTests(): Promise<{ passed: boolean; results
       'ipAddress?: string;',
       'safetyStock?: number;',
       'addresses?: CustomerAddress[];',
-      'recipientName?: string;'
+      'recipientName?: string;',
+      'offerPrice?: number;',
+      'videoUrl?: string;'
     ];
     const missingTypeFields = expectedTypes.filter(f => !typesSrc.includes(f));
 
@@ -3158,9 +3173,20 @@ export async function runCriticalPathTests(): Promise<{ passed: boolean; results
       const sampleCatalog = structuredClone(db.getRawCatalog());
       if (sampleCatalog.products[0]) {
         sampleCatalog.products[0].gstRate = 0.05;
+        sampleCatalog.products[0].offerPrice = Math.max(1000, Math.round(sampleCatalog.products[0].price * 0.85));
+        sampleCatalog.products[0].images = [
+          '/assets/images/rt_slot1.jpg',
+          '/assets/images/rt_slot2.jpg',
+          '/assets/images/rt_slot3.jpg',
+          '/assets/images/rt_slot4.jpg'
+        ];
+        sampleCatalog.products[0].image = '/assets/images/rt_slot1.jpg';
+        sampleCatalog.products[0].videoUrl = '/assets/images/rt_showcase.mp4';
       }
       if (sampleCatalog.products[1]) {
         delete sampleCatalog.products[1].gstRate;
+        delete sampleCatalog.products[1].offerPrice;
+        delete sampleCatalog.products[1].videoUrl;
       }
 
       // In-memory MySQL table store captured from INSERT queries
@@ -3320,15 +3346,17 @@ export async function runCriticalPathTests(): Promise<{ passed: boolean; results
               name: params[3],
               sku: params[4],
               price: params[5],
-              currency: params[6],
-              description: params[7],
-              features_json: params[8],
-              images_json: params[9],
-              hsn_code: params[10],
-              gst_rate: params[11],
-              solution_engine: params[12],
-              allow_customization: params[13],
-              care_kit_included: params[14]
+              offer_price: params[6],
+              currency: params[7],
+              description: params[8],
+              features_json: params[9],
+              images_json: params[10],
+              video_url: params[11],
+              hsn_code: params[12],
+              gst_rate: params[13],
+              solution_engine: params[14],
+              allow_customization: params[15],
+              care_kit_included: params[16]
             });
           }
           return [[]];
@@ -3382,7 +3410,12 @@ export async function runCriticalPathTests(): Promise<{ passed: boolean; results
         hydratedTicket?.customerPhone === '+91 98201 77665' &&
         hydratedAudit?.ipAddress === '203.0.113.42' &&
         hydratedProd0?.gstRate === 0.05 &&
+        hydratedProd0?.offerPrice === sampleCatalog.products[0]?.offerPrice &&
+        hydratedProd0?.images?.length === 4 &&
+        hydratedProd0?.image === hydratedProd0?.images?.[0] &&
+        hydratedProd0?.videoUrl === '/assets/images/rt_showcase.mp4' &&
         hydratedProd1?.gstRate === undefined &&
+        hydratedProd1?.offerPrice === undefined &&
         Boolean(hydratedAddr?.street) &&
         Boolean(hydratedCust0?.addresses && hydratedCust0.addresses.length > 0);
 
@@ -3390,13 +3423,13 @@ export async function runCriticalPathTests(): Promise<{ passed: boolean; results
         results.push({
           test: 'MySQL ensureTables() Migrations & 21-Table Round-Trip Hydration',
           status: 'PASS',
-          message: 'Validated INFORMATION_SCHEMA column/ENUM/index migrations and lossless round-trip hydration across RBAC, soft-delete, GST, corporate leads, tickets, and audit logs.'
+          message: 'Validated INFORMATION_SCHEMA column/ENUM/index migrations and lossless round-trip hydration across RBAC, soft-delete, GST, offerPrice, 4-image+video catalog, corporate leads, tickets, and audit logs.'
         });
       } else {
         results.push({
           test: 'MySQL ensureTables() Migrations & 21-Table Round-Trip Hydration',
           status: 'FAIL',
-          message: `ddl=${addedMissingCols}, agentRole=${hydratedAgent?.role}, patronCred=${Boolean(hydratedPatronCred)}, softDel=${hydratedSoftDeleted?.isActive}, lead=${hydratedLead?.erpOrderId}, ticketPhone=${hydratedTicket?.customerPhone}, gst=${hydratedProd0?.gstRate}/${hydratedProd1?.gstRate}`
+          message: `ddl=${addedMissingCols}, agentRole=${hydratedAgent?.role}, patronCred=${Boolean(hydratedPatronCred)}, softDel=${hydratedSoftDeleted?.isActive}, lead=${hydratedLead?.erpOrderId}, ticketPhone=${hydratedTicket?.customerPhone}, gst=${hydratedProd0?.gstRate}/${hydratedProd1?.gstRate}, offer=${hydratedProd0?.offerPrice}, imgs=${hydratedProd0?.images?.length}, vid=${hydratedProd0?.videoUrl}`
         });
       }
     } finally {
@@ -3802,6 +3835,631 @@ export async function runCriticalPathTests(): Promise<{ passed: boolean; results
   } catch (e: any) {
     results.push({
       test: 'Indian Validation, Patron Address Auto-Fill & Branded GST Invoice/Credit Note PDFs',
+      status: 'FAIL',
+      message: e.message
+    });
+  }
+
+  // TEST 38: Phase 2 — Media Upload (/assets/images/), 4-Image + 1-Video Gallery & Authoritative Offer Pricing
+  try {
+    const dbFile = path.resolve(process.cwd(), 'src/server/data/store_db.json');
+    const catalogFile = path.resolve(process.cwd(), 'src/server/catalog.json');
+    const preTestDbRaw = fs.existsSync(dbFile) ? fs.readFileSync(dbFile, 'utf-8') : null;
+    const preTestCatalogRaw = fs.existsSync(catalogFile) ? fs.readFileSync(catalogFile, 'utf-8') : null;
+    const uploadedDiskFiles: string[] = [];
+
+    const app = express();
+    app.use(express.json({ limit: '75mb' }));
+    const publicImagesDir = path.resolve(process.cwd(), 'public', 'assets', 'images');
+    fs.mkdirSync(publicImagesDir, { recursive: true });
+    app.use('/assets/images', express.static(publicImagesDir));
+    app.use('/api', apiRouter);
+
+    const server = await new Promise<any>(resolve => {
+      const s = app.listen(0, '127.0.0.1', () => resolve(s));
+    });
+    const port = (server.address() as any).port;
+
+    try {
+      const adminJwt = signSessionJwt({
+        sub: 'uid_master_sunil',
+        email: 'sunilchain@gmail.com',
+        name: 'Sunil Chainani',
+        role: 'STORE_MANAGER'
+      });
+      const patronJwt = signSessionJwt({
+        sub: 'uid_patron_media',
+        email: 'patron.media@example.com',
+        name: 'Patron Media',
+        role: 'PATRON'
+      });
+
+      // 1. RBAC rejection for unauthenticated and PATRON users
+      const unauthUploadRes = await fetch(`http://127.0.0.1:${port}/api/store-management/upload-media`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: 'test.png', mimeType: 'image/png', dataBase64: 'iVBORw0KGgo=' })
+      });
+      const patronUploadRes = await fetch(`http://127.0.0.1:${port}/api/store-management/upload-media`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${patronJwt}` },
+        body: JSON.stringify({ filename: 'test.png', mimeType: 'image/png', dataBase64: 'iVBORw0KGgo=' })
+      });
+
+      // 2. Reject unsupported file extensions (.svg)
+      const invalidExtRes = await fetch(`http://127.0.0.1:${port}/api/store-management/upload-media`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminJwt}` },
+        body: JSON.stringify({ filename: 'script.svg', mimeType: 'image/svg+xml', dataBase64: 'PHN2Zz48L3N2Zz4=' })
+      });
+
+      // 3. Multipart PNG upload saved to public/assets/images/ & served over HTTP
+      const pngBytes = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWScAAAAASUVORK5CYII=',
+        'base64'
+      );
+      const formData = new FormData();
+      formData.append('file', new Blob([pngBytes], { type: 'image/png' }), 'Atelier Craft Shot.png');
+      const pngUploadRes = await fetch(`http://127.0.0.1:${port}/api/store-management/upload-media`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminJwt}` },
+        body: formData
+      });
+      const pngUploadJson = await pngUploadRes.json();
+      if (pngUploadJson?.filename) {
+        uploadedDiskFiles.push(path.join(publicImagesDir, pngUploadJson.filename));
+        const distImagesFile = path.resolve(process.cwd(), 'dist', 'assets', 'images', pngUploadJson.filename);
+        if (fs.existsSync(distImagesFile)) uploadedDiskFiles.push(distImagesFile);
+      }
+
+      const servedImgRes = await fetch(`http://127.0.0.1:${port}${pngUploadJson.url}`);
+      const servedImgBuf = Buffer.from(await servedImgRes.arrayBuffer());
+
+      // 4. JSON/base64 MP4 video upload saved to /assets/images/
+      const mp4Sample = Buffer.from('00000018667479706d703432000000006d70343269736f6d', 'hex');
+      const vidUploadRes = await fetch(`http://127.0.0.1:${port}/api/store-management/upload-media`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminJwt}` },
+        body: JSON.stringify({
+          filename: 'showcase_reel.mp4',
+          mimeType: 'video/mp4',
+          dataBase64: mp4Sample.toString('base64')
+        })
+      });
+      const vidUploadJson = await vidUploadRes.json();
+      if (vidUploadJson?.filename) {
+        uploadedDiskFiles.push(path.join(publicImagesDir, vidUploadJson.filename));
+        const distVidFile = path.resolve(process.cwd(), 'dist', 'assets', 'images', vidUploadJson.filename);
+        if (fs.existsSync(distVidFile)) uploadedDiskFiles.push(distVidFile);
+      }
+
+      // 5. Reject offerPrice > MRP and > 4 images on POST /api/store-management/catalog
+      const currentCatalog = structuredClone(db.getRawCatalog());
+      const baseProd = structuredClone(currentCatalog.products[0]);
+
+      const badOfferCatalog = structuredClone(currentCatalog);
+      badOfferCatalog.products[0] = {
+        ...baseProd,
+        price: 10000,
+        offerPrice: 12500
+      };
+      const badOfferRes = await fetch(`http://127.0.0.1:${port}/api/store-management/catalog`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminJwt}` },
+        body: JSON.stringify({ catalog: badOfferCatalog })
+      });
+
+      const badImagesCatalog = structuredClone(currentCatalog);
+      badImagesCatalog.products[0] = {
+        ...baseProd,
+        images: [
+          pngUploadJson.url,
+          '/assets/images/slot2.jpg',
+          '/assets/images/slot3.jpg',
+          '/assets/images/slot4.jpg',
+          '/assets/images/slot5.jpg'
+        ]
+      };
+      const badImagesRes = await fetch(`http://127.0.0.1:${port}/api/store-management/catalog`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminJwt}` },
+        body: JSON.stringify({ catalog: badImagesCatalog })
+      });
+
+      // 6. Save valid 4-image + 1-video + offerPrice catalog update
+      const validCatalog = structuredClone(currentCatalog);
+      validCatalog.products[0] = {
+        ...baseProd,
+        price: 12000,
+        offerPrice: 9600,
+        gstRate: 0.18,
+        images: [
+          pngUploadJson.url,
+          '/assets/images/slot_2.jpg',
+          '/assets/images/slot_3.jpg',
+          '/assets/images/slot_4.jpg'
+        ],
+        videoUrl: vidUploadJson.url
+      };
+      delete (validCatalog.products[0] as any).image;
+
+      const saveValidRes = await fetch(`http://127.0.0.1:${port}/api/store-management/catalog`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminJwt}` },
+        body: JSON.stringify({ catalog: validCatalog })
+      });
+      const saveValidJson = await saveValidRes.json();
+      const savedProd0 = saveValidJson?.catalog?.products?.[0];
+
+      // 7. Authoritative checkout calculation uses offerPrice (9600) despite tampered unitPrice
+      const orderRes = await fetch(`http://127.0.0.1:${port}/api/checkout/place-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerName: 'Vikramaditya Joshi',
+          customerEmail: 'vikram.offer@example.com',
+          customerPhone: '+919823011223',
+          paymentGateway: 'RAZORPAY',
+          discountCode: 'HEIRLOOM10',
+          shippingAddress: {
+            street: 'Plot 14, Prabhat Road, Deccan Gymkhana',
+            city: 'Pune',
+            state: 'Maharashtra',
+            pincode: '411004',
+            country: 'India'
+          },
+          items: [
+            {
+              productId: savedProd0.id,
+              sku: savedProd0.sku,
+              quantity: 1,
+              unitPrice: 999999
+            }
+          ]
+        })
+      });
+      const orderJson = await orderRes.json();
+      const placedOrder = orderJson.order;
+      // 9600 subtotal, 10% HEIRLOOM10 discount = 960 -> taxable 8640 -> 18% GST = 1555 -> total 10195
+      const expectedDiscount = 960;
+      const expectedTax = Math.round((9600 - 960) * 0.18);
+      const expectedTotal = 9600 - expectedDiscount + expectedTax;
+
+      const uploadChecksOk =
+        unauthUploadRes.status === 401 &&
+        patronUploadRes.status === 403 &&
+        invalidExtRes.status === 400 &&
+        pngUploadRes.status === 201 &&
+        String(pngUploadJson.url).startsWith('/assets/images/') &&
+        servedImgRes.status === 200 &&
+        servedImgBuf.equals(pngBytes) &&
+        vidUploadRes.status === 201 &&
+        vidUploadJson.mediaType === 'video' &&
+        String(vidUploadJson.url).startsWith('/assets/images/');
+
+      const catalogAndPricingOk =
+        badOfferRes.status === 400 &&
+        badImagesRes.status === 400 &&
+        saveValidRes.status === 200 &&
+        savedProd0?.images?.length === 4 &&
+        savedProd0?.image === pngUploadJson.url &&
+        savedProd0?.videoUrl === vidUploadJson.url &&
+        savedProd0?.offerPrice === 9600 &&
+        orderRes.status === 201 &&
+        placedOrder?.subtotal === 9600 &&
+        placedOrder?.discountAmount === expectedDiscount &&
+        placedOrder?.taxAmount === expectedTax &&
+        placedOrder?.totalAmount === expectedTotal;
+
+      if (uploadChecksOk && catalogAndPricingOk) {
+        results.push({
+          test: 'Phase 2: /assets/images/ Media Upload, 4-Image + 1-Video Gallery & Authoritative Offer Pricing',
+          status: 'PASS',
+          message: 'Verified RBAC-protected PNG/MP4 uploads to /assets/images/, 4-image + 1-video persistence, offerPrice <= MRP enforcement, and server-authoritative offerPrice checkout math.'
+        });
+      } else {
+        results.push({
+          test: 'Phase 2: /assets/images/ Media Upload, 4-Image + 1-Video Gallery & Authoritative Offer Pricing',
+          status: 'FAIL',
+          message: `uploadOk=${uploadChecksOk} (statuses=${unauthUploadRes.status}/${patronUploadRes.status}/${invalidExtRes.status}/${pngUploadRes.status}/${servedImgRes.status}/${vidUploadRes.status}), pricingOk=${catalogAndPricingOk} (badOffer=${badOfferRes.status}, badImgs=${badImagesRes.status}, save=${saveValidRes.status}, subtotal=${placedOrder?.subtotal}, total=${placedOrder?.totalAmount} vs ${expectedTotal})`
+        });
+      }
+    } finally {
+      await new Promise<void>(resolve => server.close(() => resolve()));
+      for (const f of uploadedDiskFiles) {
+        if (f && fs.existsSync(f)) {
+          fs.unlinkSync(f);
+        }
+      }
+      if (preTestDbRaw) {
+        fs.writeFileSync(dbFile, preTestDbRaw, 'utf-8');
+        (db as any).state = JSON.parse(preTestDbRaw);
+      }
+      if (preTestCatalogRaw) {
+        fs.writeFileSync(catalogFile, preTestCatalogRaw, 'utf-8');
+        (db as any).catalogCache = JSON.parse(preTestCatalogRaw);
+      }
+    }
+  } catch (e: any) {
+    results.push({
+      test: 'Phase 2: /assets/images/ Media Upload, 4-Image + 1-Video Gallery & Authoritative Offer Pricing',
+      status: 'FAIL',
+      message: e.message
+    });
+  }
+
+  // TEST 39: Phase 3 — Cart Recovery Telemetry, Support Invoice Email & Daily Post-Midnight Excel Report
+  try {
+    const dbFile = path.resolve(process.cwd(), 'src/server/data/store_db.json');
+    const preTestDbRaw = fs.existsSync(dbFile) ? fs.readFileSync(dbFile, 'utf-8') : null;
+    const prevSmtpPass = process.env.SMTP_PASS;
+
+    const app = express();
+    app.use(express.json());
+    app.use('/api', apiRouter);
+
+    const server = await new Promise<any>(resolve => {
+      const s = app.listen(0, '127.0.0.1', () => resolve(s));
+    });
+    const port = (server.address() as any).port;
+
+    try {
+      // Force deterministic sandbox telemetry for SMTP verification
+      delete process.env.SMTP_PASS;
+
+      const masterJwt = signSessionJwt({
+        sub: 'uid_master_sunil',
+        email: 'sunilchain@gmail.com',
+        name: 'Sunil Chainani',
+        role: 'STORE_MANAGER'
+      });
+      const delegatedManagerJwt = signSessionJwt({
+        sub: 'uid_delegated_mgr',
+        email: 'delegated.manager@bharatvarshcrafts.com',
+        name: 'Delegated Store Manager',
+        role: 'STORE_MANAGER'
+      });
+
+      // 1. Seed a bad cart (no valid email) and a valid abandoned cart
+      const badCartId = `cart_bad_email_${Date.now()}`;
+      const goodCartId = `cart_phase3_${Date.now()}`;
+      await db.runAtomicMutation(() => {
+        db.saveCartState({
+          id: badCartId,
+          email: '',
+          phone: '+919820012345',
+          items: [
+            {
+              productId: 'prod-m-belt-01',
+              productName: 'The Rajputana Bridle Belt',
+              sku: 'BVL-MEN-BLT-01',
+              quantity: 1,
+              unitPrice: 3800,
+              leatherType: 'VEGETABLE_TANNED_HERITAGE',
+              imageUrl: '/assets/images/mens_collection_editorial_1794461810572.jpg'
+            }
+          ],
+          subtotal: 3800,
+          isAbandoned: true
+        });
+        db.saveCartState({
+          id: goodCartId,
+          email: 'aarav.phase3@example.com',
+          phone: '+919820054321',
+          items: [
+            {
+              productId: 'prod-m-belt-01',
+              productName: 'The Rajputana Bridle Belt',
+              sku: 'BVL-MEN-BLT-01',
+              quantity: 1,
+              unitPrice: 3800,
+              leatherType: 'VEGETABLE_TANNED_HERITAGE',
+              imageUrl: '/assets/images/mens_collection_editorial_1794461810572.jpg'
+            }
+          ],
+          subtotal: 3800,
+          isAbandoned: true
+        });
+      });
+
+      // Missing email must return 400 and keep stage DETECTED
+      const badTriggerRes = await fetch(`http://127.0.0.1:${port}/api/crm/cart-recovery/trigger`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${masterJwt}` },
+        body: JSON.stringify({ cartId: badCartId, channel: 'EMAIL' })
+      });
+      const badCartAfter = db.getCarts().find(c => c.id === badCartId);
+
+      // Valid abandoned cart triggers email dispatch + telemetry + /?resume= URL
+      const goodTriggerRes = await fetch(`http://127.0.0.1:${port}/api/crm/cart-recovery/trigger`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${masterJwt}` },
+        body: JSON.stringify({ cartId: goodCartId, channel: 'EMAIL' })
+      });
+      const goodTriggerJson = await goodTriggerRes.json();
+
+      // Immediate second trigger must hit cooldown without duplicating
+      const cooldownRes = await fetch(`http://127.0.0.1:${port}/api/crm/cart-recovery/trigger`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${masterJwt}` },
+        body: JSON.stringify({ cartId: goodCartId, channel: 'EMAIL' })
+      });
+      const cooldownJson = await cooldownRes.json();
+
+      // 2. Place a real checkout order -> triggers async Support invoice dispatch & lets us inspect IST Excel workbook
+      const orderRes = await fetch(`http://127.0.0.1:${port}/api/checkout/place-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerName: 'Vikramaditya Joshi',
+          customerEmail: 'vikram.phase3@example.com',
+          customerPhone: '+919811122233',
+          paymentGateway: 'RAZORPAY',
+          shippingAddress: {
+            street: '42 Koregaon Park Lane 6',
+            city: 'Pune',
+            state: 'Maharashtra',
+            pincode: '411001',
+            country: 'India'
+          },
+          items: [
+            {
+              productId: 'prod-m-belt-01',
+              sku: 'BVL-MEN-BLT-01',
+              quantity: 1,
+              unitPrice: 3800
+            }
+          ]
+        })
+      });
+      const orderJson = await orderRes.json();
+      const placedOrder = orderJson.order;
+
+      // Wait briefly for non-blocking async dispatchOrderConfirmationAndCareGuide
+      await new Promise(resolve => setTimeout(resolve, 150));
+      const supportDirectResult = await dispatchOrderInvoiceEmailToSupport(placedOrder);
+      const supportRecipient = getSupportOrderEmailRecipient();
+      const auditLogsAfterOrder = db.getAuditLogs();
+      const hasNotificationAudit = auditLogsAfterOrder.some(
+        a =>
+          a.action === 'ORDER_NOTIFICATION_DISPATCHED' &&
+          a.details.includes(placedOrder.orderNumber) &&
+          a.details.includes('SupportInvoice:')
+      );
+
+      // 3. Daily Excel Workbook (.xlsx) generation & SheetJS validation
+      const istOffsetMs = 5.5 * 60 * 60 * 1000;
+      const orderIstDateKey = new Date(new Date(placedOrder.createdAt).getTime() + istOffsetMs)
+        .toISOString()
+        .slice(0, 10);
+
+      const workbookReport = generateDailyOrderWorkbook(orderIstDateKey);
+      const parsedWb = XLSX.read(workbookReport.buffer, { type: 'buffer' });
+      const ordersSheetRows = XLSX.utils.sheet_to_json<Record<string, any>>(parsedWb.Sheets['Orders']);
+      const summarySheetRows = XLSX.utils.sheet_to_json<Record<string, any>>(parsedWb.Sheets['Summary']);
+      const matchedExcelRow = ordersSheetRows.find(r => r['Order Number'] === placedOrder.orderNumber);
+      const expectedHeadersPresent =
+        matchedExcelRow &&
+        'Order Date/Time (IST)' in matchedExcelRow &&
+        'Invoice Number' in matchedExcelRow &&
+        'Taxable Value (INR)' in matchedExcelRow &&
+        'CGST (INR)' in matchedExcelRow &&
+        'SGST (INR)' in matchedExcelRow &&
+        'IGST (INR)' in matchedExcelRow &&
+        'Total Amount (INR)' in matchedExcelRow &&
+        'AWB Number' in matchedExcelRow;
+
+      // 4. Master Admin RBAC on POST /api/admin/reports/send-daily-orders
+      const unauthReportRes = await fetch(`http://127.0.0.1:${port}/api/admin/reports/send-daily-orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: orderIstDateKey })
+      });
+      const delegatedReportRes = await fetch(`http://127.0.0.1:${port}/api/admin/reports/send-daily-orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${delegatedManagerJwt}` },
+        body: JSON.stringify({ date: orderIstDateKey })
+      });
+      const masterReportRes = await fetch(`http://127.0.0.1:${port}/api/admin/reports/send-daily-orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${masterJwt}` },
+        body: JSON.stringify({ date: orderIstDateKey })
+      });
+      const masterReportJson = await masterReportRes.json();
+
+      // 5. Duplicate-dispatch guard for scheduler (lastDailyReportDate)
+      const yesterdayKey = getYesterdayIstDateKey();
+      await db.runAtomicMutation(() => {
+        db.setLastDailyReportDate(yesterdayKey);
+      });
+      const dupCheck = await sendDailyOrdersReport({ force: false, targetDateIst: yesterdayKey });
+      await runScheduledDailyOrderReportIfDue();
+
+      const recoveryOk =
+        badTriggerRes.status === 400 &&
+        badCartAfter?.recoveryStage === 'DETECTED' &&
+        goodTriggerRes.status === 200 &&
+        goodTriggerJson.success === true &&
+        goodTriggerJson.deliveryMode === 'SANDBOX_FALLBACK' &&
+        Boolean(goodTriggerJson.messageId) &&
+        String(goodTriggerJson.fallbackReason || '').includes('SMTP_PASS') &&
+        goodTriggerJson.cart?.recoveryStage === 'EMAIL_SENT' &&
+        String(goodTriggerJson.cart?.checkoutUrl || '').startsWith(`/?resume=${goodCartId}&token=`) &&
+        cooldownRes.status === 200 &&
+        cooldownJson.success === false;
+
+      const supportEmailOk =
+        orderRes.status === 201 &&
+        supportRecipient === 'Support@bharatvarshcrafts.com' &&
+        supportDirectResult.channel === 'EMAIL' &&
+        Boolean(supportDirectResult.messageId) &&
+        hasNotificationAudit;
+
+      const excelReportOk =
+        parsedWb.SheetNames.includes('Orders') &&
+        parsedWb.SheetNames.includes('Summary') &&
+        workbookReport.filename === `Orders_${orderIstDateKey}.xlsx` &&
+        Boolean(expectedHeadersPresent) &&
+        summarySheetRows.some(r => r.Metric === 'Total Orders' && Number(r.Value) >= 1) &&
+        unauthReportRes.status === 401 &&
+        delegatedReportRes.status === 403 &&
+        masterReportRes.status === 200 &&
+        masterReportJson.success === true &&
+        masterReportJson.skipped === false &&
+        masterReportJson.filename === `Orders_${orderIstDateKey}.xlsx` &&
+        dupCheck.skipped === true;
+
+      if (recoveryOk && supportEmailOk && excelReportOk) {
+        results.push({
+          test: 'Phase 3: Cart Recovery SMTP Telemetry, Support Invoice Email & Daily IST Excel Report',
+          status: 'PASS',
+          message:
+            'Verified abandoned cart recovery validation/telemetry & /?resume= links, non-blocking Support@bharatvarshcrafts.com PDF invoice email, SheetJS Orders+Summary .xlsx export, Master Admin RBAC, and lastDailyReportDate duplicate guard.'
+        });
+      } else {
+        results.push({
+          test: 'Phase 3: Cart Recovery SMTP Telemetry, Support Invoice Email & Daily IST Excel Report',
+          status: 'FAIL',
+          message: `recoveryOk=${recoveryOk} (bad=${badTriggerRes.status}, good=${goodTriggerRes.status}/${goodTriggerJson.deliveryMode}, url=${goodTriggerJson.cart?.checkoutUrl}), supportEmailOk=${supportEmailOk} (audit=${hasNotificationAudit}), excelReportOk=${excelReportOk} (rbac=${unauthReportRes.status}/${delegatedReportRes.status}/${masterReportRes.status}, dupSkipped=${dupCheck.skipped})`
+        });
+      }
+    } finally {
+      await new Promise<void>(resolve => server.close(() => resolve()));
+      if (prevSmtpPass !== undefined) {
+        process.env.SMTP_PASS = prevSmtpPass;
+      } else {
+        delete process.env.SMTP_PASS;
+      }
+      if (preTestDbRaw) {
+        fs.writeFileSync(dbFile, preTestDbRaw, 'utf-8');
+        (db as any).state = JSON.parse(preTestDbRaw);
+      }
+    }
+  } catch (e: any) {
+    results.push({
+      test: 'Phase 3: Cart Recovery SMTP Telemetry, Support Invoice Email & Daily IST Excel Report',
+      status: 'FAIL',
+      message: e.message
+    });
+  }
+
+  // TEST 40: Google reCAPTCHA Enterprise Script, Client Action Execution & Server Assessment Verifier
+  try {
+    const htmlContent = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
+    const hasScriptTag = htmlContent.includes(
+      'https://www.google.com/recaptcha/enterprise.js?render=6Le3mCcuAAAAAJCQBRIMvqTGd4RadX5JvnNubovL'
+    );
+
+    const prevKey = process.env.RECAPTCHA_ENTERPRISE_API_KEY;
+    const prevFetch = globalThis.fetch;
+    const prevWindow = (globalThis as any).window;
+
+    try {
+      // 1. Client helper invokes grecaptcha.enterprise.ready + execute(siteKey, { action: 'LOGIN' })
+      let capturedSiteKey = '';
+      let capturedAction = '';
+      (globalThis as any).window = {
+        setTimeout: globalThis.setTimeout,
+        clearTimeout: globalThis.clearTimeout,
+        grecaptcha: {
+          enterprise: {
+            ready: (cb: () => void) => cb(),
+            execute: async (siteKey: string, opts: { action: string }) => {
+              capturedSiteKey = siteKey;
+              capturedAction = opts.action;
+              return 'mock_enterprise_token_login_123';
+            }
+          }
+        }
+      };
+      const clientToken = await executeRecaptchaEnterprise('LOGIN');
+
+      // 2. Server pass-through when RECAPTCHA_ENTERPRISE_API_KEY is unset
+      delete process.env.RECAPTCHA_ENTERPRISE_API_KEY;
+      const passThrough = await verifyRecaptchaEnterpriseToken({
+        token: undefined,
+        expectedAction: 'LOGIN'
+      });
+
+      // 3. Server enforcement when RECAPTCHA_ENTERPRISE_API_KEY is configured
+      process.env.RECAPTCHA_ENTERPRISE_API_KEY = 'AIzaTestEnterpriseServerKey12345';
+      const missingRes = await verifyRecaptchaEnterpriseToken({
+        token: '',
+        expectedAction: 'CHECKOUT'
+      });
+
+      let requestedAssessmentUrl = '';
+      (globalThis as any).fetch = async (url: string, init?: any) => {
+        requestedAssessmentUrl = url;
+        const parsedBody = JSON.parse(String(init?.body || '{}'));
+        const tok = parsedBody?.event?.token;
+        if (tok === 'good_checkout_tok') {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              tokenProperties: { valid: true, action: 'CHECKOUT' },
+              riskAnalysis: { score: 0.9 }
+            })
+          } as any;
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            tokenProperties: { valid: true, action: 'LOGIN' },
+            riskAnalysis: { score: 0.1 }
+          })
+        } as any;
+      };
+
+      const mismatchRes = await verifyRecaptchaEnterpriseToken({
+        token: 'wrong_action_tok',
+        expectedAction: 'CHECKOUT'
+      });
+      const validRes = await verifyRecaptchaEnterpriseToken({
+        token: 'good_checkout_tok',
+        expectedAction: 'CHECKOUT'
+      });
+
+      const ok =
+        hasScriptTag &&
+        clientToken === 'mock_enterprise_token_login_123' &&
+        capturedSiteKey === '6Le3mCcuAAAAAJCQBRIMvqTGd4RadX5JvnNubovL' &&
+        capturedAction === 'LOGIN' &&
+        passThrough.allowed === true &&
+        passThrough.mode === 'CLIENT_ONLY_PASS' &&
+        missingRes.allowed === false &&
+        mismatchRes.allowed === false &&
+        validRes.allowed === true &&
+        validRes.mode === 'LIVE' &&
+        validRes.score === 0.9 &&
+        requestedAssessmentUrl.includes('recaptchaenterprise.googleapis.com/v1/projects/');
+
+      if (ok) {
+        results.push({
+          test: 'Google reCAPTCHA Enterprise Script, Action Execution & Assessment Verification',
+          status: 'PASS',
+          message:
+            'Verified index.html reCAPTCHA Enterprise script, client grecaptcha.enterprise.execute({action: LOGIN}), client-only pass-through when unconfigured, and live Enterprise assessment scoring/action checks.'
+        });
+      } else {
+        results.push({
+          test: 'Google reCAPTCHA Enterprise Script, Action Execution & Assessment Verification',
+          status: 'FAIL',
+          message: `hasScript=${hasScriptTag}, clientToken=${clientToken}, siteKey=${capturedSiteKey}, action=${capturedAction}, missing=${missingRes.allowed}, mismatch=${mismatchRes.allowed}, valid=${validRes.allowed}`
+        });
+      }
+    } finally {
+      if (prevKey !== undefined) process.env.RECAPTCHA_ENTERPRISE_API_KEY = prevKey;
+      else delete process.env.RECAPTCHA_ENTERPRISE_API_KEY;
+      globalThis.fetch = prevFetch;
+      if (prevWindow !== undefined) (globalThis as any).window = prevWindow;
+      else delete (globalThis as any).window;
+    }
+  } catch (e: any) {
+    results.push({
+      test: 'Google reCAPTCHA Enterprise Script, Action Execution & Assessment Verification',
       status: 'FAIL',
       message: e.message
     });

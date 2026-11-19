@@ -4,7 +4,8 @@
  */
 
 import { db } from './db.ts';
-import { Order, OrderItem, GSTCreditNote, ProductInventory } from '../types/index.ts';
+import { Order, OrderItem, GSTCreditNote } from '../types/index.ts';
+import { dispatchOrderConfirmationAndCareGuide } from './integrations.ts';
 
 export interface CustomQuotePayload {
   leadId?: string;
@@ -211,6 +212,25 @@ export class ERPSynchronizer {
         })`
       );
     });
+
+    // Async transactional email with PDF invoice to Support@bharatvarshcrafts.com & patron
+    dispatchOrderConfirmationAndCareGuide(newOrder)
+      .then((delivery) => {
+        db.logAudit(
+          'integrations',
+          'ORDER_NOTIFICATION_DISPATCHED',
+          'STORE_MANAGEMENT',
+          `ERP Order ${newOrder.orderNumber} notifications -> PatronEmail:${delivery.emailDelivery.mode}, SupportInvoice:${delivery.supportEmailDelivery.mode}, WhatsApp:${delivery.whatsappDelivery.mode}`
+        );
+      })
+      .catch((err: any) => {
+        db.logAudit(
+          'integrations',
+          'ORDER_NOTIFICATION_ERROR',
+          'STORE_MANAGEMENT',
+          `Failed order notification dispatch for ${newOrder.orderNumber}: ${err?.message || err}`
+        );
+      });
 
     return newOrder;
   }

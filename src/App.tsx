@@ -88,6 +88,22 @@ export default function App() {
     }
   }, [isSignedIn, isAuthorizedStaff, staffRole, currentTab]);
 
+  const applyCatalogWithCartPriceSync = (nextCatalog: { categories: any[]; products: any[] }) => {
+    setCatalog(nextCatalog);
+    const liveProducts = nextCatalog.products || [];
+    setCartItems((prev) =>
+      prev.map((item) => {
+        const match = liveProducts.find((p: any) => p.id === item.productId || p.sku === item.sku);
+        if (!match) return item;
+        const effectivePrice =
+          typeof match.offerPrice === 'number' && match.offerPrice > 0 && match.offerPrice <= match.price
+            ? match.offerPrice
+            : match.price;
+        return effectivePrice !== item.unitPrice ? { ...item, unitPrice: effectivePrice } : item;
+      })
+    );
+  };
+
   const fetchCatalog = async (): Promise<{ categories: any[]; products: any[] } | null> => {
     try {
       const [catRes, cfgRes] = await Promise.all([
@@ -100,7 +116,7 @@ export default function App() {
       }
       const data = await catRes.json();
       if (data.success && data.catalog) {
-        setCatalog(data.catalog);
+        applyCatalogWithCartPriceSync(data.catalog);
         return data.catalog;
       }
     } catch (e) {
@@ -215,7 +231,7 @@ export default function App() {
         }
       } else {
         setCurrentUser((prev) => {
-          if (prev?.authProvider === 'GOOGLE') {
+          if (prev?.authProvider === 'GOOGLE' || prev?.authProvider === 'FIREBASE') {
             setAuthToken('');
             setCurrentTab('storefront');
             try {
@@ -467,7 +483,7 @@ export default function App() {
             <CatalogManager
               catalog={catalog}
               authToken={authToken}
-              onCatalogUpdated={setCatalog}
+              onCatalogUpdated={applyCatalogWithCartPriceSync}
             />
           </div>
         )}

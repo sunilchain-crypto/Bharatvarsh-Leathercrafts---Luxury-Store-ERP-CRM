@@ -12,7 +12,7 @@ export interface AuthUser {
   isMasterAdmin?: boolean;
   isStoreManagementAuthorized?: boolean;
   photoURL?: string;
-  authProvider?: 'GOOGLE' | 'CREDENTIALS';
+  authProvider?: 'GOOGLE' | 'FIREBASE' | 'CREDENTIALS';
 }
 
 export interface CustomerAddress {
@@ -221,6 +221,40 @@ export interface SupportTicket {
 }
 
 export type SolutionEngine = 'EVERYDAY_CARRY' | 'TRANSIT_FOLIOS' | 'LIFETIME_HEIRLOOM_CARE';
+
+export interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  productTypes: string[];
+}
+
+export interface Product {
+  id: string;
+  category: string;
+  productType: string;
+  name: string;
+  sku: string;
+  price: number;
+  offerPrice?: number;
+  currency: string;
+  description: string;
+  features: string[];
+  image?: string;
+  images: string[];
+  videoUrl?: string;
+  hsnCode: string;
+  gstRate?: number;
+  solutionEngine: SolutionEngine;
+  inStock?: boolean;
+  isActive?: boolean;
+  stockCount?: number;
+  puneStock?: number;
+  mumbaiStock?: number;
+  allowCustomization: boolean;
+  careKitIncluded: boolean;
+}
 
 export interface CartItem {
   productId: string;

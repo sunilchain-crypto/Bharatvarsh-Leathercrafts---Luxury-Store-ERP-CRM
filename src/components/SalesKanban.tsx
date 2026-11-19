@@ -23,7 +23,8 @@ export const SalesKanban: React.FC<SalesKanbanProps> = ({ authToken, canPushToEr
   const [catalogProducts, setCatalogProducts] = useState<CatalogProductOption[]>([]);
 
   const [isLoading, setIsLoading] = useState(false);
-  const [recoveryFeedback, setRecoveryFeedback] = useState<{ type: 'info' | 'error'; message: string } | null>(null);
+  const [triggeringCartId, setTriggeringCartId] = useState<string | null>(null);
+  const [recoveryFeedback, setRecoveryFeedback] = useState<{ type: 'success' | 'warning' | 'info' | 'error'; message: string } | null>(null);
 
   // New Lead Modal state
   const [showAddLead, setShowAddLead] = useState(false);
@@ -76,6 +77,7 @@ export const SalesKanban: React.FC<SalesKanbanProps> = ({ authToken, canPushToEr
   }, [authToken]);
 
   const handleTriggerRecovery = async (cartId: string, channel: 'EMAIL' | 'WHATSAPP') => {
+    setTriggeringCartId(cartId);
     try {
       const res = await fetch('/api/crm/cart-recovery/trigger', {
         method: 'POST',
@@ -86,11 +88,36 @@ export const SalesKanban: React.FC<SalesKanbanProps> = ({ authToken, canPushToEr
         body: JSON.stringify({ cartId, channel })
       });
       const data = await res.json();
-      setRecoveryFeedback({ type: res.ok ? 'info' : 'error', message: data.message || data.error || 'Recovery triggered.' });
-      fetchPipeline();
-      setTimeout(() => setRecoveryFeedback(null), 5000);
+      if (!res.ok || !data.success) {
+        setRecoveryFeedback({
+          type: 'error',
+          message: data.error || data.message || `Recovery ${channel.toLowerCase()} dispatch failed.`
+        });
+        return;
+      }
+
+      const mode = data.deliveryMode || data.delivery?.mode || 'SANDBOX_FALLBACK';
+      const msgId = data.messageId || data.delivery?.messageId || '';
+      const reason = data.fallbackReason || data.delivery?.fallbackReason || '';
+
+      if (mode === 'LIVE') {
+        setRecoveryFeedback({
+          type: 'success',
+          message: `LIVE ${channel} dispatched to ${data.cart?.email || 'patron'} (Message ID: ${msgId}). Card moved to Email Dispatched.`
+        });
+      } else {
+        setRecoveryFeedback({
+          type: 'warning',
+          message: `Card updated in SANDBOX_FALLBACK mode${reason ? ` (${reason})` : ''}. Configure SMTP_HOST / SMTP_USER / SMTP_PASS to deliver live emails.`
+        });
+      }
+
+      await fetchPipeline();
+      setTimeout(() => setRecoveryFeedback(null), 7000);
     } catch (e: any) {
       setRecoveryFeedback({ type: 'error', message: 'Recovery dispatch failed: ' + e.message });
+    } finally {
+      setTriggeringCartId(null);
     }
   };
 
@@ -315,6 +342,10 @@ export const SalesKanban: React.FC<SalesKanbanProps> = ({ authToken, canPushToEr
           className={`p-3 border rounded-lg text-xs font-medium flex items-center justify-between gap-2 ${
             recoveryFeedback.type === 'error'
               ? 'bg-red-50 border-red-200 text-red-900'
+              : recoveryFeedback.type === 'success'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+              : recoveryFeedback.type === 'warning'
+              ? 'bg-amber-50 border-amber-200 text-amber-900'
               : 'bg-[#EBE4D5]/80 border-[#8B4513]/30 text-[#16120E]'
           }`}
         >
@@ -369,14 +400,18 @@ export const SalesKanban: React.FC<SalesKanbanProps> = ({ authToken, canPushToEr
 
                     <div className="flex items-center gap-2 pt-1">
                       <button
+                        type="button"
+                        disabled={triggeringCartId === cart.id}
                         onClick={() => handleTriggerRecovery(cart.id, 'EMAIL')}
-                        className="flex-1 py-1 px-1.5 text-[10px] font-semibold bg-[#221C16] text-[#FAF7F2] rounded hover:bg-[#342B22] text-center"
+                        className="flex-1 py-1 px-1.5 text-[10px] font-semibold bg-[#221C16] text-[#FAF7F2] rounded hover:bg-[#342B22] text-center disabled:opacity-50"
                       >
-                        Send Email (10% Off)
+                        {triggeringCartId === cart.id ? 'Sending Email...' : 'Send Email (10% Off)'}
                       </button>
                       <button
+                        type="button"
+                        disabled={triggeringCartId === cart.id}
                         onClick={() => handleTriggerRecovery(cart.id, 'WHATSAPP')}
-                        className="py-1 px-2 text-[10px] font-semibold bg-emerald-800 text-white rounded hover:bg-emerald-900"
+                        className="py-1 px-2 text-[10px] font-semibold bg-emerald-800 text-white rounded hover:bg-emerald-900 disabled:opacity-50"
                       >
                         WhatsApp
                       </button>

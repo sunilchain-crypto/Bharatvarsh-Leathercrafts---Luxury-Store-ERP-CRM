@@ -12,6 +12,7 @@ import dotenv from 'dotenv';
 import { apiRouter } from './src/server/api.ts';
 import { cartRecovery } from './src/server/cartRecovery.ts';
 import { db } from './src/server/db.ts';
+import { startDailyOrderReportScheduler } from './src/server/dailyOrderReport.ts';
 
 dotenv.config();
 
@@ -32,12 +33,22 @@ async function startServer() {
 
   app.use(
     express.json({
+      limit: '75mb',
       verify: (req: any, _res, buf) => {
         req.rawBody = buf;
       }
     })
   );
-  app.use(express.urlencoded({ extended: true }));
+  app.use(express.urlencoded({ extended: true, limit: '75mb' }));
+
+  // Ensure persistent media upload directory exists in source (public/) and production (dist/ when present)
+  const publicImagesDir = path.resolve(__dirname, 'public', 'assets', 'images');
+  const distDir = path.resolve(__dirname, 'dist');
+  const distImagesDir = path.resolve(distDir, 'assets', 'images');
+  fs.mkdirSync(publicImagesDir, { recursive: true });
+  if (fs.existsSync(distDir)) {
+    fs.mkdirSync(distImagesDir, { recursive: true });
+  }
 
   // Health check endpoint responds immediately once HTTP server binds
   app.get('/api/health', (_req, res) => {
@@ -58,14 +69,24 @@ async function startServer() {
   // Mount API Router
   app.use('/api', apiRouter);
 
-  // Legacy compatibility alias so persisted or cached /src/assets/images/* URLs still resolve
-  const legacyImagesDir = isProduction
-    ? path.resolve(__dirname, 'dist', 'assets', 'images')
-    : path.resolve(__dirname, 'public', 'assets', 'images');
-  app.use('/src/assets/images', express.static(legacyImagesDir));
+  // Serve dynamically uploaded & packaged product media cleanly at /assets/images/* (and legacy /src/assets/images/*)
+  if (isProduction) {
+    app.use('/assets/images', express.static(distImagesDir));
+    app.use('/assets/images', express.static(publicImagesDir));
+    app.use('/src/assets/images', express.static(distImagesDir));
+    app.use('/src/assets/images', express.static(publicImagesDir));
+  } else {
+    app.use('/assets/images', express.static(publicImagesDir));
+    app.use('/src/assets/images', express.static(publicImagesDir));
+  }
 
   // Start background abandoned cart detection worker (every 60s)
   cartRecovery.startBackgroundWorker(60000);
+
+  // Start daily post-midnight IST Excel order report scheduler after MySQL hydration completes
+  mysqlInitPromise.finally(() => {
+    startDailyOrderReportScheduler(60000);
+  });
 
   if (!isProduction) {
     const hmrDisabled = process.env.DISABLE_HMR === 'true';
