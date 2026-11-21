@@ -24,7 +24,35 @@ export const SalesKanban: React.FC<SalesKanbanProps> = ({ authToken, canPushToEr
 
   const [isLoading, setIsLoading] = useState(false);
   const [triggeringCartId, setTriggeringCartId] = useState<string | null>(null);
+  const [confirmDeleteCartId, setConfirmDeleteCartId] = useState<string | null>(null);
+  const [deletingCartId, setDeletingCartId] = useState<string | null>(null);
   const [recoveryFeedback, setRecoveryFeedback] = useState<{ type: 'success' | 'warning' | 'info' | 'error'; message: string } | null>(null);
+
+  const isValidContactEmail = (email?: string) => {
+    const clean = (email || '').trim();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean);
+  };
+
+  const isValidIndianMobile = (phone?: string) => {
+    const digits = (phone || '').replace(/[^\d]/g, '');
+    const normalized = digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits;
+    return /^[6-9]\d{9}$/.test(normalized);
+  };
+
+  const getCooldownInfo = (lastTriggerAt?: string) => {
+    if (!lastTriggerAt) return { active: false, label: '2h cooldown window' };
+    const twoHoursMs = 2 * 60 * 60 * 1000;
+    const elapsedMs = Date.now() - new Date(lastTriggerAt).getTime();
+    const remainingMs = twoHoursMs - elapsedMs;
+    if (remainingMs <= 0) {
+      return { active: false, label: '2h cooldown complete — ready for follow-up' };
+    }
+    const totalMins = Math.ceil(remainingMs / 60000);
+    const hrs = Math.floor(totalMins / 60);
+    const mins = totalMins % 60;
+    const formatted = hrs > 0 ? `${hrs}h ${mins}m left` : `${mins}m left`;
+    return { active: true, label: `Cooldown Active (${formatted} of 2h)` };
+  };
 
   // New Lead Modal state
   const [showAddLead, setShowAddLead] = useState(false);
@@ -133,6 +161,35 @@ export const SalesKanban: React.FC<SalesKanbanProps> = ({ authToken, canPushToEr
       setTimeout(() => setRecoveryFeedback(null), 5000);
     } catch (e: any) {
       setRecoveryFeedback({ type: 'error', message: 'Sweep failed: ' + e.message });
+    }
+  };
+
+  const handleRemoveAbandonedCart = async (cartId: string) => {
+    setDeletingCartId(cartId);
+    try {
+      const res = await fetch(`/api/crm/abandoned-carts/${encodeURIComponent(cartId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setRecoveryFeedback({
+          type: 'error',
+          message: data.error || 'Failed to remove card from Abandoned Checkout Recovery Board.'
+        });
+        return;
+      }
+      setConfirmDeleteCartId(null);
+      setRecoveryFeedback({
+        type: 'info',
+        message: data.message || 'Abandoned checkout card removed from board.'
+      });
+      await fetchPipeline();
+      setTimeout(() => setRecoveryFeedback(null), 5000);
+    } catch (e: any) {
+      setRecoveryFeedback({ type: 'error', message: 'Remove failed: ' + e.message });
+    } finally {
+      setDeletingCartId(null);
     }
   };
 
@@ -391,33 +448,97 @@ export const SalesKanban: React.FC<SalesKanbanProps> = ({ authToken, canPushToEr
             <div className="space-y-3">
               {pipeline.abandonedCarts
                 .filter((c) => c.recoveryStage === 'DETECTED')
-                .map((cart) => (
-                  <div key={cart.id} className="p-3 rounded-lg bg-[#FAF7F2] border border-[#221C16]/10 space-y-2 text-xs">
-                    <div className="font-semibold text-[#16120E] truncate">{cart.email}</div>
-                    <div className="text-[11px] text-[#5C4D3E]">
-                      {cart.items.length} item(s) · <span className="font-mono font-bold text-[#16120E]">₹{cart.subtotal.toLocaleString('en-IN')}</span>
-                    </div>
+                .map((cart) => {
+                  const hasEmail = isValidContactEmail(cart.email);
+                  const hasIndianMobile = isValidIndianMobile(cart.phone);
+                  const isUncontactable = !hasEmail && !hasIndianMobile;
+                  return (
+                    <div
+                      key={cart.id}
+                      className={`p-3 rounded-lg border space-y-2 text-xs ${
+                        isUncontactable
+                          ? 'bg-amber-50/70 border-amber-300'
+                          : 'bg-[#FAF7F2] border-[#221C16]/10'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="font-semibold text-[#16120E] truncate">
+                          {cart.email || '(No email captured)'}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setConfirmDeleteCartId(confirmDeleteCartId === cart.id ? null : cart.id)
+                          }
+                          className="p-1 text-[#5C4D3E] hover:text-red-700 hover:bg-red-50 rounded shrink-0"
+                          title="Remove card from Abandoned Checkout Recovery Board"
+                          aria-label={`Remove abandoned cart ${cart.id}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
 
-                    <div className="flex items-center gap-2 pt-1">
-                      <button
-                        type="button"
-                        disabled={triggeringCartId === cart.id}
-                        onClick={() => handleTriggerRecovery(cart.id, 'EMAIL')}
-                        className="flex-1 py-1 px-1.5 text-[10px] font-semibold bg-[#221C16] text-[#FAF7F2] rounded hover:bg-[#342B22] text-center disabled:opacity-50"
-                      >
-                        {triggeringCartId === cart.id ? 'Sending Email...' : 'Send Email (10% Off)'}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={triggeringCartId === cart.id}
-                        onClick={() => handleTriggerRecovery(cart.id, 'WHATSAPP')}
-                        className="py-1 px-2 text-[10px] font-semibold bg-emerald-800 text-white rounded hover:bg-emerald-900 disabled:opacity-50"
-                      >
-                        WhatsApp
-                      </button>
+                      <div className="text-[11px] text-[#5C4D3E]">
+                        {cart.items.length} item(s) ·{' '}
+                        <span className="font-mono font-bold text-[#16120E]">
+                          ₹{cart.subtotal.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+
+                      {(!hasEmail || !hasIndianMobile) && (
+                        <div className="text-[10px] font-mono text-amber-900 bg-amber-100/70 border border-amber-200 rounded px-2 py-1 leading-snug">
+                          {!hasEmail && !hasIndianMobile
+                            ? 'Missing valid email & Indian mobile (+91) — consider removing card'
+                            : !hasEmail
+                            ? 'Missing valid email address'
+                            : 'Missing valid Indian mobile (+91) for WhatsApp'}
+                        </div>
+                      )}
+
+                      {confirmDeleteCartId === cart.id ? (
+                        <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-red-200">
+                          <span className="text-[10px] font-semibold text-red-900">Remove card?</span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteCartId(null)}
+                              className="px-2 py-0.5 text-[10px] border rounded bg-white text-[#5C4D3E]"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              disabled={deletingCartId === cart.id}
+                              onClick={() => handleRemoveAbandonedCart(cart.id)}
+                              className="px-2 py-0.5 text-[10px] font-semibold bg-red-700 text-white rounded hover:bg-red-800 disabled:opacity-50"
+                            >
+                              {deletingCartId === cart.id ? 'Removing...' : 'Confirm'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            disabled={triggeringCartId === cart.id}
+                            onClick={() => handleTriggerRecovery(cart.id, 'EMAIL')}
+                            className="flex-1 py-1 px-1.5 text-[10px] font-semibold bg-[#221C16] text-[#FAF7F2] rounded hover:bg-[#342B22] text-center disabled:opacity-50"
+                          >
+                            {triggeringCartId === cart.id ? 'Sending Email...' : 'Send Email (10% Off)'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={triggeringCartId === cart.id}
+                            onClick={() => handleTriggerRecovery(cart.id, 'WHATSAPP')}
+                            className="py-1 px-2 text-[10px] font-semibold bg-emerald-800 text-white rounded hover:bg-emerald-900 disabled:opacity-50"
+                          >
+                            WhatsApp
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
             </div>
           </div>
 
@@ -433,17 +554,57 @@ export const SalesKanban: React.FC<SalesKanbanProps> = ({ authToken, canPushToEr
             <div className="space-y-3">
               {pipeline.abandonedCarts
                 .filter((c) => c.recoveryStage === 'EMAIL_SENT')
-                .map((cart) => (
-                  <div key={cart.id} className="p-3 rounded-lg bg-[#FAF7F2] border border-[#221C16]/10 space-y-2 text-xs">
-                    <div className="font-semibold text-[#16120E] truncate">{cart.email}</div>
-                    <div className="text-[11px] text-[#5C4D3E]">
-                      Incentive Link Sent · <span className="font-mono font-bold text-[#16120E]">₹{cart.subtotal.toLocaleString('en-IN')}</span>
+                .map((cart) => {
+                  const cooldown = getCooldownInfo(cart.lastRecoveryTriggerAt);
+                  return (
+                    <div key={cart.id} className="p-3 rounded-lg bg-[#FAF7F2] border border-[#221C16]/10 space-y-2 text-xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="font-semibold text-[#16120E] truncate">{cart.email}</div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setConfirmDeleteCartId(confirmDeleteCartId === cart.id ? null : cart.id)
+                          }
+                          className="p-1 text-[#5C4D3E] hover:text-red-700 hover:bg-red-50 rounded shrink-0"
+                          title="Remove card from Abandoned Checkout Recovery Board"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="text-[11px] text-[#5C4D3E]">
+                        Incentive Link Sent ·{' '}
+                        <span className="font-mono font-bold text-[#16120E]">
+                          ₹{cart.subtotal.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                      <div className="text-[10px] font-mono text-[#8B4513]">
+                        Attempt #{cart.recoveryAttempts} · {cooldown.label}
+                      </div>
+                      {confirmDeleteCartId === cart.id && (
+                        <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-red-200">
+                          <span className="text-[10px] font-semibold text-red-900">Remove card?</span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteCartId(null)}
+                              className="px-2 py-0.5 text-[10px] border rounded bg-white text-[#5C4D3E]"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              disabled={deletingCartId === cart.id}
+                              onClick={() => handleRemoveAbandonedCart(cart.id)}
+                              className="px-2 py-0.5 text-[10px] font-semibold bg-red-700 text-white rounded hover:bg-red-800 disabled:opacity-50"
+                            >
+                              {deletingCartId === cart.id ? 'Removing...' : 'Confirm'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <div className="text-[10px] font-mono text-[#8B4513]">
-                      Attempt #{cart.recoveryAttempts} (Cooldown Active)
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
             </div>
           </div>
 
@@ -461,10 +622,44 @@ export const SalesKanban: React.FC<SalesKanbanProps> = ({ authToken, canPushToEr
                 .filter((c) => c.recoveryStage === 'WHATSAPP_SENT')
                 .map((cart) => (
                   <div key={cart.id} className="p-3 rounded-lg bg-[#FAF7F2] border border-[#221C16]/10 space-y-2 text-xs">
-                    <div className="font-semibold text-[#16120E] truncate">{cart.email}</div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="font-semibold text-[#16120E] truncate">{cart.email}</div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setConfirmDeleteCartId(confirmDeleteCartId === cart.id ? null : cart.id)
+                        }
+                        className="p-1 text-[#5C4D3E] hover:text-red-700 hover:bg-red-50 rounded shrink-0"
+                        title="Remove card from Abandoned Checkout Recovery Board"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                     <div className="text-[10px] font-mono text-emerald-800">
                       WhatsApp Delivered with Deboss Incentive
                     </div>
+                    {confirmDeleteCartId === cart.id && (
+                      <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-red-200">
+                        <span className="text-[10px] font-semibold text-red-900">Remove card?</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteCartId(null)}
+                            className="px-2 py-0.5 text-[10px] border rounded bg-white text-[#5C4D3E]"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            disabled={deletingCartId === cart.id}
+                            onClick={() => handleRemoveAbandonedCart(cart.id)}
+                            className="px-2 py-0.5 text-[10px] font-semibold bg-red-700 text-white rounded hover:bg-red-800 disabled:opacity-50"
+                          >
+                            {deletingCartId === cart.id ? 'Removing...' : 'Confirm'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
             </div>
@@ -484,10 +679,44 @@ export const SalesKanban: React.FC<SalesKanbanProps> = ({ authToken, canPushToEr
                 .filter((c) => c.recoveryStage === 'RECOVERED')
                 .map((cart) => (
                   <div key={cart.id} className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 space-y-1 text-xs">
-                    <div className="font-semibold text-emerald-900 truncate">{cart.email}</div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="font-semibold text-emerald-900 truncate">{cart.email}</div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setConfirmDeleteCartId(confirmDeleteCartId === cart.id ? null : cart.id)
+                        }
+                        className="p-1 text-emerald-800/70 hover:text-red-700 hover:bg-red-50 rounded shrink-0"
+                        title="Remove card from Abandoned Checkout Recovery Board"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                     <div className="text-[11px] text-emerald-800 font-mono">
                       Order placed successfully
                     </div>
+                    {confirmDeleteCartId === cart.id && (
+                      <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-red-200">
+                        <span className="text-[10px] font-semibold text-red-900">Remove card?</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteCartId(null)}
+                            className="px-2 py-0.5 text-[10px] border rounded bg-white text-[#5C4D3E]"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            disabled={deletingCartId === cart.id}
+                            onClick={() => handleRemoveAbandonedCart(cart.id)}
+                            className="px-2 py-0.5 text-[10px] font-semibold bg-red-700 text-white rounded hover:bg-red-800 disabled:opacity-50"
+                          >
+                            {deletingCartId === cart.id ? 'Removing...' : 'Confirm'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
             </div>

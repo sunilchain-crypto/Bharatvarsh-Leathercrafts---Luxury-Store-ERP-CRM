@@ -3109,6 +3109,36 @@ class RelationalDatabase {
     };
   }
 
+  public async deleteCartAsync(cartId: string, actorEmail: string): Promise<CartRecord | null> {
+    return this.withWriteLock(async () => {
+      const idx = this.state.carts.findIndex(c => c.id === cartId);
+      if (idx === -1) return null;
+
+      const prevState = structuredClone(this.state);
+      this.insideAtomicTransaction = true;
+      try {
+        const [removed] = this.state.carts.splice(idx, 1);
+        this.appendAuditEntry(
+          actorEmail,
+          'REMOVE_ABANDONED_CART',
+          'STORE_MANAGEMENT',
+          `Removed abandoned checkout card ${removed.id} (${removed.email || 'no email'}, ${removed.phone || 'no phone'}, ₹${removed.subtotal}) from recovery board`
+        );
+        await mysqlAdapter.deleteAbandonedCart(cartId, this.state);
+        this.persistToDiskOnly();
+        this.lastPersistError = null;
+        return removed;
+      } catch (err: any) {
+        this.state = prevState;
+        this.persistToDiskOnly();
+        this.lastPersistError = err.message;
+        throw err;
+      } finally {
+        this.insideAtomicTransaction = false;
+      }
+    });
+  }
+
   // --- ERP Sync Layer (Permanent Inventory Persistence) ---
   public getInventory(): ProductInventory[] {
     return this.state.inventory;
@@ -3118,7 +3148,8 @@ class RelationalDatabase {
     sku: string,
     location: 'punePrimaryHub' | 'mumbaiWarehouse',
     newQty: number,
-    actorEmail: string
+    actorEmail: string,
+    safetyStock?: number
   ): ProductInventory {
     if (!this.isStoreManagementAuthorized(actorEmail)) {
       throw new Error(`Access Denied: Only authorized admin accounts can modify inventory.`);
@@ -3130,13 +3161,23 @@ class RelationalDatabase {
     const prev = item.stockByLocation[location];
     item.stockByLocation[location] = sanitizedQty;
 
+    let safetyNote = '';
+    if (typeof safetyStock === 'number' && Number.isFinite(safetyStock)) {
+      const prevSafety = item.safetyStock;
+      const sanitizedSafety = Math.max(0, Math.floor(safetyStock));
+      item.safetyStock = sanitizedSafety;
+      if (prevSafety !== sanitizedSafety) {
+        safetyNote = ` | Safety Stock: ${prevSafety} -> ${sanitizedSafety}`;
+      }
+    }
+
     const totalNow = item.stockByLocation.punePrimaryHub + item.stockByLocation.mumbaiWarehouse;
 
     this.appendAuditEntry(
       actorEmail,
       'ADJUST_INVENTORY',
       'INVENTORY_ADJUSTMENT',
-      `Adjusted ${item.name} (${sku}) at ${location}: ${prev} -> ${sanitizedQty} (Total: ${totalNow}${totalNow === 0 ? ' - PRODUCT DEACTIVATED / OUT OF STOCK' : ''})`
+      `Adjusted ${item.name} (${sku}) at ${location}: ${prev} -> ${sanitizedQty} (Total: ${totalNow}${totalNow === 0 ? ' - PRODUCT DEACTIVATED / OUT OF STOCK' : ''})${safetyNote}`
     );
     return item;
   }
@@ -3145,22 +3186,24 @@ class RelationalDatabase {
     sku: string,
     location: 'punePrimaryHub' | 'mumbaiWarehouse',
     newQty: number,
-    actorEmail: string
+    actorEmail: string,
+    safetyStock?: number
   ): ProductInventory {
-    const item = this.applyInventoryAdjustmentInMemory(sku, location, newQty, actorEmail);
+    const item = this.applyInventoryAdjustmentInMemory(sku, location, newQty, actorEmail, safetyStock);
     this.persistState();
     return item;
   }
 
   /**
-   * Atomic, row-locked inventory stock adjustment (SELECT ... FOR UPDATE in MySQL).
+   * Atomic, row-locked inventory stock & safety stock adjustment (SELECT ... FOR UPDATE in MySQL).
    * Rolls back both in-memory/disk state and MySQL if persistence fails.
    */
   public async updateInventoryStockAsync(
     sku: string,
     location: 'punePrimaryHub' | 'mumbaiWarehouse',
     newQty: number,
-    actorEmail: string
+    actorEmail: string,
+    safetyStock?: number
   ): Promise<ProductInventory> {
     return this.withWriteLock(async () => {
       if (!this.isStoreManagementAuthorized(actorEmail)) {
@@ -3177,7 +3220,7 @@ class RelationalDatabase {
               inv.stockByLocation.mumbaiWarehouse = lockedRow.mumbaiWarehouse;
             }
           }
-          const item = this.applyInventoryAdjustmentInMemory(sku, location, newQty, actorEmail);
+          const item = this.applyInventoryAdjustmentInMemory(sku, location, newQty, actorEmail, safetyStock);
           return { result: item, nextState: this.state };
         });
 
@@ -3192,6 +3235,33 @@ class RelationalDatabase {
       } finally {
         this.insideAtomicTransaction = false;
       }
+    });
+  }
+
+  public async updateInventorySafetyStockAsync(
+    sku: string,
+    safetyStock: number,
+    actorEmail: string
+  ): Promise<ProductInventory> {
+    return this.runAtomicMutation(() => {
+      if (!this.isStoreManagementAuthorized(actorEmail)) {
+        throw new Error(`Access Denied: Only authorized admin accounts can modify safety stock.`);
+      }
+      const item = this.state.inventory.find(i => i.sku === sku);
+      if (!item) throw new Error(`SKU ${sku} not found`);
+      const sanitizedSafety = Math.max(0, Math.floor(Number(safetyStock)));
+      if (!Number.isFinite(sanitizedSafety)) {
+        throw new Error('Safety stock must be a valid non-negative integer.');
+      }
+      const prevSafety = item.safetyStock;
+      item.safetyStock = sanitizedSafety;
+      this.appendAuditEntry(
+        actorEmail,
+        'UPDATE_SAFETY_STOCK',
+        'INVENTORY_ADJUSTMENT',
+        `Updated safety stock threshold for ${item.name} (${sku}): ${prevSafety} -> ${sanitizedSafety} pcs`
+      );
+      return item;
     });
   }
 

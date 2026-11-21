@@ -8,9 +8,10 @@ import {
   Layers,
   Presentation,
   RefreshCw,
-  CheckCircle2
+  CheckCircle2,
+  Film
 } from 'lucide-react';
-import { KnowledgeBaseEntry } from '../types';
+import { KnowledgeBaseEntry } from '../types/index.ts';
 
 const CATEGORY_LABELS: Record<KnowledgeBaseEntry['category'], string> = {
   LEATHER_GUIDE: 'Leather Anatomy',
@@ -24,6 +25,22 @@ function formatBytes(bytes?: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function getEmbedVideoUrl(url?: string): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  const ytMatch = trimmed.match(
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{6,})/i
+  );
+  if (ytMatch?.[1]) {
+    return `https://www.youtube.com/embed/${ytMatch[1]}`;
+  }
+  const vimeoMatch = trimmed.match(/vimeo\.com\/(?:video\/)?(\d+)/i);
+  if (vimeoMatch?.[1]) {
+    return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
+  }
+  return null;
 }
 
 export const KnowledgeBaseView: React.FC = () => {
@@ -159,9 +176,17 @@ export const KnowledgeBaseView: React.FC = () => {
                           year: 'numeric'
                         })}
                       </span>
-                      {entry.slides && entry.slides.length > 0 && (
-                        <span className="font-mono">{entry.slides.length} slides</span>
-                      )}
+                      <div className="flex items-center gap-2 font-mono">
+                        {entry.videoUrl && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#1B332A]">
+                            <Film className="h-3 w-3" />
+                            Video
+                          </span>
+                        )}
+                        {entry.slides && entry.slides.length > 0 && (
+                          <span>{entry.slides.length} slides</span>
+                        )}
+                      </div>
                     </div>
                   </button>
                 );
@@ -198,6 +223,40 @@ export const KnowledgeBaseView: React.FC = () => {
                       </a>
                     )}
                   </div>
+
+                  {/* Atelier Video Player (uploaded MP4/WebM/MOV or YouTube/Vimeo embed) */}
+                  {selectedEntry.videoUrl && (
+                    <div className="border-b border-[#E8E2D9] p-6">
+                      <div className="mb-3 flex items-center justify-between text-xs text-[#6B5D51]">
+                        <span className="inline-flex items-center gap-1.5 font-mono uppercase tracking-wider text-[#8B4513]">
+                          <Film className="h-3.5 w-3.5" />
+                          Atelier Craft Video
+                          {selectedEntry.videoFileName ? ` · ${selectedEntry.videoFileName}` : ''}
+                          {selectedEntry.videoSizeBytes ? ` · ${formatBytes(selectedEntry.videoSizeBytes)}` : ''}
+                        </span>
+                      </div>
+                      {getEmbedVideoUrl(selectedEntry.videoUrl) ? (
+                        <div className="aspect-video w-full overflow-hidden rounded-lg border border-[#E8E2D9] bg-[#16120E]">
+                          <iframe
+                            title={`${selectedEntry.title} Video`}
+                            src={getEmbedVideoUrl(selectedEntry.videoUrl)!}
+                            className="h-full w-full"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                          />
+                        </div>
+                      ) : (
+                        <video
+                          key={selectedEntry.videoUrl}
+                          controls
+                          playsInline
+                          preload="metadata"
+                          src={selectedEntry.videoUrl}
+                          className="max-h-[480px] w-full rounded-lg border border-[#E8E2D9] bg-[#16120E]"
+                        />
+                      )}
+                    </div>
+                  )}
 
                   {/* Interactive Slide Deck Viewer (if slides exist) */}
                   {slides.length > 0 && activeSlide && (

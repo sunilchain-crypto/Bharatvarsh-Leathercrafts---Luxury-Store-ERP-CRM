@@ -47,6 +47,10 @@ export const ERPWarehouseView: React.FC<ERPWarehouseViewProps> = ({ authToken, o
   const [adjustingItem, setAdjustingItem] = useState<ProductInventory | null>(null);
   const [adjustLocation, setAdjustLocation] = useState<'punePrimaryHub' | 'mumbaiWarehouse'>('punePrimaryHub');
   const [newQty, setNewQty] = useState(0);
+  const [adjustSafetyStock, setAdjustSafetyStock] = useState(5);
+  // Inline Safety Stock drafts keyed by SKU
+  const [safetyStockDrafts, setSafetyStockDrafts] = useState<Record<string, number>>({});
+  const [savingSafetySku, setSavingSafetySku] = useState<string | null>(null);
 
   // BOM Adjustment Modal
   const [adjustingBom, setAdjustingBom] = useState<BillOfMaterialsItem | null>(null);
@@ -161,20 +165,62 @@ export const ERPWarehouseView: React.FC<ERPWarehouseViewProps> = ({ authToken, o
         body: JSON.stringify({
           sku: adjustingItem.sku,
           location: adjustLocation,
-          newQty
+          newQty,
+          safetyStock: adjustSafetyStock
         })
       });
       const data = await res.json();
       if (res.ok && data.success) {
+        const updatedSku = adjustingItem.sku;
         setAdjustingItem(null);
+        setSafetyStockDrafts(prev => {
+          const next = { ...prev };
+          delete next[updatedSku];
+          return next;
+        });
         await fetchErpData();
         onInventoryChanged?.();
-        showErpBanner('success', `Inventory count updated for ${adjustingItem.sku}.`);
+        showErpBanner('success', `Inventory count and safety stock updated for ${updatedSku}.`);
       } else {
         showErpBanner('error', data.error || 'Adjustment failed');
       }
     } catch (e: any) {
       showErpBanner('error', e?.message || 'Adjustment failed');
+    }
+  };
+
+  const handleSaveInlineSafetyStock = async (item: ProductInventory) => {
+    const draftVal = safetyStockDrafts[item.sku];
+    const targetSafety = typeof draftVal === 'number' ? Math.max(0, Math.floor(draftVal)) : item.safetyStock;
+    if (targetSafety === item.safetyStock) return;
+
+    setSavingSafetySku(item.sku);
+    try {
+      const res = await fetch(`/api/erp/inventory/${encodeURIComponent(item.sku)}/safety-stock`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ safetyStock: targetSafety })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSafetyStockDrafts(prev => {
+          const next = { ...prev };
+          delete next[item.sku];
+          return next;
+        });
+        await fetchErpData();
+        onInventoryChanged?.();
+        showErpBanner('success', `Safety stock for ${item.sku} updated to ${targetSafety} pcs.`);
+      } else {
+        showErpBanner('error', data.error || 'Failed to update safety stock');
+      }
+    } catch (e: any) {
+      showErpBanner('error', e?.message || 'Failed to update safety stock');
+    } finally {
+      setSavingSafetySku(null);
     }
   };
 
@@ -462,7 +508,41 @@ export const ERPWarehouseView: React.FC<ERPWarehouseViewProps> = ({ authToken, o
                         </span>
                       </td>
                       <td className="p-3.5 text-center tabular-nums text-[#5C4D3E]">
-                        {item.safetyStock} pcs
+                        <div className="inline-flex items-center justify-center gap-1.5">
+                          <input
+                            type="number"
+                            min={0}
+                            aria-label={`Safety stock for ${item.sku}`}
+                            value={
+                              safetyStockDrafts[item.sku] !== undefined
+                                ? safetyStockDrafts[item.sku]
+                                : item.safetyStock
+                            }
+                            onChange={(e) => {
+                              const parsed = Math.max(0, parseInt(e.target.value || '0', 10) || 0);
+                              setSafetyStockDrafts(prev => ({ ...prev, [item.sku]: parsed }));
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleSaveInlineSafetyStock(item);
+                              }
+                            }}
+                            className="w-16 px-2 py-1 text-center border border-[#221C16]/20 rounded bg-[#FAF7F2] font-mono text-xs text-[#16120E] font-semibold focus:border-[#8B4513] focus:outline-none"
+                          />
+                          <span className="text-[11px] text-[#5C4D3E]">pcs</span>
+                          {safetyStockDrafts[item.sku] !== undefined &&
+                            safetyStockDrafts[item.sku] !== item.safetyStock && (
+                              <button
+                                type="button"
+                                disabled={savingSafetySku === item.sku}
+                                onClick={() => handleSaveInlineSafetyStock(item)}
+                                className="px-2 py-1 text-[10px] font-sans font-semibold bg-[#8B4513] text-white rounded hover:bg-[#6E360F] disabled:opacity-50"
+                              >
+                                {savingSafetySku === item.sku ? '...' : 'Save'}
+                              </button>
+                            )}
+                        </div>
                       </td>
                       <td className="p-3.5 text-right tabular-nums font-bold text-[#16120E]">
                         ₹{item.sellingPrice.toLocaleString('en-IN')}
@@ -473,6 +553,7 @@ export const ERPWarehouseView: React.FC<ERPWarehouseViewProps> = ({ authToken, o
                             setAdjustingItem(item);
                             setAdjustLocation('punePrimaryHub');
                             setNewQty(item.stockByLocation.punePrimaryHub);
+                            setAdjustSafetyStock(item.safetyStock);
                           }}
                           className="px-2.5 py-1 text-[11px] font-sans font-semibold bg-[#221C16] text-[#FAF7F2] rounded hover:bg-[#342B22]"
                         >
@@ -852,6 +933,17 @@ export const ERPWarehouseView: React.FC<ERPWarehouseViewProps> = ({ authToken, o
                   min={0}
                   value={newQty}
                   onChange={(e) => setNewQty(Math.max(0, parseInt(e.target.value || '0', 10)))}
+                  className="w-full px-3 py-1.5 border rounded font-mono font-bold bg-[#FAF7F2]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[#5C4D3E] mb-1">Safety Stock Threshold (pcs)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={adjustSafetyStock}
+                  onChange={(e) => setAdjustSafetyStock(Math.max(0, parseInt(e.target.value || '0', 10)))}
                   className="w-full px-3 py-1.5 border rounded font-mono font-bold bg-[#FAF7F2]"
                 />
               </div>

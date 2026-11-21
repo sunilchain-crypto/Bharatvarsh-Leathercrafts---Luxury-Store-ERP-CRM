@@ -141,26 +141,45 @@ function parseMultipartSingleFile(
 const KB_MIME_BY_EXT: Record<string, string> = {
   '.pdf': 'application/pdf',
   '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  '.ppt': 'application/vnd.ms-powerpoint'
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime'
 };
 
 const KB_EXT_BY_MIME: Record<string, string> = {
   'application/pdf': '.pdf',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
-  'application/vnd.ms-powerpoint': '.ppt'
+  'application/vnd.ms-powerpoint': '.ppt',
+  'video/mp4': '.mp4',
+  'video/webm': '.webm',
+  'video/quicktime': '.mov'
 };
 
-const MAX_KB_UPLOAD_BYTES = 30 * 1024 * 1024;
+const KB_VIDEO_EXTS = new Set(['.mp4', '.webm', '.mov']);
+const MAX_KB_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+interface ParsedMultipartFile {
+  fieldName: string;
+  filename: string;
+  mimeType: string;
+  buffer: Buffer;
+}
 
 function parseMultipartFormData(
   body: Buffer,
   contentType: string
-): { fields: Record<string, string>; file: { filename: string; mimeType: string; buffer: Buffer } | null } {
+): {
+  fields: Record<string, string>;
+  file: ParsedMultipartFile | null;
+  files: Record<string, ParsedMultipartFile>;
+} {
   const fields: Record<string, string> = {};
-  let file: { filename: string; mimeType: string; buffer: Buffer } | null = null;
+  let file: ParsedMultipartFile | null = null;
+  const files: Record<string, ParsedMultipartFile> = {};
   const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;\s]+))/i);
   const boundary = boundaryMatch?.[1] || boundaryMatch?.[2];
-  if (!boundary) return { fields, file };
+  if (!boundary) return { fields, file, files };
 
   const delimiter = Buffer.from(`--${boundary}`);
   const headerEndMarker = Buffer.from('\r\n\r\n');
@@ -190,20 +209,29 @@ function parseMultipartFormData(
       const nameMatch = rawHeaders.match(/name="([^"]+)"/i) || rawHeaders.match(/name=([^;\r\n]+)/i);
       const filenameMatch = rawHeaders.match(/filename="([^"]+)"/i) || rawHeaders.match(/filename=([^;\r\n]+)/i);
       const contentBuf = partBuf.subarray(headerEndIdx + 4);
-      if (filenameMatch && !file) {
+      const fieldName = (nameMatch?.[1] || 'file').trim();
+      if (filenameMatch) {
         const mimeMatch = rawHeaders.match(/Content-Type:\s*([^\r\n;]+)/i);
-        file = {
+        const parsedFile: ParsedMultipartFile = {
+          fieldName,
           filename: (filenameMatch[1] || '').trim(),
           mimeType: (mimeMatch?.[1] || '').trim().toLowerCase(),
           buffer: contentBuf
         };
+        if (!file && fieldName !== 'videoFile') {
+          file = parsedFile;
+        }
+        files[fieldName] = parsedFile;
       } else if (nameMatch) {
-        fields[nameMatch[1].trim()] = contentBuf.toString('utf8').trim();
+        fields[fieldName] = contentBuf.toString('utf8').trim();
       }
     }
     searchFrom = nextBoundary;
   }
-  return { fields, file };
+  if (!file && files.videoFile) {
+    file = files.videoFile;
+  }
+  return { fields, file, files };
 }
 
 const rawMediaUploadMiddleware = express.raw({
@@ -1533,6 +1561,27 @@ apiRouter.post('/crm/cart/detect-sweep', requireCrmAccess, async (req: Authentic
   }
 });
 
+// Remove an unrecoverable / obsolete card from the Abandoned Checkout Recovery Board
+apiRouter.delete('/crm/abandoned-carts/:id', requireCrmAccess, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const cartId = String(req.params.id || '').trim();
+    if (!cartId) {
+      return res.status(400).json({ success: false, error: 'Cart ID is required.' });
+    }
+    const removed = await db.deleteCartAsync(cartId, req.user!.email);
+    if (!removed) {
+      return res.status(404).json({ success: false, error: 'Abandoned cart card not found.' });
+    }
+    return res.json({
+      success: true,
+      removedCartId: removed.id,
+      message: `Removed abandoned checkout card (${removed.email || removed.id}) from the recovery board.`
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to remove abandoned cart card.' });
+  }
+});
+
 // ==========================================
 // 3. ERP & SUPPLY CHAIN ENDPOINTS (STORE_MANAGER | LOGISTICS_COORDINATOR)
 // ==========================================
@@ -1544,14 +1593,33 @@ apiRouter.get('/erp/inventory', requireErpAccess, (req: AuthenticatedRequest, re
   res.json({ success: true, inventory, billOfMaterials: bom, lowStockAlerts });
 });
 
-// Permanent Inventory Stock Adjustment (Row-locked in MySQL)
+// Permanent Inventory Stock & Safety Stock Adjustment (Row-locked in MySQL)
 apiRouter.post('/erp/inventory/adjust', requireErpAccess, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { sku, location, newQty } = req.body;
-    const updated = await db.updateInventoryStockAsync(sku, location, newQty, req.user!.email);
-    res.json({ success: true, inventoryItem: updated });
+    const { sku, location, newQty, safetyStock } = req.body;
+    const parsedSafety =
+      safetyStock !== undefined && safetyStock !== null && safetyStock !== ''
+        ? Number(safetyStock)
+        : undefined;
+    const updated = await db.updateInventoryStockAsync(sku, location, newQty, req.user!.email, parsedSafety);
+    res.json({ success: true, inventoryItem: updated, lowStockAlerts: db.getLowStockAlerts() });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Direct inline update of SKU Safety Stock threshold under Stock by Location
+apiRouter.patch('/erp/inventory/:sku/safety-stock', requireErpAccess, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const sku = decodeURIComponent(String(req.params.sku || '').trim());
+    const safetyStock = Number(req.body?.safetyStock);
+    if (!sku || !Number.isFinite(safetyStock) || safetyStock < 0) {
+      return res.status(400).json({ error: 'Valid SKU and non-negative safetyStock integer are required.' });
+    }
+    const updated = await db.updateInventorySafetyStockAsync(sku, safetyStock, req.user!.email);
+    return res.json({ success: true, inventoryItem: updated, lowStockAlerts: db.getLowStockAlerts() });
+  } catch (err: any) {
+    return res.status(400).json({ error: err?.message || 'Failed to update safety stock.' });
   }
 });
 
@@ -2088,7 +2156,7 @@ apiRouter.post(
   }
 );
 
-// Knowledge Base Presentation Upload / Update (.pdf, .pptx, .ppt <= 30MB)
+// Knowledge Base Presentation & Video Upload / Update (.pdf, .pptx, .ppt, .mp4, .webm, .mov <= 50MB + video URL)
 apiRouter.post(
   '/store-management/knowledge-base',
   requireStoreManagementAccess,
@@ -2103,6 +2171,11 @@ apiRouter.post(
       let rawFilename = '';
       let rawMimeType = '';
       let fileBuffer: Buffer | null = null;
+      let rawVideoFilename = '';
+      let rawVideoMimeType = '';
+      let videoBuffer: Buffer | null = null;
+      let externalVideoUrlInput = '';
+      let removeVideo = false;
       let slides: Array<{ title: string; subtitle?: string; points: string[] }> | undefined;
 
       if (Buffer.isBuffer(req.body)) {
@@ -2111,14 +2184,25 @@ apiRouter.post(
           entryId = parsed.fields.id || '';
           title = parsed.fields.title || '';
           description = parsed.fields.description || '';
+          externalVideoUrlInput = parsed.fields.videoUrl || '';
+          removeVideo = ['true', '1', 'yes'].includes((parsed.fields.removeVideo || '').toLowerCase());
           const rawCat = (parsed.fields.category || 'LEATHER_GUIDE').toUpperCase();
           if (['LEATHER_GUIDE', 'CARE_MANUAL', 'CRAFT_DECK', 'SUSTAINABILITY'].includes(rawCat)) {
             category = rawCat as typeof category;
           }
-          if (parsed.file) {
+          if (parsed.files.file) {
+            rawFilename = parsed.files.file.filename;
+            rawMimeType = parsed.files.file.mimeType;
+            fileBuffer = parsed.files.file.buffer;
+          } else if (parsed.file && parsed.file.fieldName !== 'videoFile') {
             rawFilename = parsed.file.filename;
             rawMimeType = parsed.file.mimeType;
             fileBuffer = parsed.file.buffer;
+          }
+          if (parsed.files.videoFile) {
+            rawVideoFilename = parsed.files.videoFile.filename;
+            rawVideoMimeType = parsed.files.videoFile.mimeType;
+            videoBuffer = parsed.files.videoFile.buffer;
           }
         } else {
           rawFilename = String(req.headers['x-filename'] || req.query.filename || '');
@@ -2131,6 +2215,8 @@ apiRouter.post(
         entryId = String(req.body.id || '').trim();
         title = String(req.body.title || '').trim();
         description = String(req.body.description || '').trim();
+        externalVideoUrlInput = String(req.body.videoUrl || '').trim();
+        removeVideo = Boolean(req.body.removeVideo === true || String(req.body.removeVideo || '').toLowerCase() === 'true');
         const rawCat = String(req.body.category || 'LEATHER_GUIDE').toUpperCase();
         if (['LEATHER_GUIDE', 'CARE_MANUAL', 'CRAFT_DECK', 'SUSTAINABILITY'].includes(rawCat)) {
           category = rawCat as typeof category;
@@ -2148,24 +2234,90 @@ apiRouter.post(
         } else if (encoded) {
           fileBuffer = Buffer.from(encoded, 'base64');
         }
+
+        rawVideoFilename = String(req.body.videoFilename || req.body.videoFileName || '').trim();
+        rawVideoMimeType = String(req.body.videoMimeType || '').toLowerCase().trim();
+        const videoEncoded = String(req.body.videoBase64 || req.body.videoDataUrl || '').trim();
+        const videoDataUrlMatch = videoEncoded.match(/^data:([^;]+);base64,(.+)$/i);
+        if (videoDataUrlMatch) {
+          if (!rawVideoMimeType) rawVideoMimeType = videoDataUrlMatch[1].toLowerCase().trim();
+          videoBuffer = Buffer.from(videoDataUrlMatch[2], 'base64');
+        } else if (videoEncoded) {
+          videoBuffer = Buffer.from(videoEncoded, 'base64');
+        }
       }
 
       const existing = entryId ? db.getKnowledgeBase().find(k => k.id === entryId) : undefined;
-      const finalTitle = title || existing?.title || (rawFilename ? path.basename(rawFilename, path.extname(rawFilename)).replace(/[_-]+/g, ' ') : '');
+      const finalTitle =
+        title ||
+        existing?.title ||
+        (rawFilename ? path.basename(rawFilename, path.extname(rawFilename)).replace(/[_-]+/g, ' ') : '') ||
+        (rawVideoFilename ? path.basename(rawVideoFilename, path.extname(rawVideoFilename)).replace(/[_-]+/g, ' ') : '');
       if (!finalTitle || finalTitle.length < 2) {
-        return res.status(400).json({ error: 'Presentation title is required (minimum 2 characters).' });
+        return res.status(400).json({ error: 'Knowledge Base entry title is required (minimum 2 characters).' });
       }
-      const finalDescription = description || existing?.description || 'Bharatvarsh Atelier leathercraft presentation & patron reference guide.';
+      const finalDescription =
+        description || existing?.description || 'Bharatvarsh Atelier leathercraft presentation & patron reference guide.';
+
+      const saveKbAssetToDisk = (buf: Buffer, origName: string, canonicalExt: string, fallbackPrefix: string) => {
+        const rawBase =
+          path
+            .basename(origName || finalTitle, path.extname(origName || ''))
+            .toLowerCase()
+            .replace(/[^a-z0-9_-]+/g, '_')
+            .replace(/^_+|_+$/g, '')
+            .slice(0, 48) || fallbackPrefix;
+
+        const safeFileName = `${rawBase}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}${canonicalExt}`;
+        const publicKbDir = path.resolve(process.cwd(), 'public', 'assets', 'knowledge-base');
+        fs.mkdirSync(publicKbDir, { recursive: true });
+        fs.writeFileSync(path.join(publicKbDir, safeFileName), buf);
+
+        const distDir = path.resolve(process.cwd(), 'dist');
+        if (fs.existsSync(distDir)) {
+          const distKbDir = path.join(distDir, 'assets', 'knowledge-base');
+          fs.mkdirSync(distKbDir, { recursive: true });
+          fs.writeFileSync(path.join(distKbDir, safeFileName), buf);
+        }
+        return { safeFileName, publicUrl: `/assets/knowledge-base/${safeFileName}` };
+      };
+
+      const cleanupKbAssetIfLocal = (assetUrl?: string) => {
+        if (!assetUrl || !assetUrl.startsWith('/assets/knowledge-base/')) return;
+        const basename = path.basename(assetUrl);
+        const publicPath = path.resolve(process.cwd(), 'public', 'assets', 'knowledge-base', basename);
+        const distPath = path.resolve(process.cwd(), 'dist', 'assets', 'knowledge-base', basename);
+        try {
+          if (fs.existsSync(publicPath)) fs.unlinkSync(publicPath);
+          if (fs.existsSync(distPath)) fs.unlinkSync(distPath);
+        } catch {
+          // Non-fatal cleanup
+        }
+      };
 
       let fileUrl = existing?.fileUrl;
       let fileName = existing?.fileName;
-      let fileType: 'PDF' | 'PPTX' | 'PPT' | 'DECK' = existing?.fileType || 'DECK';
+      let fileType: 'PDF' | 'PPTX' | 'PPT' | 'VIDEO' | 'DECK' = existing?.fileType || 'DECK';
       let mimeType = existing?.mimeType;
       let sizeBytes = existing?.sizeBytes;
 
+      let videoUrl = existing?.videoUrl;
+      let videoFileName = existing?.videoFileName;
+      let videoMimeType = existing?.videoMimeType;
+      let videoSizeBytes = existing?.videoSizeBytes;
+
+      if (removeVideo) {
+        cleanupKbAssetIfLocal(existing?.videoUrl);
+        videoUrl = undefined;
+        videoFileName = undefined;
+        videoMimeType = undefined;
+        videoSizeBytes = undefined;
+      }
+
+      // 1. Handle primary uploaded file (.pdf, .pptx, .ppt, OR direct video .mp4/.webm/.mov)
       if (fileBuffer && fileBuffer.length > 0) {
         if (fileBuffer.length > MAX_KB_UPLOAD_BYTES) {
-          return res.status(413).json({ error: 'Presentation file size must not exceed 30MB.' });
+          return res.status(413).json({ error: 'Uploaded file size must not exceed 50MB.' });
         }
 
         const rawExt = path.extname(rawFilename || '').toLowerCase();
@@ -2174,45 +2326,99 @@ apiRouter.post(
 
         if (rawExt && !validByExt) {
           return res.status(400).json({
-            error: 'Unsupported file format. Please upload a .pdf, .pptx, or .ppt presentation file.'
+            error: 'Unsupported file format. Please upload .pdf, .pptx, .ppt, .mp4, .webm, or .mov files.'
           });
         }
         if (!validByExt && !extByMime) {
           return res.status(400).json({
-            error: 'Could not verify presentation format. Please upload a valid .pdf, .pptx, or .ppt file.'
+            error: 'Could not verify file format. Please upload a valid .pdf, .pptx, .ppt, .mp4, .webm, or .mov file.'
           });
         }
 
         const canonicalExt = validByExt ? rawExt : extByMime!;
         const resolvedMime = KB_MIME_BY_EXT[canonicalExt];
-        const rawBase =
-          path
-            .basename(rawFilename || finalTitle, path.extname(rawFilename || ''))
-            .toLowerCase()
-            .replace(/[^a-z0-9_-]+/g, '_')
-            .replace(/^_+|_+$/g, '')
-            .slice(0, 48) || 'leather_presentation';
+        const saved = saveKbAssetToDisk(
+          fileBuffer,
+          rawFilename,
+          canonicalExt,
+          KB_VIDEO_EXTS.has(canonicalExt) ? 'leather_video' : 'leather_presentation'
+        );
 
-        const safeFileName = `${rawBase}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}${canonicalExt}`;
-        const publicKbDir = path.resolve(process.cwd(), 'public', 'assets', 'knowledge-base');
-        fs.mkdirSync(publicKbDir, { recursive: true });
-        fs.writeFileSync(path.join(publicKbDir, safeFileName), fileBuffer);
+        if (KB_VIDEO_EXTS.has(canonicalExt)) {
+          if (existing?.videoUrl && existing.videoUrl !== saved.publicUrl) {
+            cleanupKbAssetIfLocal(existing.videoUrl);
+          }
+          videoUrl = saved.publicUrl;
+          videoFileName = rawFilename || saved.safeFileName;
+          videoMimeType = resolvedMime;
+          videoSizeBytes = fileBuffer.length;
+          if (!existing?.fileUrl && (!existing?.slides || existing.slides.length === 0)) {
+            fileType = 'VIDEO';
+          }
+        } else {
+          if (existing?.fileUrl && existing.fileUrl !== saved.publicUrl) {
+            cleanupKbAssetIfLocal(existing.fileUrl);
+          }
+          fileUrl = saved.publicUrl;
+          fileName = rawFilename || saved.safeFileName;
+          fileType = canonicalExt === '.pdf' ? 'PDF' : canonicalExt === '.pptx' ? 'PPTX' : 'PPT';
+          mimeType = resolvedMime;
+          sizeBytes = fileBuffer.length;
+        }
+      }
 
-        const distDir = path.resolve(process.cwd(), 'dist');
-        if (fs.existsSync(distDir)) {
-          const distKbDir = path.join(distDir, 'assets', 'knowledge-base');
-          fs.mkdirSync(distKbDir, { recursive: true });
-          fs.writeFileSync(path.join(distKbDir, safeFileName), fileBuffer);
+      // 2. Handle dedicated videoFile upload (allows adding/replacing video on any deck or PDF)
+      if (videoBuffer && videoBuffer.length > 0) {
+        if (videoBuffer.length > MAX_KB_UPLOAD_BYTES) {
+          return res.status(413).json({ error: 'Video file size must not exceed 50MB.' });
+        }
+        const rawVidExt = path.extname(rawVideoFilename || '').toLowerCase();
+        const validVidByExt = KB_VIDEO_EXTS.has(rawVidExt);
+        const vidExtByMime = rawVideoMimeType ? KB_EXT_BY_MIME[rawVideoMimeType] : undefined;
+        const validVidByMime = Boolean(vidExtByMime && KB_VIDEO_EXTS.has(vidExtByMime));
+
+        if (!validVidByExt && !validVidByMime) {
+          return res.status(400).json({
+            error: 'Unsupported video format. Please upload an .mp4, .webm, or .mov video file.'
+          });
         }
 
-        fileUrl = `/assets/knowledge-base/${safeFileName}`;
-        fileName = rawFilename || safeFileName;
-        fileType = canonicalExt === '.pdf' ? 'PDF' : canonicalExt === '.pptx' ? 'PPTX' : 'PPT';
-        mimeType = resolvedMime;
-        sizeBytes = fileBuffer.length;
-      } else if (!existing && (!slides || slides.length === 0)) {
+        const canonicalVidExt = validVidByExt ? rawVidExt : vidExtByMime!;
+        const resolvedVidMime = KB_MIME_BY_EXT[canonicalVidExt];
+        const savedVid = saveKbAssetToDisk(videoBuffer, rawVideoFilename, canonicalVidExt, 'leather_video');
+
+        if (existing?.videoUrl && existing.videoUrl !== savedVid.publicUrl) {
+          cleanupKbAssetIfLocal(existing.videoUrl);
+        }
+        videoUrl = savedVid.publicUrl;
+        videoFileName = rawVideoFilename || savedVid.safeFileName;
+        videoMimeType = resolvedVidMime;
+        videoSizeBytes = videoBuffer.length;
+        if (!fileUrl && (!existing?.slides || existing.slides.length === 0) && (!slides || slides.length === 0)) {
+          fileType = 'VIDEO';
+        }
+      } else if (!removeVideo && externalVideoUrlInput) {
+        const cleanVidUrl = externalVideoUrlInput.trim();
+        if (!/^(\/assets\/|https?:\/\/)/i.test(cleanVidUrl)) {
+          return res.status(400).json({
+            error: 'Video URL must start with https://, http://, or /assets/.'
+          });
+        }
+        if (existing?.videoUrl && existing.videoUrl !== cleanVidUrl) {
+          cleanupKbAssetIfLocal(existing.videoUrl);
+        }
+        videoUrl = cleanVidUrl;
+        videoFileName = undefined;
+        videoMimeType = undefined;
+        videoSizeBytes = undefined;
+        if (!fileUrl && (!existing?.slides || existing.slides.length === 0) && (!slides || slides.length === 0)) {
+          fileType = 'VIDEO';
+        }
+      }
+
+      if (!existing && !fileUrl && !videoUrl && (!slides || slides.length === 0)) {
         return res.status(400).json({
-          error: 'Please attach a presentation file (.pdf, .pptx, or .ppt) to publish in the Knowledge Base.'
+          error: 'Please attach a presentation file (.pdf, .pptx, .ppt), upload a video (.mp4, .webm, .mov), or enter a video URL.'
         });
       }
 
@@ -2228,6 +2434,10 @@ apiRouter.post(
             fileType,
             mimeType,
             sizeBytes,
+            videoUrl,
+            videoFileName,
+            videoMimeType,
+            videoSizeBytes,
             uploadedBy: req.user!.email,
             slides: slides || existing?.slides
           },
@@ -2240,8 +2450,8 @@ apiRouter.post(
         entry: savedEntry,
         entries: db.getKnowledgeBase(),
         message: existing
-          ? `Knowledge Base presentation "${savedEntry.title}" updated.`
-          : `Knowledge Base presentation "${savedEntry.title}" published.`
+          ? `Knowledge Base entry "${savedEntry.title}" updated.`
+          : `Knowledge Base entry "${savedEntry.title}" published.`
       });
     } catch (err: any) {
       return res.status(500).json({ error: err?.message || 'Knowledge Base upload failed.' });
@@ -2258,15 +2468,17 @@ apiRouter.delete('/store-management/knowledge-base/:id', requireStoreManagementA
       return res.status(404).json({ error: 'Knowledge Base presentation not found.' });
     }
 
-    if (removed.fileUrl && removed.fileUrl.startsWith('/assets/knowledge-base/')) {
-      const basename = path.basename(removed.fileUrl);
-      const publicPath = path.resolve(process.cwd(), 'public', 'assets', 'knowledge-base', basename);
-      const distPath = path.resolve(process.cwd(), 'dist', 'assets', 'knowledge-base', basename);
-      try {
-        if (fs.existsSync(publicPath)) fs.unlinkSync(publicPath);
-        if (fs.existsSync(distPath)) fs.unlinkSync(distPath);
-      } catch {
-        // Non-fatal file cleanup
+    for (const candidateUrl of [removed.fileUrl, removed.videoUrl]) {
+      if (candidateUrl && candidateUrl.startsWith('/assets/knowledge-base/')) {
+        const basename = path.basename(candidateUrl);
+        const publicPath = path.resolve(process.cwd(), 'public', 'assets', 'knowledge-base', basename);
+        const distPath = path.resolve(process.cwd(), 'dist', 'assets', 'knowledge-base', basename);
+        try {
+          if (fs.existsSync(publicPath)) fs.unlinkSync(publicPath);
+          if (fs.existsSync(distPath)) fs.unlinkSync(distPath);
+        } catch {
+          // Non-fatal file cleanup
+        }
       }
     }
 

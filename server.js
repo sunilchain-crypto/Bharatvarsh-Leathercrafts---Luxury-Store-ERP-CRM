@@ -1798,6 +1798,29 @@ var init_mysqlAdapter = __esm({
           conn.release();
         }
       }
+      /**
+       * Explicitly hard-deletes a single abandoned cart row from bvl_carts
+       * when removed from the Abandoned Checkout Recovery Board.
+       */
+      async deleteAbandonedCart(cartId, state) {
+        if (!this.isConnected()) return;
+        const conn = await this.pool.getConnection();
+        try {
+          await conn.beginTransaction();
+          await conn.query(`DELETE FROM bvl_carts WHERE id = ?`, [cartId]);
+          await this.syncStateWithConnection(conn, state);
+          await conn.commit();
+          this.lastError = null;
+          this.lastSyncAt = (/* @__PURE__ */ new Date()).toISOString();
+        } catch (err) {
+          await conn.rollback().catch(() => {
+          });
+          this.lastError = err.message;
+          throw new Error(`MySQL abandoned cart deletion failed: ${err.message}`);
+        } finally {
+          conn.release();
+        }
+      }
       async saveStateSnapshot(state, connOverride) {
         if (!connOverride && !this.isConnected()) return;
         if (connOverride) {
@@ -4610,7 +4633,7 @@ var init_db = __esm({
           customerPhone: order.customerPhone,
           channel: "EMAIL",
           subject: `Return / Exchange Request \u2014 ${order.orderNumber} (${reasonLabelMap[params.reason]})`,
-          category: params.reason === "INCORRECT_SIZE" ? "SIZE_EXCHANGE" : "HARDWARE_REPAIR",
+          category: params.reason === "INCORRECT_SIZE" ? "SIZE_EXCHANGE" : "DAMAGED_GOODS",
           priority: "HIGH",
           initialMessage: `Patron submitted a 10-day return/exchange request for Order ${order.orderNumber} (${order.items.map((it) => `${it.productName} x${it.quantity}`).join(", ")}). Reason: ${reasonLabelMap[params.reason]}.${cleanNotes ? ` Patron notes: "${cleanNotes}"` : ""}`
         });
@@ -4871,11 +4894,39 @@ var init_db = __esm({
           cart
         };
       }
+      async deleteCartAsync(cartId, actorEmail) {
+        return this.withWriteLock(async () => {
+          const idx = this.state.carts.findIndex((c) => c.id === cartId);
+          if (idx === -1) return null;
+          const prevState = structuredClone(this.state);
+          this.insideAtomicTransaction = true;
+          try {
+            const [removed] = this.state.carts.splice(idx, 1);
+            this.appendAuditEntry(
+              actorEmail,
+              "REMOVE_ABANDONED_CART",
+              "STORE_MANAGEMENT",
+              `Removed abandoned checkout card ${removed.id} (${removed.email || "no email"}, ${removed.phone || "no phone"}, \u20B9${removed.subtotal}) from recovery board`
+            );
+            await mysqlAdapter.deleteAbandonedCart(cartId, this.state);
+            this.persistToDiskOnly();
+            this.lastPersistError = null;
+            return removed;
+          } catch (err) {
+            this.state = prevState;
+            this.persistToDiskOnly();
+            this.lastPersistError = err.message;
+            throw err;
+          } finally {
+            this.insideAtomicTransaction = false;
+          }
+        });
+      }
       // --- ERP Sync Layer (Permanent Inventory Persistence) ---
       getInventory() {
         return this.state.inventory;
       }
-      applyInventoryAdjustmentInMemory(sku, location, newQty, actorEmail) {
+      applyInventoryAdjustmentInMemory(sku, location, newQty, actorEmail, safetyStock) {
         if (!this.isStoreManagementAuthorized(actorEmail)) {
           throw new Error(`Access Denied: Only authorized admin accounts can modify inventory.`);
         }
@@ -4884,25 +4935,34 @@ var init_db = __esm({
         const sanitizedQty = Math.max(0, Math.floor(newQty));
         const prev = item.stockByLocation[location];
         item.stockByLocation[location] = sanitizedQty;
+        let safetyNote = "";
+        if (typeof safetyStock === "number" && Number.isFinite(safetyStock)) {
+          const prevSafety = item.safetyStock;
+          const sanitizedSafety = Math.max(0, Math.floor(safetyStock));
+          item.safetyStock = sanitizedSafety;
+          if (prevSafety !== sanitizedSafety) {
+            safetyNote = ` | Safety Stock: ${prevSafety} -> ${sanitizedSafety}`;
+          }
+        }
         const totalNow = item.stockByLocation.punePrimaryHub + item.stockByLocation.mumbaiWarehouse;
         this.appendAuditEntry(
           actorEmail,
           "ADJUST_INVENTORY",
           "INVENTORY_ADJUSTMENT",
-          `Adjusted ${item.name} (${sku}) at ${location}: ${prev} -> ${sanitizedQty} (Total: ${totalNow}${totalNow === 0 ? " - PRODUCT DEACTIVATED / OUT OF STOCK" : ""})`
+          `Adjusted ${item.name} (${sku}) at ${location}: ${prev} -> ${sanitizedQty} (Total: ${totalNow}${totalNow === 0 ? " - PRODUCT DEACTIVATED / OUT OF STOCK" : ""})${safetyNote}`
         );
         return item;
       }
-      updateInventoryStock(sku, location, newQty, actorEmail) {
-        const item = this.applyInventoryAdjustmentInMemory(sku, location, newQty, actorEmail);
+      updateInventoryStock(sku, location, newQty, actorEmail, safetyStock) {
+        const item = this.applyInventoryAdjustmentInMemory(sku, location, newQty, actorEmail, safetyStock);
         this.persistState();
         return item;
       }
       /**
-       * Atomic, row-locked inventory stock adjustment (SELECT ... FOR UPDATE in MySQL).
+       * Atomic, row-locked inventory stock & safety stock adjustment (SELECT ... FOR UPDATE in MySQL).
        * Rolls back both in-memory/disk state and MySQL if persistence fails.
        */
-      async updateInventoryStockAsync(sku, location, newQty, actorEmail) {
+      async updateInventoryStockAsync(sku, location, newQty, actorEmail, safetyStock) {
         return this.withWriteLock(async () => {
           if (!this.isStoreManagementAuthorized(actorEmail)) {
             throw new Error(`Access Denied: Only authorized admin accounts can modify inventory.`);
@@ -4918,7 +4978,7 @@ var init_db = __esm({
                   inv.stockByLocation.mumbaiWarehouse = lockedRow.mumbaiWarehouse;
                 }
               }
-              const item = this.applyInventoryAdjustmentInMemory(sku, location, newQty, actorEmail);
+              const item = this.applyInventoryAdjustmentInMemory(sku, location, newQty, actorEmail, safetyStock);
               return { result: item, nextState: this.state };
             });
             this.persistToDiskOnly();
@@ -4932,6 +4992,28 @@ var init_db = __esm({
           } finally {
             this.insideAtomicTransaction = false;
           }
+        });
+      }
+      async updateInventorySafetyStockAsync(sku, safetyStock, actorEmail) {
+        return this.runAtomicMutation(() => {
+          if (!this.isStoreManagementAuthorized(actorEmail)) {
+            throw new Error(`Access Denied: Only authorized admin accounts can modify safety stock.`);
+          }
+          const item = this.state.inventory.find((i) => i.sku === sku);
+          if (!item) throw new Error(`SKU ${sku} not found`);
+          const sanitizedSafety = Math.max(0, Math.floor(Number(safetyStock)));
+          if (!Number.isFinite(sanitizedSafety)) {
+            throw new Error("Safety stock must be a valid non-negative integer.");
+          }
+          const prevSafety = item.safetyStock;
+          item.safetyStock = sanitizedSafety;
+          this.appendAuditEntry(
+            actorEmail,
+            "UPDATE_SAFETY_STOCK",
+            "INVENTORY_ADJUSTMENT",
+            `Updated safety stock threshold for ${item.name} (${sku}): ${prevSafety} -> ${sanitizedSafety} pcs`
+          );
+          return item;
         });
       }
       getBillOfMaterials() {
@@ -5957,7 +6039,8 @@ function getIntegrationsReadiness() {
   const stripeConfigured = isConfiguredCredential(process.env.STRIPE_SECRET_KEY);
   const shiprocketConfigured = isConfiguredCredential(process.env.SHIPROCKET_API_TOKEN) || isConfiguredCredential(process.env.SHIPROCKET_EMAIL) && isConfiguredCredential(process.env.SHIPROCKET_PASSWORD);
   const delhiveryConfigured = isConfiguredCredential(process.env.DELHIVERY_API_KEY);
-  const smtpConfigured = isConfiguredCredential(process.env.SMTP_HOST) && isConfiguredCredential(process.env.SMTP_USER) && isConfiguredCredential(process.env.SMTP_PASS);
+  const smtpHostClean = normalizeEnvValue(process.env.SMTP_HOST);
+  const smtpConfigured = isConfiguredCredential(smtpHostClean) && isConfiguredCredential(normalizeEnvValue(process.env.SMTP_USER)) && isConfiguredCredential(normalizeEnvValue(process.env.SMTP_PASS));
   const whatsappConfigured = isConfiguredCredential(process.env.WHATSAPP_BUSINESS_PHONE_NUMBER_ID) && isConfiguredCredential(process.env.WHATSAPP_ACCESS_TOKEN);
   return [
     {
@@ -5993,7 +6076,7 @@ function getIntegrationsReadiness() {
       category: "MESSAGING",
       configured: smtpConfigured,
       mode: smtpConfigured ? "LIVE" : "SANDBOX_FALLBACK",
-      summary: smtpConfigured ? `Live SMTP relay configured (${process.env.SMTP_HOST})` : "Missing SMTP_HOST / SMTP_USER / SMTP_PASS \u2014 logging email dispatches locally"
+      summary: smtpConfigured ? `Live SMTP relay configured (${smtpHostClean}, auto 465/587 TLS)${isPerOrderEmailDisabled() ? " \xB7 Daily consolidated mode" : ""}` : "Missing SMTP_HOST / SMTP_USER / SMTP_PASS \u2014 logging email dispatches locally"
     },
     {
       provider: "WhatsApp Business",
@@ -6356,18 +6439,91 @@ async function allocateCourierAwb(params) {
     fallbackReason: "Shiprocket credentials not configured"
   };
 }
+function normalizeEnvValue(raw) {
+  if (!raw) return "";
+  let val = raw.trim();
+  if (val.startsWith('"') && val.endsWith('"') && val.length >= 2 || val.startsWith("'") && val.endsWith("'") && val.length >= 2) {
+    val = val.slice(1, -1).trim();
+  }
+  return val;
+}
+function buildSmtpTransportAttempts(env = process.env) {
+  const host = normalizeEnvValue(env.SMTP_HOST);
+  if (!host) return [];
+  const parsedPort = parseInt(normalizeEnvValue(env.SMTP_PORT), 10);
+  const primaryPort = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 465;
+  const rawSecure = normalizeEnvValue(env.SMTP_SECURE).toLowerCase();
+  const parseBoolSecure = (fallback) => {
+    if (["true", "1", "yes", "ssl", "tls"].includes(rawSecure)) return true;
+    if (["false", "0", "no", "starttls"].includes(rawSecure)) return false;
+    return fallback;
+  };
+  let primarySecure;
+  let primaryRequireTls = false;
+  if (primaryPort === 465) {
+    primarySecure = true;
+  } else if (primaryPort === 587) {
+    primarySecure = false;
+    primaryRequireTls = true;
+  } else if (primaryPort === 25 || primaryPort === 2525) {
+    primarySecure = false;
+  } else {
+    primarySecure = parseBoolSecure(false);
+  }
+  const attempts = [
+    {
+      host,
+      port: primaryPort,
+      secure: primarySecure,
+      ...primaryRequireTls ? { requireTLS: true } : {},
+      label: `${host}:${primaryPort} (${primarySecure ? "SMTPS" : primaryRequireTls ? "STARTTLS" : "SMTP"})`
+    }
+  ];
+  if (primaryPort === 465) {
+    attempts.push({
+      host,
+      port: 587,
+      secure: false,
+      requireTLS: true,
+      label: `${host}:587 (STARTTLS fallback)`
+    });
+  } else if (primaryPort === 587) {
+    attempts.push({
+      host,
+      port: 465,
+      secure: true,
+      label: `${host}:465 (SMTPS fallback)`
+    });
+  }
+  return attempts;
+}
+function isRetryableSmtpTransportError(err) {
+  const code = String(err?.code || "").toUpperCase();
+  const msg = String(err?.message || "").toLowerCase();
+  if (code === "EAUTH" || msg.includes("535") || msg.includes("invalid login") || msg.includes("authentication failed")) {
+    return false;
+  }
+  return code === "ETIMEDOUT" || code === "ESOCKET" || code === "ECONNECTION" || code === "ECONNREFUSED" || code === "ECONNRESET" || code === "EHOSTUNREACH" || msg.includes("greeting never received") || msg.includes("wrong version number") || msg.includes("timeout") || msg.includes("socket close") || msg.includes("connection closed");
+}
+function isPerOrderEmailDisabled(env = process.env) {
+  const disableFlag = normalizeEnvValue(env.DISABLE_PER_ORDER_EMAILS).toLowerCase();
+  if (["true", "1", "yes"].includes(disableFlag)) return true;
+  const enableFlag = normalizeEnvValue(env.ENABLE_PER_ORDER_EMAILS).toLowerCase();
+  if (["false", "0", "no"].includes(enableFlag)) return true;
+  return false;
+}
 function getSupportOrderEmailRecipient() {
-  const configured = process.env.SUPPORT_ORDER_EMAIL || process.env.SMTP_SUPPORT_EMAIL;
+  const configured = normalizeEnvValue(process.env.SUPPORT_ORDER_EMAIL) || normalizeEnvValue(process.env.SMTP_SUPPORT_EMAIL);
   if (configured && isConfiguredCredential(configured)) {
-    return configured.trim();
+    return configured;
   }
   return "Support@bharatvarshcrafts.com";
 }
 function getMissingSmtpReason() {
   const missing = [];
-  if (!isConfiguredCredential(process.env.SMTP_HOST)) missing.push("SMTP_HOST");
-  if (!isConfiguredCredential(process.env.SMTP_USER)) missing.push("SMTP_USER");
-  if (!isConfiguredCredential(process.env.SMTP_PASS)) missing.push("SMTP_PASS");
+  if (!isConfiguredCredential(normalizeEnvValue(process.env.SMTP_HOST))) missing.push("SMTP_HOST");
+  if (!isConfiguredCredential(normalizeEnvValue(process.env.SMTP_USER))) missing.push("SMTP_USER");
+  if (!isConfiguredCredential(normalizeEnvValue(process.env.SMTP_PASS))) missing.push("SMTP_PASS");
   if (missing.length === 0) return "";
   return `Missing ${missing.join(", ")} in server environment`;
 }
@@ -6382,44 +6538,67 @@ async function sendTransactionalEmail(params) {
       fallbackReason: "Missing or invalid recipient email address"
     };
   }
-  const host = process.env.SMTP_HOST;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 465;
-  const secure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === "true" : port === 465;
-  const from = process.env.SMTP_SUPPORT_EMAIL || user || "Support@bharatvarshcrafts.com";
+  const host = normalizeEnvValue(process.env.SMTP_HOST);
+  const user = normalizeEnvValue(process.env.SMTP_USER);
+  const pass = normalizeEnvValue(process.env.SMTP_PASS);
+  const supportEmail = normalizeEnvValue(process.env.SMTP_SUPPORT_EMAIL);
+  const from = user || supportEmail || "Support@bharatvarshcrafts.com";
+  const replyTo = supportEmail && supportEmail.toLowerCase() !== from.toLowerCase() ? supportEmail : void 0;
   const smtpConfigured = isConfiguredCredential(host) && isConfiguredCredential(user) && isConfiguredCredential(pass);
   if (smtpConfigured) {
-    try {
+    const attempts = buildSmtpTransportAttempts(process.env);
+    const attemptErrors = [];
+    for (let i = 0; i < attempts.length; i++) {
+      const attempt = attempts[i];
       const transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure,
-        auth: { user, pass }
+        host: attempt.host,
+        port: attempt.port,
+        secure: attempt.secure,
+        ...attempt.requireTLS ? { requireTLS: true } : {},
+        auth: { user, pass },
+        connectionTimeout: 15e3,
+        greetingTimeout: 15e3,
+        socketTimeout: 25e3,
+        tls: {
+          servername: attempt.host,
+          minVersion: "TLSv1.2"
+        }
       });
-      const info = await transporter.sendMail({
-        from: `"Bharatvarsh Leathercrafts LLP" <${from}>`,
-        to: recipient,
-        subject: params.subject,
-        text: params.text,
-        html: params.html || `<p>${params.text.replace(/\n/g, "<br/>")}</p>`,
-        ...Array.isArray(params.attachments) && params.attachments.length > 0 ? { attachments: params.attachments } : {}
-      });
-      return {
-        mode: "LIVE",
-        channel: "EMAIL",
-        messageId: info.messageId || `smtp_${Date.now()}`,
-        smtpConfigured: true
-      };
-    } catch (err) {
-      return {
-        mode: "SANDBOX_FALLBACK",
-        channel: "EMAIL",
-        messageId: `email_sbx_${Date.now()}`,
-        smtpConfigured: true,
-        fallbackReason: `SMTP transport error: ${err.message}`
-      };
+      try {
+        const info = await transporter.sendMail({
+          from: `"Bharatvarsh Leathercrafts LLP" <${from}>`,
+          ...replyTo ? { replyTo } : {},
+          to: recipient,
+          subject: params.subject,
+          text: params.text,
+          html: params.html || `<p>${params.text.replace(/\n/g, "<br/>")}</p>`,
+          ...Array.isArray(params.attachments) && params.attachments.length > 0 ? { attachments: params.attachments } : {}
+        });
+        transporter.close();
+        return {
+          mode: "LIVE",
+          channel: "EMAIL",
+          messageId: info.messageId || `smtp_${Date.now()}`,
+          smtpConfigured: true,
+          transportUsed: attempt.label
+        };
+      } catch (err) {
+        transporter.close();
+        const reason = `${attempt.label} -> ${err?.message || err}`;
+        attemptErrors.push(reason);
+        const canFallback = i < attempts.length - 1 && isRetryableSmtpTransportError(err);
+        if (!canFallback) {
+          break;
+        }
+      }
     }
+    return {
+      mode: "SANDBOX_FALLBACK",
+      channel: "EMAIL",
+      messageId: `email_sbx_${Date.now()}`,
+      smtpConfigured: true,
+      fallbackReason: `SMTP transport error: ${attemptErrors.join(" | ")}`
+    };
   }
   return {
     mode: "SANDBOX_FALLBACK",
@@ -6616,6 +6795,26 @@ async function dispatchOrderInvoiceEmailToSupport(order) {
   });
 }
 async function dispatchOrderConfirmationAndCareGuide(order) {
+  if (isPerOrderEmailDisabled()) {
+    const skippedEmail = {
+      mode: "SANDBOX_FALLBACK",
+      channel: "EMAIL",
+      messageId: `email_skipped_${Date.now()}`,
+      smtpConfigured: false,
+      fallbackReason: "Per-order emails disabled (using daily consolidated Excel summary)"
+    };
+    const whatsappDelivery2 = await sendWhatsAppMessage({
+      toPhone: order.customerPhone,
+      text: `Bharatvarsh Atelier: Order ${order.orderNumber} confirmed (\u20B9${order.totalAmount.toLocaleString(
+        "en-IN"
+      )}). AWB: ${order.awbNumber}. Digital Beeswax Care Guide included inside your My Atelier portal.`
+    });
+    return {
+      emailDelivery: skippedEmail,
+      supportEmailDelivery: skippedEmail,
+      whatsappDelivery: whatsappDelivery2
+    };
+  }
   const { pdfBuffer, safeFilename } = resolveOrderInvoiceContext(order);
   const summaryLines = order.items.map(
     (it) => `\u2022 ${it.productName} (${it.quantity}x) \u2014 \u20B9${it.unitPrice.toLocaleString("en-IN")}${it.customization?.monogramInitials ? ` [Monogram: ${it.customization.monogramInitials}]` : ""}`
@@ -7685,6 +7884,19 @@ var init_authMiddleware = __esm({
 
 // src/server/dailyOrderReport.ts
 import * as XLSX from "xlsx";
+function resetDailyReportSchedulerBackoff() {
+  failedDateKey = null;
+  consecutiveFailureCount = 0;
+  nextRetryAllowedAtMs = 0;
+}
+function getDailyReportSchedulerStatus() {
+  return {
+    consecutiveFailures: consecutiveFailureCount,
+    nextRetryAt: nextRetryAllowedAtMs > Date.now() ? new Date(nextRetryAllowedAtMs).toISOString() : null,
+    lastDispatchedDate: db.getLastDailyReportDate() || null,
+    yesterdayIstDate: getYesterdayIstDateKey()
+  };
+}
 function getYesterdayIstDateKey(referenceNow = /* @__PURE__ */ new Date()) {
   const istNow = new Date(referenceNow.getTime() + IST_OFFSET_MS);
   const yesterdayUtcMidnight = new Date(
@@ -7838,6 +8050,7 @@ async function sendDailyOrdersReport(options) {
       grossRevenue: 0,
       totalTax: 0,
       deliveryMode: "SANDBOX_FALLBACK",
+      smtpConfigured: false,
       fallbackReason: `Report for ${targetDateKey} already dispatched`
     };
   }
@@ -7845,9 +8058,9 @@ async function sendDailyOrdersReport(options) {
   const recipient = getSupportOrderEmailRecipient();
   const formattedGross = Math.round(report.grossRevenue).toLocaleString("en-IN");
   const formattedTax = Math.round(report.totalTax).toLocaleString("en-IN");
-  const subject = `Daily Order Summary (${report.dateKey}) \u2014 ${report.orderCount} Orders | \u20B9${formattedGross}`;
+  const subject = `Daily Consolidated Order Summary (${report.dateKey}) \u2014 ${report.orderCount} Orders | \u20B9${formattedGross}`;
   const text = [
-    `Bharatvarsh Leathercrafts LLP \u2014 Daily Order Summary (${report.dateKey} IST)`,
+    `Bharatvarsh Leathercrafts LLP \u2014 Daily Consolidated Order Summary (${report.dateKey} IST)`,
     `Total Orders: ${report.orderCount}`,
     `Gross Revenue: \u20B9${formattedGross}`,
     `Total Tax Collected: \u20B9${formattedTax}`,
@@ -7858,7 +8071,7 @@ async function sendDailyOrdersReport(options) {
   <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#FAF7F2;padding:24px;color:#16120E;">
     <div style="max-width:600px;margin:0 auto;background:#FFFFFF;border:1px solid #D8CFC2;padding:24px;border-radius:8px;">
       <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#8B4513;font-weight:700;">Bharatvarsh Leathercrafts LLP \xB7 Automated Ledger</div>
-      <h2 style="font-family:Georgia,serif;font-size:20px;margin:8px 0;">Daily Order Summary (${report.dateKey} IST)</h2>
+      <h2 style="font-family:Georgia,serif;font-size:20px;margin:8px 0;">Daily Consolidated Order Summary (${report.dateKey} IST)</h2>
       <div style="background:#FAF7F2;border:1px solid #E5DDD0;padding:14px;border-radius:6px;font-size:13px;line-height:1.8;font-family:monospace;">
         <div><strong>Total Orders:</strong> ${report.orderCount}</div>
         <div><strong>Gross Revenue:</strong> &#8377;${formattedGross}</div>
@@ -7882,7 +8095,9 @@ async function sendDailyOrdersReport(options) {
       }
     ]
   });
-  if (delivery.mode === "LIVE" || !delivery.smtpConfigured) {
+  const liveDispatchFailed = delivery.smtpConfigured && delivery.mode !== "LIVE";
+  if (!liveDispatchFailed) {
+    resetDailyReportSchedulerBackoff();
     await db.runAtomicMutation(() => {
       if (!options?.targetDateIst || options.targetDateIst === getYesterdayIstDateKey()) {
         db.setLastDailyReportDate(report.dateKey);
@@ -7891,19 +8106,29 @@ async function sendDailyOrdersReport(options) {
         options?.actorEmail || "daily_report_scheduler",
         "DAILY_ORDER_REPORT_SENT",
         "STORE_MANAGEMENT",
-        `Dispatched ${report.filename} to ${recipient} (${report.orderCount} orders, \u20B9${formattedGross}, Mode: ${delivery.mode})`
+        `Dispatched ${report.filename} to ${recipient} (${report.orderCount} orders, \u20B9${formattedGross}, Mode: ${delivery.mode}${delivery.transportUsed ? `, Transport: ${delivery.transportUsed}` : ""})`
       );
     });
   } else {
+    if (!options?.force) {
+      if (failedDateKey !== report.dateKey) {
+        failedDateKey = report.dateKey;
+        consecutiveFailureCount = 1;
+      } else {
+        consecutiveFailureCount += 1;
+      }
+      const backoffMinutes = Math.min(120, 15 * Math.pow(2, consecutiveFailureCount - 1));
+      nextRetryAllowedAtMs = Date.now() + backoffMinutes * 60 * 1e3;
+    }
     db.logAudit(
       options?.actorEmail || "daily_report_scheduler",
       "DAILY_ORDER_REPORT_ERROR",
       "STORE_MANAGEMENT",
-      `Failed live SMTP dispatch of ${report.filename} to ${recipient}: ${delivery.fallbackReason || "Unknown error"}`
+      `Failed live SMTP dispatch of ${report.filename} to ${recipient}: ${delivery.fallbackReason || "Unknown error"}${!options?.force && nextRetryAllowedAtMs > Date.now() ? ` (next auto-retry in ${Math.round((nextRetryAllowedAtMs - Date.now()) / 6e4)}m)` : ""}`
     );
   }
   return {
-    success: true,
+    success: !liveDispatchFailed,
     skipped: false,
     dateKey: report.dateKey,
     filename: report.filename,
@@ -7911,6 +8136,8 @@ async function sendDailyOrdersReport(options) {
     grossRevenue: report.grossRevenue,
     totalTax: report.totalTax,
     deliveryMode: delivery.mode,
+    smtpConfigured: delivery.smtpConfigured,
+    transportUsed: delivery.transportUsed,
     messageId: delivery.messageId,
     fallbackReason: delivery.fallbackReason
   };
@@ -7919,13 +8146,22 @@ async function runScheduledDailyOrderReportIfDue() {
   if (reportInFlight) return;
   const yesterdayKey = getYesterdayIstDateKey();
   if (db.getLastDailyReportDate() === yesterdayKey) return;
+  if (failedDateKey === yesterdayKey && Date.now() < nextRetryAllowedAtMs) {
+    return;
+  }
   reportInFlight = true;
   try {
     const result = await sendDailyOrdersReport({ force: false, targetDateIst: yesterdayKey });
     if (!result.skipped) {
-      console.log(
-        `[DailyOrderReport] Dispatched ${result.filename} (${result.orderCount} orders, mode: ${result.deliveryMode})`
-      );
+      if (result.success) {
+        console.log(
+          `[DailyOrderReport] Dispatched ${result.filename} (${result.orderCount} orders, mode: ${result.deliveryMode}${result.transportUsed ? `, via ${result.transportUsed}` : ""})`
+        );
+      } else {
+        console.warn(
+          `[DailyOrderReport] SMTP dispatch deferred for ${result.filename}: ${result.fallbackReason || "Transport error"}`
+        );
+      }
     }
   } catch (err) {
     console.error("[DailyOrderReport] Scheduled report failed:", err?.message || err);
@@ -7945,7 +8181,7 @@ function startDailyOrderReportScheduler(intervalMs = 6e4) {
   }, intervalMs);
   console.log(`[DailyOrderReport] Scheduler active (IST post-midnight check every ${intervalMs / 1e3}s)`);
 }
-var IST_OFFSET_MS, reportTimer, reportInFlight;
+var IST_OFFSET_MS, reportTimer, reportInFlight, failedDateKey, consecutiveFailureCount, nextRetryAllowedAtMs;
 var init_dailyOrderReport = __esm({
   "src/server/dailyOrderReport.ts"() {
     init_db();
@@ -7953,6 +8189,9 @@ var init_dailyOrderReport = __esm({
     IST_OFFSET_MS = 5.5 * 60 * 60 * 1e3;
     reportTimer = null;
     reportInFlight = false;
+    failedDateKey = null;
+    consecutiveFailureCount = 0;
+    nextRetryAllowedAtMs = 0;
   }
 });
 
@@ -12116,6 +12355,314 @@ async function runCriticalPathTests() {
       message: e.message
     });
   }
+  try {
+    const dbFile = path7.resolve(process.cwd(), "src/server/data/store_db.json");
+    const preTestDbRaw = fs7.existsSync(dbFile) ? fs7.readFileSync(dbFile, "utf-8") : null;
+    const prevDisablePerOrder = process.env.DISABLE_PER_ORDER_EMAILS;
+    const prevSmtpHost = process.env.SMTP_HOST;
+    const prevSmtpPort = process.env.SMTP_PORT;
+    const prevSmtpSecure = process.env.SMTP_SECURE;
+    const prevSmtpUser = process.env.SMTP_USER;
+    const prevSmtpPass = process.env.SMTP_PASS;
+    const app = express();
+    app.use(express.json());
+    app.use("/api", apiRouter);
+    const server = await new Promise((resolve) => {
+      const s = app.listen(0, "127.0.0.1", () => resolve(s));
+    });
+    try {
+      const port = server.address().port;
+      const attempts465 = buildSmtpTransportAttempts({
+        SMTP_HOST: '"smtpout.secureserver.net"',
+        SMTP_PORT: "465",
+        SMTP_SECURE: '"false"'
+      });
+      const attempts587 = buildSmtpTransportAttempts({
+        SMTP_HOST: "smtpout.secureserver.net",
+        SMTP_PORT: "587",
+        SMTP_SECURE: "true"
+      });
+      const tlsNegotiationOk = attempts465.length === 2 && attempts465[0].host === "smtpout.secureserver.net" && attempts465[0].port === 465 && attempts465[0].secure === true && attempts465[1].port === 587 && attempts465[1].secure === false && attempts465[1].requireTLS === true && attempts587.length === 2 && attempts587[0].port === 587 && attempts587[0].secure === false && attempts587[0].requireTLS === true && attempts587[1].port === 465 && attempts587[1].secure === true;
+      process.env.DISABLE_PER_ORDER_EMAILS = '"true"';
+      const perOrderDisabledFlagOk = isPerOrderEmailDisabled();
+      const sampleOrder = db.getOrders()[0];
+      const skippedRes = await dispatchOrderConfirmationAndCareGuide(sampleOrder);
+      const perOrderBypassOk = perOrderDisabledFlagOk && skippedRes.emailDelivery.smtpConfigured === false && skippedRes.supportEmailDelivery.smtpConfigured === false && String(skippedRes.supportEmailDelivery.fallbackReason || "").includes("daily consolidated");
+      const adminJwt = signSessionJwt({
+        sub: "uid_master_sunil",
+        email: "sunilchain@gmail.com",
+        name: "Sunil Chainani",
+        role: "STORE_MANAGER"
+      });
+      const patronJwt = signSessionJwt({
+        sub: "uid_vikram",
+        email: "vikram.singhania@heritagecrafts.in",
+        name: "Vikramaditya Singhania",
+        role: "PATRON"
+      });
+      const dlUnauth = await fetch(`http://127.0.0.1:${port}/api/admin/reports/daily-orders-excel`);
+      const dlPatron = await fetch(`http://127.0.0.1:${port}/api/admin/reports/daily-orders-excel`, {
+        headers: { Authorization: `Bearer ${patronJwt}` }
+      });
+      const dlAdmin = await fetch(`http://127.0.0.1:${port}/api/admin/reports/daily-orders-excel`, {
+        headers: { Authorization: `Bearer ${adminJwt}` }
+      });
+      const dlBytes = Buffer.from(await dlAdmin.arrayBuffer());
+      const dlWb = XLSX2.read(dlBytes, { type: "buffer" });
+      const excelDownloadOk = dlUnauth.status === 401 && dlPatron.status === 403 && dlAdmin.status === 200 && String(dlAdmin.headers.get("content-disposition") || "").includes(".xlsx") && dlWb.SheetNames.includes("Orders") && dlWb.SheetNames.includes("Summary");
+      resetDailyReportSchedulerBackoff();
+      await db.runAtomicMutation(() => {
+        db.setLastDailyReportDate("2000-01-01");
+      });
+      process.env.SMTP_HOST = "127.0.0.1";
+      process.env.SMTP_PORT = "1";
+      process.env.SMTP_SECURE = "false";
+      process.env.SMTP_USER = "Support@bharatvarshcrafts.com";
+      process.env.SMTP_PASS = "test-live-pass-for-backoff";
+      const errCountBefore = db.getAuditLogs().filter((a) => a.action === "DAILY_ORDER_REPORT_ERROR").length;
+      await runScheduledDailyOrderReportIfDue();
+      const errCountAfterFirst = db.getAuditLogs().filter((a) => a.action === "DAILY_ORDER_REPORT_ERROR").length;
+      await runScheduledDailyOrderReportIfDue();
+      const errCountAfterSecond = db.getAuditLogs().filter((a) => a.action === "DAILY_ORDER_REPORT_ERROR").length;
+      const schedStatus = getDailyReportSchedulerStatus();
+      const backoffOk = errCountAfterFirst === errCountBefore + 1 && errCountAfterSecond === errCountAfterFirst && schedStatus.consecutiveFailures === 1 && Boolean(schedStatus.nextRetryAt);
+      if (tlsNegotiationOk && perOrderBypassOk && excelDownloadOk && backoffOk) {
+        results.push({
+          test: "SMTP 465/587 TLS Negotiation, Per-Order Bypass, Excel Download & Scheduler Backoff",
+          status: "PASS",
+          message: "Verified canonical 465 SMTPS / 587 STARTTLS fallback & quote stripping, DISABLE_PER_ORDER_EMAILS bypass, direct .xlsx download RBAC, and 15m+ scheduler retry backoff."
+        });
+      } else {
+        results.push({
+          test: "SMTP 465/587 TLS Negotiation, Per-Order Bypass, Excel Download & Scheduler Backoff",
+          status: "FAIL",
+          message: `tls=${tlsNegotiationOk}, perOrder=${perOrderBypassOk}, excel=${excelDownloadOk}, backoff=${backoffOk} (${errCountBefore}->${errCountAfterFirst}->${errCountAfterSecond})`
+        });
+      }
+    } finally {
+      resetDailyReportSchedulerBackoff();
+      await new Promise((resolve) => server.close(() => resolve()));
+      if (prevDisablePerOrder !== void 0) process.env.DISABLE_PER_ORDER_EMAILS = prevDisablePerOrder;
+      else delete process.env.DISABLE_PER_ORDER_EMAILS;
+      if (prevSmtpHost !== void 0) process.env.SMTP_HOST = prevSmtpHost;
+      else delete process.env.SMTP_HOST;
+      if (prevSmtpPort !== void 0) process.env.SMTP_PORT = prevSmtpPort;
+      else delete process.env.SMTP_PORT;
+      if (prevSmtpSecure !== void 0) process.env.SMTP_SECURE = prevSmtpSecure;
+      else delete process.env.SMTP_SECURE;
+      if (prevSmtpUser !== void 0) process.env.SMTP_USER = prevSmtpUser;
+      else delete process.env.SMTP_USER;
+      if (prevSmtpPass !== void 0) process.env.SMTP_PASS = prevSmtpPass;
+      else delete process.env.SMTP_PASS;
+      if (preTestDbRaw) {
+        fs7.writeFileSync(dbFile, preTestDbRaw, "utf-8");
+        db.state = JSON.parse(preTestDbRaw);
+      }
+    }
+  } catch (e) {
+    results.push({
+      test: "SMTP 465/587 TLS Negotiation, Per-Order Bypass, Excel Download & Scheduler Backoff",
+      status: "FAIL",
+      message: e.message
+    });
+  }
+  try {
+    const dbFile = path7.resolve(process.cwd(), "store_db.json");
+    const preTestDbRaw = fs7.existsSync(dbFile) ? fs7.readFileSync(dbFile, "utf-8") : null;
+    const app = express();
+    app.use("/assets", express.static(path7.resolve(process.cwd(), "public", "assets")));
+    app.use(express.json({ limit: "60mb" }));
+    app.use("/api", apiRouter);
+    const server = app.listen(0);
+    const createdFilesToCleanup = [];
+    try {
+      const address = server.address();
+      const port = address.port;
+      const adminJwt = signSessionJwt({
+        sub: "uid_master_sunil",
+        email: "sunilchain@gmail.com",
+        name: "Sunil Chainani",
+        role: "STORE_MANAGER"
+      });
+      const patronJwt = signSessionJwt({
+        sub: "uid_vikram",
+        email: "vikram.singhania@heritagecrafts.in",
+        name: "Vikramaditya Singhania",
+        role: "PATRON"
+      });
+      const dummyMp4Base64 = Buffer.from("00000018667479706d703432000000006d70343269736f6d", "hex").toString("base64");
+      const kbCreateRes = await fetch(`http://127.0.0.1:${port}/api/store-management/knowledge-base`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${adminJwt}`
+        },
+        body: JSON.stringify({
+          title: "Saddle Stitching Atelier Film",
+          description: "Short craft video demonstrating dual-needle saddle stitching.",
+          category: "CRAFT_DECK",
+          filename: "saddle_stitching_demo.mp4",
+          mimeType: "video/mp4",
+          dataBase64: dummyMp4Base64
+        })
+      });
+      const kbCreateJson = await kbCreateRes.json();
+      const uploadedVideoUrl = String(kbCreateJson?.entry?.videoUrl || "");
+      if (uploadedVideoUrl.startsWith("/assets/knowledge-base/")) {
+        createdFilesToCleanup.push(path7.resolve(process.cwd(), "public", "assets", "knowledge-base", path7.basename(uploadedVideoUrl)));
+        createdFilesToCleanup.push(path7.resolve(process.cwd(), "dist", "assets", "knowledge-base", path7.basename(uploadedVideoUrl)));
+      }
+      const servedVideoRes = uploadedVideoUrl ? await fetch(`http://127.0.0.1:${port}${uploadedVideoUrl}`) : null;
+      const kbAttachUrlRes = await fetch(`http://127.0.0.1:${port}/api/store-management/knowledge-base`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${adminJwt}`
+        },
+        body: JSON.stringify({
+          id: "kb_hide_anatomy_01",
+          videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        })
+      });
+      const kbAttachUrlJson = await kbAttachUrlRes.json();
+      const kbRemoveVideoRes = await fetch(`http://127.0.0.1:${port}/api/store-management/knowledge-base`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${adminJwt}`
+        },
+        body: JSON.stringify({
+          id: "kb_hide_anatomy_01",
+          removeVideo: true
+        })
+      });
+      const kbRemoveVideoJson = await kbRemoveVideoRes.json();
+      const kbDeleteRes = await fetch(
+        `http://127.0.0.1:${port}/api/store-management/knowledge-base/${encodeURIComponent(kbCreateJson?.entry?.id || "")}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${adminJwt}` }
+        }
+      );
+      const videoPublicPath = uploadedVideoUrl ? path7.resolve(process.cwd(), "public", "assets", "knowledge-base", path7.basename(uploadedVideoUrl)) : "";
+      const kbVideoOk = kbCreateRes.status === 201 && kbCreateJson?.entry?.fileType === "VIDEO" && uploadedVideoUrl.startsWith("/assets/knowledge-base/") && servedVideoRes?.status === 200 && kbAttachUrlRes.status === 200 && kbAttachUrlJson?.entry?.videoUrl === "https://www.youtube.com/watch?v=dQw4w9WgXcQ" && kbRemoveVideoRes.status === 200 && !kbRemoveVideoJson?.entry?.videoUrl && kbDeleteRes.status === 200 && Boolean(videoPublicPath) && !fs7.existsSync(videoPublicPath);
+      const targetSku = db.getInventory()[0]?.sku || "BVL-MEN-BLT-01";
+      const safetyUnauth = await fetch(`http://127.0.0.1:${port}/api/erp/inventory/${encodeURIComponent(targetSku)}/safety-stock`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ safetyStock: 99 })
+      });
+      const safetyPatron = await fetch(`http://127.0.0.1:${port}/api/erp/inventory/${encodeURIComponent(targetSku)}/safety-stock`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${patronJwt}`
+        },
+        body: JSON.stringify({ safetyStock: 99 })
+      });
+      const safetyPatchRes = await fetch(`http://127.0.0.1:${port}/api/erp/inventory/${encodeURIComponent(targetSku)}/safety-stock`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${adminJwt}`
+        },
+        body: JSON.stringify({ safetyStock: 99 })
+      });
+      const safetyPatchJson = await safetyPatchRes.json();
+      const safetyAdjustRes = await fetch(`http://127.0.0.1:${port}/api/erp/inventory/adjust`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${adminJwt}`
+        },
+        body: JSON.stringify({
+          sku: targetSku,
+          location: "punePrimaryHub",
+          newQty: 24,
+          safetyStock: 7
+        })
+      });
+      const safetyAdjustJson = await safetyAdjustRes.json();
+      const safetyStockOk = safetyUnauth.status === 401 && safetyPatron.status === 403 && safetyPatchRes.status === 200 && safetyPatchJson?.inventoryItem?.safetyStock === 99 && Array.isArray(safetyPatchJson?.lowStockAlerts?.lowStockSkus) && safetyPatchJson.lowStockAlerts.lowStockSkus.some((a) => a.sku === targetSku) && safetyAdjustRes.status === 200 && safetyAdjustJson?.inventoryItem?.stockByLocation?.punePrimaryHub === 24 && safetyAdjustJson?.inventoryItem?.safetyStock === 7;
+      const testCartId = `cart_unrecoverable_test_${Date.now()}`;
+      await db.runAtomicMutation(() => {
+        const created = db.saveCartState({
+          id: testCartId,
+          email: "",
+          phone: "invalid-phone",
+          items: [
+            {
+              productId: "prod_bvl_test",
+              sku: targetSku,
+              productName: "Heritage Test Piece",
+              unitPrice: 4500,
+              quantity: 1,
+              leatherType: "VEGETABLE_TANNED_HERITAGE",
+              imageUrl: "/assets/images/heirloom_belt.png"
+            }
+          ],
+          subtotal: 4500
+        });
+        created.isAbandoned = true;
+        created.abandonedAt = new Date(Date.now() - 4 * 60 * 60 * 1e3).toISOString();
+        created.recoveryStage = "DETECTED";
+      });
+      const delCartUnauth = await fetch(`http://127.0.0.1:${port}/api/crm/abandoned-carts/${encodeURIComponent(testCartId)}`, {
+        method: "DELETE"
+      });
+      const delCartPatron = await fetch(`http://127.0.0.1:${port}/api/crm/abandoned-carts/${encodeURIComponent(testCartId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${patronJwt}` }
+      });
+      const delCartAdmin = await fetch(`http://127.0.0.1:${port}/api/crm/abandoned-carts/${encodeURIComponent(testCartId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${adminJwt}` }
+      });
+      const delCartAdminJson = await delCartAdmin.json();
+      const delCartAgain = await fetch(`http://127.0.0.1:${port}/api/crm/abandoned-carts/${encodeURIComponent(testCartId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${adminJwt}` }
+      });
+      const kanbanAfterRes = await fetch(`http://127.0.0.1:${port}/api/crm/kanban`, {
+        headers: { Authorization: `Bearer ${adminJwt}` }
+      });
+      const kanbanAfterJson = await kanbanAfterRes.json();
+      const stillInKanban = (kanbanAfterJson?.pipeline?.abandonedCarts || []).some((c) => c.id === testCartId);
+      const auditLoggedRemove = db.getAuditLogs().some((a) => a.action === "REMOVE_ABANDONED_CART" && a.details.includes(testCartId));
+      const removeCartOk = delCartUnauth.status === 401 && delCartPatron.status === 403 && delCartAdmin.status === 200 && delCartAdminJson?.removedCartId === testCartId && delCartAgain.status === 404 && !stillInKanban && auditLoggedRemove;
+      if (kbVideoOk && safetyStockOk && removeCartOk) {
+        results.push({
+          test: "Knowledge Base Videos, Editable Safety Stock & Abandoned Cart Card Removal",
+          status: "PASS",
+          message: "Verified KB video upload/attach/remove/cleanup, inline & modal ERP safety stock editing with RBAC, and abandoned cart card deletion with audit logging."
+        });
+      } else {
+        results.push({
+          test: "Knowledge Base Videos, Editable Safety Stock & Abandoned Cart Card Removal",
+          status: "FAIL",
+          message: `kbVideo=${kbVideoOk}, safetyStock=${safetyStockOk}, removeCart=${removeCartOk}`
+        });
+      }
+    } finally {
+      await new Promise((resolve) => server.close(() => resolve()));
+      for (const filePath of createdFilesToCleanup) {
+        try {
+          if (fs7.existsSync(filePath)) fs7.unlinkSync(filePath);
+        } catch {
+        }
+      }
+      if (preTestDbRaw) {
+        fs7.writeFileSync(dbFile, preTestDbRaw, "utf-8");
+        db.state = JSON.parse(preTestDbRaw);
+      }
+    }
+  } catch (e) {
+    results.push({
+      test: "Knowledge Base Videos, Editable Safety Stock & Abandoned Cart Card Removal",
+      status: "FAIL",
+      message: e.message
+    });
+  }
   const allPassed = results.every((r) => r.status === "PASS");
   console.log("CRITICAL PATH TEST SUMMARY:");
   results.forEach((r) => console.log(`[${r.status}] ${r.test}: ${r.message}`));
@@ -12199,9 +12746,10 @@ function parseMultipartSingleFile(body, contentType) {
 function parseMultipartFormData(body, contentType) {
   const fields = {};
   let file = null;
+  const files = {};
   const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;\s]+))/i);
   const boundary = boundaryMatch?.[1] || boundaryMatch?.[2];
-  if (!boundary) return { fields, file };
+  if (!boundary) return { fields, file, files };
   const delimiter = Buffer.from(`--${boundary}`);
   const headerEndMarker = Buffer.from("\r\n\r\n");
   let searchFrom = 0;
@@ -12225,20 +12773,29 @@ function parseMultipartFormData(body, contentType) {
       const nameMatch = rawHeaders.match(/name="([^"]+)"/i) || rawHeaders.match(/name=([^;\r\n]+)/i);
       const filenameMatch = rawHeaders.match(/filename="([^"]+)"/i) || rawHeaders.match(/filename=([^;\r\n]+)/i);
       const contentBuf = partBuf.subarray(headerEndIdx + 4);
-      if (filenameMatch && !file) {
+      const fieldName = (nameMatch?.[1] || "file").trim();
+      if (filenameMatch) {
         const mimeMatch = rawHeaders.match(/Content-Type:\s*([^\r\n;]+)/i);
-        file = {
+        const parsedFile = {
+          fieldName,
           filename: (filenameMatch[1] || "").trim(),
           mimeType: (mimeMatch?.[1] || "").trim().toLowerCase(),
           buffer: contentBuf
         };
+        if (!file && fieldName !== "videoFile") {
+          file = parsedFile;
+        }
+        files[fieldName] = parsedFile;
       } else if (nameMatch) {
-        fields[nameMatch[1].trim()] = contentBuf.toString("utf8").trim();
+        fields[fieldName] = contentBuf.toString("utf8").trim();
       }
     }
     searchFrom = nextBoundary;
   }
-  return { fields, file };
+  if (!file && files.videoFile) {
+    file = files.videoFile;
+  }
+  return { fields, file, files };
 }
 function handleMediaUploadBody(req, res, next) {
   if (req.is("application/json") && req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
@@ -12256,7 +12813,7 @@ function handleMediaUploadBody(req, res, next) {
     return next();
   });
 }
-var apiRouter, IMAGE_MIME_BY_EXT, VIDEO_MIME_BY_EXT, EXT_BY_MIME, MAX_IMAGE_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_BYTES, KB_MIME_BY_EXT, KB_EXT_BY_MIME, MAX_KB_UPLOAD_BYTES, rawMediaUploadMiddleware;
+var apiRouter, IMAGE_MIME_BY_EXT, VIDEO_MIME_BY_EXT, EXT_BY_MIME, MAX_IMAGE_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_BYTES, KB_MIME_BY_EXT, KB_EXT_BY_MIME, KB_VIDEO_EXTS, MAX_KB_UPLOAD_BYTES, rawMediaUploadMiddleware;
 var init_api = __esm({
   "src/server/api.ts"() {
     init_db();
@@ -12297,14 +12854,21 @@ var init_api = __esm({
     KB_MIME_BY_EXT = {
       ".pdf": "application/pdf",
       ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-      ".ppt": "application/vnd.ms-powerpoint"
+      ".ppt": "application/vnd.ms-powerpoint",
+      ".mp4": "video/mp4",
+      ".webm": "video/webm",
+      ".mov": "video/quicktime"
     };
     KB_EXT_BY_MIME = {
       "application/pdf": ".pdf",
       "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
-      "application/vnd.ms-powerpoint": ".ppt"
+      "application/vnd.ms-powerpoint": ".ppt",
+      "video/mp4": ".mp4",
+      "video/webm": ".webm",
+      "video/quicktime": ".mov"
     };
-    MAX_KB_UPLOAD_BYTES = 30 * 1024 * 1024;
+    KB_VIDEO_EXTS = /* @__PURE__ */ new Set([".mp4", ".webm", ".mov"]);
+    MAX_KB_UPLOAD_BYTES = 50 * 1024 * 1024;
     rawMediaUploadMiddleware = express2.raw({
       type: [
         "multipart/form-data",
@@ -13386,6 +13950,25 @@ var init_api = __esm({
         res.status(500).json({ error: err.message });
       }
     });
+    apiRouter.delete("/crm/abandoned-carts/:id", requireCrmAccess, async (req, res) => {
+      try {
+        const cartId = String(req.params.id || "").trim();
+        if (!cartId) {
+          return res.status(400).json({ success: false, error: "Cart ID is required." });
+        }
+        const removed = await db.deleteCartAsync(cartId, req.user.email);
+        if (!removed) {
+          return res.status(404).json({ success: false, error: "Abandoned cart card not found." });
+        }
+        return res.json({
+          success: true,
+          removedCartId: removed.id,
+          message: `Removed abandoned checkout card (${removed.email || removed.id}) from the recovery board.`
+        });
+      } catch (err) {
+        return res.status(500).json({ success: false, error: err?.message || "Failed to remove abandoned cart card." });
+      }
+    });
     apiRouter.get("/erp/inventory", requireErpAccess, (req, res) => {
       const inventory = db.getInventory();
       const bom = db.getBillOfMaterials();
@@ -13394,11 +13977,25 @@ var init_api = __esm({
     });
     apiRouter.post("/erp/inventory/adjust", requireErpAccess, async (req, res) => {
       try {
-        const { sku, location, newQty } = req.body;
-        const updated = await db.updateInventoryStockAsync(sku, location, newQty, req.user.email);
-        res.json({ success: true, inventoryItem: updated });
+        const { sku, location, newQty, safetyStock } = req.body;
+        const parsedSafety = safetyStock !== void 0 && safetyStock !== null && safetyStock !== "" ? Number(safetyStock) : void 0;
+        const updated = await db.updateInventoryStockAsync(sku, location, newQty, req.user.email, parsedSafety);
+        res.json({ success: true, inventoryItem: updated, lowStockAlerts: db.getLowStockAlerts() });
       } catch (err) {
         res.status(500).json({ error: err.message });
+      }
+    });
+    apiRouter.patch("/erp/inventory/:sku/safety-stock", requireErpAccess, async (req, res) => {
+      try {
+        const sku = decodeURIComponent(String(req.params.sku || "").trim());
+        const safetyStock = Number(req.body?.safetyStock);
+        if (!sku || !Number.isFinite(safetyStock) || safetyStock < 0) {
+          return res.status(400).json({ error: "Valid SKU and non-negative safetyStock integer are required." });
+        }
+        const updated = await db.updateInventorySafetyStockAsync(sku, safetyStock, req.user.email);
+        return res.json({ success: true, inventoryItem: updated, lowStockAlerts: db.getLowStockAlerts() });
+      } catch (err) {
+        return res.status(400).json({ error: err?.message || "Failed to update safety stock." });
       }
     });
     apiRouter.post("/erp/bom", requireErpAccess, async (req, res) => {
@@ -13590,6 +14187,20 @@ var init_api = __esm({
         res.json(result);
       } catch (err) {
         res.status(500).json({ success: false, error: err.message || "Failed to generate daily Excel order report." });
+      }
+    });
+    apiRouter.get("/admin/reports/daily-orders-excel", requireStoreManagementAccess, (req, res) => {
+      try {
+        const targetDateIst = typeof req.query?.date === "string" ? req.query.date.trim() : void 0;
+        const report = generateDailyOrderWorkbook(targetDateIst);
+        res.setHeader(
+          "Content-Type",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        );
+        res.setHeader("Content-Disposition", `attachment; filename="${report.filename}"`);
+        res.send(report.buffer);
+      } catch (err) {
+        res.status(400).json({ success: false, error: err.message || "Failed to export daily Excel workbook." });
       }
     });
     apiRouter.get("/store-management/integrations-status", requireStoreManagementAccess, (req, res) => {
@@ -13842,6 +14453,11 @@ var init_api = __esm({
           let rawFilename = "";
           let rawMimeType = "";
           let fileBuffer = null;
+          let rawVideoFilename = "";
+          let rawVideoMimeType = "";
+          let videoBuffer = null;
+          let externalVideoUrlInput = "";
+          let removeVideo = false;
           let slides;
           if (Buffer.isBuffer(req.body)) {
             if (contentTypeHeader.includes("multipart/form-data")) {
@@ -13849,14 +14465,25 @@ var init_api = __esm({
               entryId = parsed.fields.id || "";
               title = parsed.fields.title || "";
               description = parsed.fields.description || "";
+              externalVideoUrlInput = parsed.fields.videoUrl || "";
+              removeVideo = ["true", "1", "yes"].includes((parsed.fields.removeVideo || "").toLowerCase());
               const rawCat = (parsed.fields.category || "LEATHER_GUIDE").toUpperCase();
               if (["LEATHER_GUIDE", "CARE_MANUAL", "CRAFT_DECK", "SUSTAINABILITY"].includes(rawCat)) {
                 category = rawCat;
               }
-              if (parsed.file) {
+              if (parsed.files.file) {
+                rawFilename = parsed.files.file.filename;
+                rawMimeType = parsed.files.file.mimeType;
+                fileBuffer = parsed.files.file.buffer;
+              } else if (parsed.file && parsed.file.fieldName !== "videoFile") {
                 rawFilename = parsed.file.filename;
                 rawMimeType = parsed.file.mimeType;
                 fileBuffer = parsed.file.buffer;
+              }
+              if (parsed.files.videoFile) {
+                rawVideoFilename = parsed.files.videoFile.filename;
+                rawVideoMimeType = parsed.files.videoFile.mimeType;
+                videoBuffer = parsed.files.videoFile.buffer;
               }
             } else {
               rawFilename = String(req.headers["x-filename"] || req.query.filename || "");
@@ -13869,6 +14496,8 @@ var init_api = __esm({
             entryId = String(req.body.id || "").trim();
             title = String(req.body.title || "").trim();
             description = String(req.body.description || "").trim();
+            externalVideoUrlInput = String(req.body.videoUrl || "").trim();
+            removeVideo = Boolean(req.body.removeVideo === true || String(req.body.removeVideo || "").toLowerCase() === "true");
             const rawCat = String(req.body.category || "LEATHER_GUIDE").toUpperCase();
             if (["LEATHER_GUIDE", "CARE_MANUAL", "CRAFT_DECK", "SUSTAINABILITY"].includes(rawCat)) {
               category = rawCat;
@@ -13886,56 +14515,158 @@ var init_api = __esm({
             } else if (encoded) {
               fileBuffer = Buffer.from(encoded, "base64");
             }
+            rawVideoFilename = String(req.body.videoFilename || req.body.videoFileName || "").trim();
+            rawVideoMimeType = String(req.body.videoMimeType || "").toLowerCase().trim();
+            const videoEncoded = String(req.body.videoBase64 || req.body.videoDataUrl || "").trim();
+            const videoDataUrlMatch = videoEncoded.match(/^data:([^;]+);base64,(.+)$/i);
+            if (videoDataUrlMatch) {
+              if (!rawVideoMimeType) rawVideoMimeType = videoDataUrlMatch[1].toLowerCase().trim();
+              videoBuffer = Buffer.from(videoDataUrlMatch[2], "base64");
+            } else if (videoEncoded) {
+              videoBuffer = Buffer.from(videoEncoded, "base64");
+            }
           }
           const existing = entryId ? db.getKnowledgeBase().find((k) => k.id === entryId) : void 0;
-          const finalTitle = title || existing?.title || (rawFilename ? path8.basename(rawFilename, path8.extname(rawFilename)).replace(/[_-]+/g, " ") : "");
+          const finalTitle = title || existing?.title || (rawFilename ? path8.basename(rawFilename, path8.extname(rawFilename)).replace(/[_-]+/g, " ") : "") || (rawVideoFilename ? path8.basename(rawVideoFilename, path8.extname(rawVideoFilename)).replace(/[_-]+/g, " ") : "");
           if (!finalTitle || finalTitle.length < 2) {
-            return res.status(400).json({ error: "Presentation title is required (minimum 2 characters)." });
+            return res.status(400).json({ error: "Knowledge Base entry title is required (minimum 2 characters)." });
           }
           const finalDescription = description || existing?.description || "Bharatvarsh Atelier leathercraft presentation & patron reference guide.";
+          const saveKbAssetToDisk = (buf, origName, canonicalExt, fallbackPrefix) => {
+            const rawBase = path8.basename(origName || finalTitle, path8.extname(origName || "")).toLowerCase().replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 48) || fallbackPrefix;
+            const safeFileName = `${rawBase}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}${canonicalExt}`;
+            const publicKbDir = path8.resolve(process.cwd(), "public", "assets", "knowledge-base");
+            fs8.mkdirSync(publicKbDir, { recursive: true });
+            fs8.writeFileSync(path8.join(publicKbDir, safeFileName), buf);
+            const distDir = path8.resolve(process.cwd(), "dist");
+            if (fs8.existsSync(distDir)) {
+              const distKbDir = path8.join(distDir, "assets", "knowledge-base");
+              fs8.mkdirSync(distKbDir, { recursive: true });
+              fs8.writeFileSync(path8.join(distKbDir, safeFileName), buf);
+            }
+            return { safeFileName, publicUrl: `/assets/knowledge-base/${safeFileName}` };
+          };
+          const cleanupKbAssetIfLocal = (assetUrl) => {
+            if (!assetUrl || !assetUrl.startsWith("/assets/knowledge-base/")) return;
+            const basename = path8.basename(assetUrl);
+            const publicPath = path8.resolve(process.cwd(), "public", "assets", "knowledge-base", basename);
+            const distPath = path8.resolve(process.cwd(), "dist", "assets", "knowledge-base", basename);
+            try {
+              if (fs8.existsSync(publicPath)) fs8.unlinkSync(publicPath);
+              if (fs8.existsSync(distPath)) fs8.unlinkSync(distPath);
+            } catch {
+            }
+          };
           let fileUrl = existing?.fileUrl;
           let fileName = existing?.fileName;
           let fileType = existing?.fileType || "DECK";
           let mimeType = existing?.mimeType;
           let sizeBytes = existing?.sizeBytes;
+          let videoUrl = existing?.videoUrl;
+          let videoFileName = existing?.videoFileName;
+          let videoMimeType = existing?.videoMimeType;
+          let videoSizeBytes = existing?.videoSizeBytes;
+          if (removeVideo) {
+            cleanupKbAssetIfLocal(existing?.videoUrl);
+            videoUrl = void 0;
+            videoFileName = void 0;
+            videoMimeType = void 0;
+            videoSizeBytes = void 0;
+          }
           if (fileBuffer && fileBuffer.length > 0) {
             if (fileBuffer.length > MAX_KB_UPLOAD_BYTES) {
-              return res.status(413).json({ error: "Presentation file size must not exceed 30MB." });
+              return res.status(413).json({ error: "Uploaded file size must not exceed 50MB." });
             }
             const rawExt = path8.extname(rawFilename || "").toLowerCase();
             const validByExt = Boolean(KB_MIME_BY_EXT[rawExt]);
             const extByMime = rawMimeType ? KB_EXT_BY_MIME[rawMimeType] : void 0;
             if (rawExt && !validByExt) {
               return res.status(400).json({
-                error: "Unsupported file format. Please upload a .pdf, .pptx, or .ppt presentation file."
+                error: "Unsupported file format. Please upload .pdf, .pptx, .ppt, .mp4, .webm, or .mov files."
               });
             }
             if (!validByExt && !extByMime) {
               return res.status(400).json({
-                error: "Could not verify presentation format. Please upload a valid .pdf, .pptx, or .ppt file."
+                error: "Could not verify file format. Please upload a valid .pdf, .pptx, .ppt, .mp4, .webm, or .mov file."
               });
             }
             const canonicalExt = validByExt ? rawExt : extByMime;
             const resolvedMime = KB_MIME_BY_EXT[canonicalExt];
-            const rawBase = path8.basename(rawFilename || finalTitle, path8.extname(rawFilename || "")).toLowerCase().replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 48) || "leather_presentation";
-            const safeFileName = `${rawBase}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}${canonicalExt}`;
-            const publicKbDir = path8.resolve(process.cwd(), "public", "assets", "knowledge-base");
-            fs8.mkdirSync(publicKbDir, { recursive: true });
-            fs8.writeFileSync(path8.join(publicKbDir, safeFileName), fileBuffer);
-            const distDir = path8.resolve(process.cwd(), "dist");
-            if (fs8.existsSync(distDir)) {
-              const distKbDir = path8.join(distDir, "assets", "knowledge-base");
-              fs8.mkdirSync(distKbDir, { recursive: true });
-              fs8.writeFileSync(path8.join(distKbDir, safeFileName), fileBuffer);
+            const saved = saveKbAssetToDisk(
+              fileBuffer,
+              rawFilename,
+              canonicalExt,
+              KB_VIDEO_EXTS.has(canonicalExt) ? "leather_video" : "leather_presentation"
+            );
+            if (KB_VIDEO_EXTS.has(canonicalExt)) {
+              if (existing?.videoUrl && existing.videoUrl !== saved.publicUrl) {
+                cleanupKbAssetIfLocal(existing.videoUrl);
+              }
+              videoUrl = saved.publicUrl;
+              videoFileName = rawFilename || saved.safeFileName;
+              videoMimeType = resolvedMime;
+              videoSizeBytes = fileBuffer.length;
+              if (!existing?.fileUrl && (!existing?.slides || existing.slides.length === 0)) {
+                fileType = "VIDEO";
+              }
+            } else {
+              if (existing?.fileUrl && existing.fileUrl !== saved.publicUrl) {
+                cleanupKbAssetIfLocal(existing.fileUrl);
+              }
+              fileUrl = saved.publicUrl;
+              fileName = rawFilename || saved.safeFileName;
+              fileType = canonicalExt === ".pdf" ? "PDF" : canonicalExt === ".pptx" ? "PPTX" : "PPT";
+              mimeType = resolvedMime;
+              sizeBytes = fileBuffer.length;
             }
-            fileUrl = `/assets/knowledge-base/${safeFileName}`;
-            fileName = rawFilename || safeFileName;
-            fileType = canonicalExt === ".pdf" ? "PDF" : canonicalExt === ".pptx" ? "PPTX" : "PPT";
-            mimeType = resolvedMime;
-            sizeBytes = fileBuffer.length;
-          } else if (!existing && (!slides || slides.length === 0)) {
+          }
+          if (videoBuffer && videoBuffer.length > 0) {
+            if (videoBuffer.length > MAX_KB_UPLOAD_BYTES) {
+              return res.status(413).json({ error: "Video file size must not exceed 50MB." });
+            }
+            const rawVidExt = path8.extname(rawVideoFilename || "").toLowerCase();
+            const validVidByExt = KB_VIDEO_EXTS.has(rawVidExt);
+            const vidExtByMime = rawVideoMimeType ? KB_EXT_BY_MIME[rawVideoMimeType] : void 0;
+            const validVidByMime = Boolean(vidExtByMime && KB_VIDEO_EXTS.has(vidExtByMime));
+            if (!validVidByExt && !validVidByMime) {
+              return res.status(400).json({
+                error: "Unsupported video format. Please upload an .mp4, .webm, or .mov video file."
+              });
+            }
+            const canonicalVidExt = validVidByExt ? rawVidExt : vidExtByMime;
+            const resolvedVidMime = KB_MIME_BY_EXT[canonicalVidExt];
+            const savedVid = saveKbAssetToDisk(videoBuffer, rawVideoFilename, canonicalVidExt, "leather_video");
+            if (existing?.videoUrl && existing.videoUrl !== savedVid.publicUrl) {
+              cleanupKbAssetIfLocal(existing.videoUrl);
+            }
+            videoUrl = savedVid.publicUrl;
+            videoFileName = rawVideoFilename || savedVid.safeFileName;
+            videoMimeType = resolvedVidMime;
+            videoSizeBytes = videoBuffer.length;
+            if (!fileUrl && (!existing?.slides || existing.slides.length === 0) && (!slides || slides.length === 0)) {
+              fileType = "VIDEO";
+            }
+          } else if (!removeVideo && externalVideoUrlInput) {
+            const cleanVidUrl = externalVideoUrlInput.trim();
+            if (!/^(\/assets\/|https?:\/\/)/i.test(cleanVidUrl)) {
+              return res.status(400).json({
+                error: "Video URL must start with https://, http://, or /assets/."
+              });
+            }
+            if (existing?.videoUrl && existing.videoUrl !== cleanVidUrl) {
+              cleanupKbAssetIfLocal(existing.videoUrl);
+            }
+            videoUrl = cleanVidUrl;
+            videoFileName = void 0;
+            videoMimeType = void 0;
+            videoSizeBytes = void 0;
+            if (!fileUrl && (!existing?.slides || existing.slides.length === 0) && (!slides || slides.length === 0)) {
+              fileType = "VIDEO";
+            }
+          }
+          if (!existing && !fileUrl && !videoUrl && (!slides || slides.length === 0)) {
             return res.status(400).json({
-              error: "Please attach a presentation file (.pdf, .pptx, or .ppt) to publish in the Knowledge Base."
+              error: "Please attach a presentation file (.pdf, .pptx, .ppt), upload a video (.mp4, .webm, .mov), or enter a video URL."
             });
           }
           const savedEntry = await db.runAtomicMutation(
@@ -13950,6 +14681,10 @@ var init_api = __esm({
                 fileType,
                 mimeType,
                 sizeBytes,
+                videoUrl,
+                videoFileName,
+                videoMimeType,
+                videoSizeBytes,
                 uploadedBy: req.user.email,
                 slides: slides || existing?.slides
               },
@@ -13960,7 +14695,7 @@ var init_api = __esm({
             success: true,
             entry: savedEntry,
             entries: db.getKnowledgeBase(),
-            message: existing ? `Knowledge Base presentation "${savedEntry.title}" updated.` : `Knowledge Base presentation "${savedEntry.title}" published.`
+            message: existing ? `Knowledge Base entry "${savedEntry.title}" updated.` : `Knowledge Base entry "${savedEntry.title}" published.`
           });
         } catch (err) {
           return res.status(500).json({ error: err?.message || "Knowledge Base upload failed." });
@@ -13975,14 +14710,16 @@ var init_api = __esm({
         if (!removed) {
           return res.status(404).json({ error: "Knowledge Base presentation not found." });
         }
-        if (removed.fileUrl && removed.fileUrl.startsWith("/assets/knowledge-base/")) {
-          const basename = path8.basename(removed.fileUrl);
-          const publicPath = path8.resolve(process.cwd(), "public", "assets", "knowledge-base", basename);
-          const distPath = path8.resolve(process.cwd(), "dist", "assets", "knowledge-base", basename);
-          try {
-            if (fs8.existsSync(publicPath)) fs8.unlinkSync(publicPath);
-            if (fs8.existsSync(distPath)) fs8.unlinkSync(distPath);
-          } catch {
+        for (const candidateUrl of [removed.fileUrl, removed.videoUrl]) {
+          if (candidateUrl && candidateUrl.startsWith("/assets/knowledge-base/")) {
+            const basename = path8.basename(candidateUrl);
+            const publicPath = path8.resolve(process.cwd(), "public", "assets", "knowledge-base", basename);
+            const distPath = path8.resolve(process.cwd(), "dist", "assets", "knowledge-base", basename);
+            try {
+              if (fs8.existsSync(publicPath)) fs8.unlinkSync(publicPath);
+              if (fs8.existsSync(distPath)) fs8.unlinkSync(distPath);
+            } catch {
+            }
           }
         }
         return res.json({

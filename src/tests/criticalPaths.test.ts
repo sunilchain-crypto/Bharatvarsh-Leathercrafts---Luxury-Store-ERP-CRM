@@ -4969,6 +4969,259 @@ export async function runCriticalPathTests(): Promise<{ passed: boolean; results
     });
   }
 
+  // Test 43: Knowledge Base Video Upload/Update, Editable Safety Stock & Abandoned Cart Card Removal
+  try {
+    const dbFile = path.resolve(process.cwd(), 'store_db.json');
+    const preTestDbRaw = fs.existsSync(dbFile) ? fs.readFileSync(dbFile, 'utf-8') : null;
+    const app = express();
+    app.use('/assets', express.static(path.resolve(process.cwd(), 'public', 'assets')));
+    app.use(express.json({ limit: '60mb' }));
+    app.use('/api', apiRouter);
+    const server = app.listen(0);
+    const createdFilesToCleanup: string[] = [];
+
+    try {
+      const address = server.address() as any;
+      const port = address.port;
+
+      const adminJwt = signSessionJwt({
+        sub: 'uid_master_sunil',
+        email: 'sunilchain@gmail.com',
+        name: 'Sunil Chainani',
+        role: 'STORE_MANAGER'
+      });
+      const patronJwt = signSessionJwt({
+        sub: 'uid_vikram',
+        email: 'vikram.singhania@heritagecrafts.in',
+        name: 'Vikramaditya Singhania',
+        role: 'PATRON'
+      });
+
+      // 1. Knowledge Base Video Upload, Update & Removal
+      const dummyMp4Base64 = Buffer.from('00000018667479706d703432000000006d70343269736f6d', 'hex').toString('base64');
+      const kbCreateRes = await fetch(`http://127.0.0.1:${port}/api/store-management/knowledge-base`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminJwt}`
+        },
+        body: JSON.stringify({
+          title: 'Saddle Stitching Atelier Film',
+          description: 'Short craft video demonstrating dual-needle saddle stitching.',
+          category: 'CRAFT_DECK',
+          filename: 'saddle_stitching_demo.mp4',
+          mimeType: 'video/mp4',
+          dataBase64: dummyMp4Base64
+        })
+      });
+      const kbCreateJson = (await kbCreateRes.json()) as any;
+      const uploadedVideoUrl = String(kbCreateJson?.entry?.videoUrl || '');
+      if (uploadedVideoUrl.startsWith('/assets/knowledge-base/')) {
+        createdFilesToCleanup.push(path.resolve(process.cwd(), 'public', 'assets', 'knowledge-base', path.basename(uploadedVideoUrl)));
+        createdFilesToCleanup.push(path.resolve(process.cwd(), 'dist', 'assets', 'knowledge-base', path.basename(uploadedVideoUrl)));
+      }
+      const servedVideoRes = uploadedVideoUrl
+        ? await fetch(`http://127.0.0.1:${port}${uploadedVideoUrl}`)
+        : null;
+
+      // Update an existing seeded deck with an external YouTube video URL, then remove it
+      const kbAttachUrlRes = await fetch(`http://127.0.0.1:${port}/api/store-management/knowledge-base`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminJwt}`
+        },
+        body: JSON.stringify({
+          id: 'kb_hide_anatomy_01',
+          videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+        })
+      });
+      const kbAttachUrlJson = (await kbAttachUrlRes.json()) as any;
+
+      const kbRemoveVideoRes = await fetch(`http://127.0.0.1:${port}/api/store-management/knowledge-base`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminJwt}`
+        },
+        body: JSON.stringify({
+          id: 'kb_hide_anatomy_01',
+          removeVideo: true
+        })
+      });
+      const kbRemoveVideoJson = (await kbRemoveVideoRes.json()) as any;
+
+      // Delete the newly created video entry and verify file cleanup
+      const kbDeleteRes = await fetch(
+        `http://127.0.0.1:${port}/api/store-management/knowledge-base/${encodeURIComponent(kbCreateJson?.entry?.id || '')}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${adminJwt}` }
+        }
+      );
+      const videoPublicPath = uploadedVideoUrl
+        ? path.resolve(process.cwd(), 'public', 'assets', 'knowledge-base', path.basename(uploadedVideoUrl))
+        : '';
+
+      const kbVideoOk =
+        kbCreateRes.status === 201 &&
+        kbCreateJson?.entry?.fileType === 'VIDEO' &&
+        uploadedVideoUrl.startsWith('/assets/knowledge-base/') &&
+        servedVideoRes?.status === 200 &&
+        kbAttachUrlRes.status === 200 &&
+        kbAttachUrlJson?.entry?.videoUrl === 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' &&
+        kbRemoveVideoRes.status === 200 &&
+        !kbRemoveVideoJson?.entry?.videoUrl &&
+        kbDeleteRes.status === 200 &&
+        Boolean(videoPublicPath) &&
+        !fs.existsSync(videoPublicPath);
+
+      // 2. Editable Safety Stock under Stock by Location (PATCH + POST adjust)
+      const targetSku = db.getInventory()[0]?.sku || 'BVL-MEN-BLT-01';
+      const safetyUnauth = await fetch(`http://127.0.0.1:${port}/api/erp/inventory/${encodeURIComponent(targetSku)}/safety-stock`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ safetyStock: 99 })
+      });
+      const safetyPatron = await fetch(`http://127.0.0.1:${port}/api/erp/inventory/${encodeURIComponent(targetSku)}/safety-stock`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${patronJwt}`
+        },
+        body: JSON.stringify({ safetyStock: 99 })
+      });
+      const safetyPatchRes = await fetch(`http://127.0.0.1:${port}/api/erp/inventory/${encodeURIComponent(targetSku)}/safety-stock`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminJwt}`
+        },
+        body: JSON.stringify({ safetyStock: 99 })
+      });
+      const safetyPatchJson = (await safetyPatchRes.json()) as any;
+      const safetyAdjustRes = await fetch(`http://127.0.0.1:${port}/api/erp/inventory/adjust`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminJwt}`
+        },
+        body: JSON.stringify({
+          sku: targetSku,
+          location: 'punePrimaryHub',
+          newQty: 24,
+          safetyStock: 7
+        })
+      });
+      const safetyAdjustJson = (await safetyAdjustRes.json()) as any;
+
+      const safetyStockOk =
+        safetyUnauth.status === 401 &&
+        safetyPatron.status === 403 &&
+        safetyPatchRes.status === 200 &&
+        safetyPatchJson?.inventoryItem?.safetyStock === 99 &&
+        Array.isArray(safetyPatchJson?.lowStockAlerts?.lowStockSkus) &&
+        safetyPatchJson.lowStockAlerts.lowStockSkus.some((a: any) => a.sku === targetSku) &&
+        safetyAdjustRes.status === 200 &&
+        safetyAdjustJson?.inventoryItem?.stockByLocation?.punePrimaryHub === 24 &&
+        safetyAdjustJson?.inventoryItem?.safetyStock === 7;
+
+      // 3. Remove Card from Abandoned Checkout Recovery Board (Missing valid contact info)
+      const testCartId = `cart_unrecoverable_test_${Date.now()}`;
+      await db.runAtomicMutation(() => {
+        const created = db.saveCartState({
+          id: testCartId,
+          email: '',
+          phone: 'invalid-phone',
+          items: [
+            {
+              productId: 'prod_bvl_test',
+              sku: targetSku,
+              productName: 'Heritage Test Piece',
+              unitPrice: 4500,
+              quantity: 1,
+              leatherType: 'VEGETABLE_TANNED_HERITAGE',
+              imageUrl: '/assets/images/heirloom_belt.png'
+            }
+          ],
+          subtotal: 4500
+        });
+        created.isAbandoned = true;
+        created.abandonedAt = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+        created.recoveryStage = 'DETECTED';
+      });
+
+      const delCartUnauth = await fetch(`http://127.0.0.1:${port}/api/crm/abandoned-carts/${encodeURIComponent(testCartId)}`, {
+        method: 'DELETE'
+      });
+      const delCartPatron = await fetch(`http://127.0.0.1:${port}/api/crm/abandoned-carts/${encodeURIComponent(testCartId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${patronJwt}` }
+      });
+      const delCartAdmin = await fetch(`http://127.0.0.1:${port}/api/crm/abandoned-carts/${encodeURIComponent(testCartId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminJwt}` }
+      });
+      const delCartAdminJson = (await delCartAdmin.json()) as any;
+      const delCartAgain = await fetch(`http://127.0.0.1:${port}/api/crm/abandoned-carts/${encodeURIComponent(testCartId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminJwt}` }
+      });
+
+      const kanbanAfterRes = await fetch(`http://127.0.0.1:${port}/api/crm/kanban`, {
+        headers: { Authorization: `Bearer ${adminJwt}` }
+      });
+      const kanbanAfterJson = (await kanbanAfterRes.json()) as any;
+      const stillInKanban = (kanbanAfterJson?.pipeline?.abandonedCarts || []).some((c: any) => c.id === testCartId);
+      const auditLoggedRemove = db
+        .getAuditLogs()
+        .some(a => a.action === 'REMOVE_ABANDONED_CART' && a.details.includes(testCartId));
+
+      const removeCartOk =
+        delCartUnauth.status === 401 &&
+        delCartPatron.status === 403 &&
+        delCartAdmin.status === 200 &&
+        delCartAdminJson?.removedCartId === testCartId &&
+        delCartAgain.status === 404 &&
+        !stillInKanban &&
+        auditLoggedRemove;
+
+      if (kbVideoOk && safetyStockOk && removeCartOk) {
+        results.push({
+          test: 'Knowledge Base Videos, Editable Safety Stock & Abandoned Cart Card Removal',
+          status: 'PASS',
+          message:
+            'Verified KB video upload/attach/remove/cleanup, inline & modal ERP safety stock editing with RBAC, and abandoned cart card deletion with audit logging.'
+        });
+      } else {
+        results.push({
+          test: 'Knowledge Base Videos, Editable Safety Stock & Abandoned Cart Card Removal',
+          status: 'FAIL',
+          message: `kbVideo=${kbVideoOk}, safetyStock=${safetyStockOk}, removeCart=${removeCartOk}`
+        });
+      }
+    } finally {
+      await new Promise<void>(resolve => server.close(() => resolve()));
+      for (const filePath of createdFilesToCleanup) {
+        try {
+          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        } catch {
+          // ignore
+        }
+      }
+      if (preTestDbRaw) {
+        fs.writeFileSync(dbFile, preTestDbRaw, 'utf-8');
+        (db as any).state = JSON.parse(preTestDbRaw);
+      }
+    }
+  } catch (e: any) {
+    results.push({
+      test: 'Knowledge Base Videos, Editable Safety Stock & Abandoned Cart Card Removal',
+      status: 'FAIL',
+      message: e.message
+    });
+  }
+
   const allPassed = results.every(r => r.status === 'PASS');
   console.log('CRITICAL PATH TEST SUMMARY:');
   results.forEach(r => console.log(`[${r.status}] ${r.test}: ${r.message}`));

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Lock, Database, CheckCircle2, Server, Sliders, Plus, Trash2, Radio, FileSpreadsheet, BookOpen, Upload, Download } from 'lucide-react';
+import { AlertTriangle, Lock, Database, CheckCircle2, Server, Sliders, Plus, Trash2, Radio, FileSpreadsheet, BookOpen, Upload, Download, Film } from 'lucide-react';
 import { StoreManagementConfig, AuditLogEntry, AuthUser, PromoCodeRule, KnowledgeBaseEntry } from '../types/index.ts';
 
 interface MySQLStatus {
@@ -63,13 +63,16 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
   const [lastDailyReportDate, setLastDailyReportDate] = useState<string | null>(null);
   const [isSendingDailyReport, setIsSendingDailyReport] = useState(false);
 
-  // Leather Knowledge Base Presentations State
+  // Leather Knowledge Base Presentations & Videos State
   const [kbEntries, setKbEntries] = useState<KnowledgeBaseEntry[]>([]);
   const [kbEditingId, setKbEditingId] = useState<string>('');
   const [kbTitle, setKbTitle] = useState('');
   const [kbDescription, setKbDescription] = useState('');
   const [kbCategory, setKbCategory] = useState<KnowledgeBaseEntry['category']>('LEATHER_GUIDE');
   const [kbFile, setKbFile] = useState<File | null>(null);
+  const [kbVideoFile, setKbVideoFile] = useState<File | null>(null);
+  const [kbVideoUrl, setKbVideoUrl] = useState('');
+  const [kbRemoveVideo, setKbRemoveVideo] = useState(false);
   const [isUploadingKb, setIsUploadingKb] = useState(false);
 
   const tokenHeader = `Bearer ${authToken}`;
@@ -381,11 +384,14 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
   const handleUploadKnowledgeBase = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!kbTitle.trim()) {
-      setFeedback({ type: 'error', message: 'Presentation title is required.' });
+      setFeedback({ type: 'error', message: 'Knowledge Base entry title is required.' });
       return;
     }
-    if (!kbEditingId && !kbFile) {
-      setFeedback({ type: 'error', message: 'Select a .pdf, .pptx, or .ppt presentation file to upload.' });
+    if (!kbEditingId && !kbFile && !kbVideoFile && !kbVideoUrl.trim()) {
+      setFeedback({
+        type: 'error',
+        message: 'Select a presentation file (.pdf, .pptx, .ppt), upload a video (.mp4, .webm, .mov), or enter a video URL.'
+      });
       return;
     }
 
@@ -397,6 +403,9 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
       formData.append('description', kbDescription.trim());
       formData.append('category', kbCategory);
       if (kbFile) formData.append('file', kbFile);
+      if (kbVideoFile) formData.append('videoFile', kbVideoFile);
+      if (kbVideoUrl.trim()) formData.append('videoUrl', kbVideoUrl.trim());
+      if (kbRemoveVideo) formData.append('removeVideo', 'true');
 
       const res = await fetch('/api/store-management/knowledge-base', {
         method: 'POST',
@@ -411,7 +420,10 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
         setKbDescription('');
         setKbCategory('LEATHER_GUIDE');
         setKbFile(null);
-        setFeedback({ type: 'success', message: data.message || 'Knowledge Base presentation published.' });
+        setKbVideoFile(null);
+        setKbVideoUrl('');
+        setKbRemoveVideo(false);
+        setFeedback({ type: 'success', message: data.message || 'Knowledge Base entry published.' });
         fetchConfig();
       } else {
         setFeedback({ type: 'error', message: data.error || 'Knowledge Base upload failed.' });
@@ -1017,22 +1029,22 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
               </div>
             </div>
 
-            {/* Leather Knowledge Base Presentations Manager */}
+            {/* Leather Knowledge Base Presentations & Videos Manager */}
             <div className="p-6 bg-white rounded-xl border border-[#221C16]/10 shadow-sm space-y-4">
               <div>
                 <h3 className="font-display text-lg font-bold text-[#16120E] flex items-center gap-2">
                   <BookOpen className="w-4 h-4 text-[#8B4513]" />
-                  <span>Leather Knowledge Base Presentations</span>
+                  <span>Leather Knowledge Base (Presentations &amp; Videos)</span>
                 </h3>
                 <p className="text-xs text-[#5C4D3E] mt-1">
-                  Upload or update patron-facing leathercraft decks (.pdf, .pptx, .ppt up to 30MB). Published files appear immediately in the public Knowledge Base tab.
+                  Upload or update patron-facing leathercraft decks (.pdf, .pptx, .ppt) and craft videos (.mp4, .webm, .mov up to 50MB or video URL). Published items appear immediately in the public Knowledge Base tab.
                 </p>
               </div>
 
               <form onSubmit={handleUploadKnowledgeBase} className="space-y-3 text-xs p-4 rounded-lg bg-[#FAF7F2] border border-[#221C16]/10">
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-[11px] uppercase tracking-wider text-[#8B4513] font-semibold">
-                    {kbEditingId ? 'Update / Replace Existing Presentation' : 'Publish New Presentation'}
+                    {kbEditingId ? 'Update / Replace Presentation or Video' : 'Publish New Presentation / Video'}
                   </span>
                   {kbEditingId && (
                     <button
@@ -1042,6 +1054,9 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
                         setKbTitle('');
                         setKbDescription('');
                         setKbFile(null);
+                        setKbVideoFile(null);
+                        setKbVideoUrl('');
+                        setKbRemoveVideo(false);
                       }}
                       className="text-[11px] underline text-[#5C4D3E]"
                     >
@@ -1052,13 +1067,13 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div className="sm:col-span-2">
-                    <label className="block text-[11px] text-[#5C4D3E] mb-1">Presentation Title *</label>
+                    <label className="block text-[11px] text-[#5C4D3E] mb-1">Entry Title *</label>
                     <input
                       type="text"
                       required
                       value={kbTitle}
                       onChange={(e) => setKbTitle(e.target.value)}
-                      placeholder="e.g. Full-Grain Patina & Hide Selection Deck"
+                      placeholder="e.g. Full-Grain Patina & Hide Selection Guide"
                       className="w-full px-3 py-1.5 bg-white border rounded text-xs"
                     />
                   </div>
@@ -1083,14 +1098,14 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
                     rows={2}
                     value={kbDescription}
                     onChange={(e) => setKbDescription(e.target.value)}
-                    placeholder="Briefly describe what patrons will learn from this presentation..."
+                    placeholder="Briefly describe what patrons will learn from this presentation or video..."
                     className="w-full px-3 py-1.5 bg-white border rounded text-xs"
                   />
                 </div>
 
                 <div>
                   <label className="block text-[11px] text-[#5C4D3E] mb-1">
-                    Presentation File (.pdf, .pptx, .ppt · max 30MB){kbEditingId ? ' — optional when keeping current file' : ' *'}
+                    Presentation File (.pdf, .pptx, .ppt · max 50MB){kbEditingId ? ' — optional when keeping current file' : ' — optional if adding a video below'}
                   </label>
                   <input
                     type="file"
@@ -1098,6 +1113,65 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
                     onChange={(e) => setKbFile(e.target.files?.[0] || null)}
                     className="w-full text-xs text-[#5C4D3E] file:mr-3 file:rounded file:border-0 file:bg-[#221C16] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[#FAF7F2] hover:file:bg-[#8B4513]"
                   />
+                </div>
+
+                <div className="p-3 rounded-lg bg-white border border-[#221C16]/10 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-[#8B4513] font-semibold flex items-center gap-1.5">
+                      <Film className="w-3.5 h-3.5" />
+                      <span>Knowledge Base Video (Upload or Link)</span>
+                    </span>
+                    {kbEditingId && (kbVideoUrl || kbEntries.find((x) => x.id === kbEditingId)?.videoUrl) && (
+                      <label className="inline-flex items-center gap-1.5 text-[11px] text-red-800 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={kbRemoveVideo}
+                          onChange={(e) => {
+                            setKbRemoveVideo(e.target.checked);
+                            if (e.target.checked) {
+                              setKbVideoFile(null);
+                              setKbVideoUrl('');
+                            }
+                          }}
+                        />
+                        <span>Remove video</span>
+                      </label>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-[#5C4D3E] mb-1">
+                      Upload Video File (.mp4, .webm, .mov · max 50MB)
+                    </label>
+                    <input
+                      type="file"
+                      accept=".mp4,.webm,.mov,video/mp4,video/webm,video/quicktime"
+                      disabled={kbRemoveVideo}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] || null;
+                        setKbVideoFile(f);
+                        if (f) setKbRemoveVideo(false);
+                      }}
+                      className="w-full text-xs text-[#5C4D3E] file:mr-3 file:rounded file:border-0 file:bg-[#8B4513] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-[#6E360F] disabled:opacity-50"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-[#5C4D3E] mb-1">
+                      Or Paste Video URL (YouTube, Vimeo, or direct .mp4/.webm URL)
+                    </label>
+                    <input
+                      type="text"
+                      disabled={kbRemoveVideo}
+                      value={kbVideoUrl}
+                      onChange={(e) => {
+                        setKbVideoUrl(e.target.value);
+                        if (e.target.value.trim()) setKbRemoveVideo(false);
+                      }}
+                      placeholder="https://www.youtube.com/watch?v=... or /assets/knowledge-base/craft.mp4"
+                      className="w-full px-3 py-1.5 bg-[#FAF7F2] border rounded font-mono text-[11px] disabled:opacity-50"
+                    />
+                  </div>
                 </div>
 
                 <button
@@ -1108,9 +1182,9 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
                   <Upload className="w-3.5 h-3.5 text-[#C5A059]" />
                   <span>
                     {isUploadingKb
-                      ? 'Uploading Presentation...'
+                      ? 'Uploading & Saving...'
                       : kbEditingId
-                      ? 'Save Changes to Presentation'
+                      ? 'Save Changes to Entry'
                       : 'Upload & Publish to Knowledge Base'}
                   </span>
                 </button>
@@ -1118,7 +1192,7 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
 
               <div className="space-y-2 text-xs">
                 <div className="font-mono text-[11px] uppercase tracking-wider text-[#5C4D3E]">
-                  Published Decks ({kbEntries.length})
+                  Published Decks &amp; Videos ({kbEntries.length})
                 </div>
                 {kbEntries.map((entry) => (
                   <div
@@ -1126,19 +1200,34 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
                     className="p-3 rounded-lg bg-[#FAF7F2] border border-[#221C16]/10 flex items-start justify-between gap-3"
                   >
                     <div className="min-w-0">
-                      <div className="font-semibold text-[#16120E] truncate">{entry.title}</div>
+                      <div className="font-semibold text-[#16120E] truncate flex items-center gap-1.5">
+                        <span className="truncate">{entry.title}</span>
+                        {entry.videoUrl && (
+                          <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#1B332A] text-[#FAF7F2] shrink-0 inline-flex items-center gap-1">
+                            <Film className="w-2.5 h-2.5" />
+                            Video
+                          </span>
+                        )}
+                      </div>
                       <div className="font-mono text-[10px] text-[#8B4513] mt-0.5">
                         {entry.fileType} · {entry.category.replace(/_/g, ' ')} · Updated {entry.uploadedAt?.slice(0, 10)}
                       </div>
-                      {entry.fileUrl && (
-                        <a
-                          href={entry.fileUrl}
-                          download={entry.fileName || true}
-                          className="text-[11px] underline text-[#5C4D3E] hover:text-[#8B4513] mt-1 inline-block"
-                        >
-                          {entry.fileName || entry.fileUrl}
-                        </a>
-                      )}
+                      <div className="flex flex-wrap items-center gap-3 mt-1">
+                        {entry.fileUrl && (
+                          <a
+                            href={entry.fileUrl}
+                            download={entry.fileName || true}
+                            className="text-[11px] underline text-[#5C4D3E] hover:text-[#8B4513]"
+                          >
+                            {entry.fileName || entry.fileUrl}
+                          </a>
+                        )}
+                        {entry.videoUrl && (
+                          <span className="text-[11px] font-mono text-[#1B332A] truncate max-w-[260px]">
+                            Video: {entry.videoFileName || entry.videoUrl}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <button
@@ -1149,16 +1238,19 @@ export const StoreManagementSettings: React.FC<StoreManagementSettingsProps> = (
                           setKbDescription(entry.description);
                           setKbCategory(entry.category);
                           setKbFile(null);
+                          setKbVideoFile(null);
+                          setKbVideoUrl(entry.videoUrl || '');
+                          setKbRemoveVideo(false);
                         }}
                         className="text-[11px] underline text-[#221C16] hover:text-[#8B4513]"
                       >
-                        Edit
+                        Edit / Video
                       </button>
                       <button
                         type="button"
                         onClick={() => handleDeleteKnowledgeBase(entry.id)}
                         className="p-1 text-red-700 hover:bg-red-50 rounded"
-                        title="Delete presentation"
+                        title="Delete entry"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>

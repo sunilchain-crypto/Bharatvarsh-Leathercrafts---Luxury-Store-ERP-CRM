@@ -239,7 +239,7 @@
       "isDefault": true,
       "addressType": "SHIPPING",
       "createdAt": "2026-11-18T17:24:39.254Z",
-      "updatedAt": "2026-11-19T14:22:26.646Z"
+      "updatedAt": "2026-11-20T20:40:17.436Z"
     },
     {
       "id": "addr_1795022679265_itqx",
@@ -254,10 +254,694 @@
       "isDefault": true,
       "addressType": "SHIPPING",
       "createdAt": "2026-11-18T17:24:39.265Z",
-      "updatedAt": "2026-11-19T14:22:26.671Z"
+      "updatedAt": "2026-11-20T20:40:17.533Z"
     }
   ],
   "orders": [
+    {
+      "customerId": "cust_quote_test",
+      "customerName": "Enterprise Client",
+      "customerEmail": "corp@client.com",
+      "customerPhone": "",
+      "status": "PROCESSING",
+      "currency": "INR",
+      "subtotal": 28900,
+      "discountAmount": 0,
+      "taxAmount": 5202,
+      "shippingFee": 0,
+      "totalAmount": 34102,
+      "paymentGateway": "RAZORPAY",
+      "paymentId": "quote_pay_1795207217527",
+      "paymentStatus": "PAID",
+      "items": [
+        {
+          "id": "item_quote_1795207217527_0",
+          "orderId": "",
+          "productId": "prod-t-brf-01",
+          "productName": "The Viceroy Diplomat Briefcase",
+          "sku": "BVL-TRV-BRF-01",
+          "category": "travell",
+          "quantity": 1,
+          "unitPrice": 28900,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "hsnCode": "4202",
+          "gstRate": 0.18,
+          "taxAmount": 5202,
+          "lineTotal": 34102
+        }
+      ],
+      "shippingAddress": {
+        "id": "addr_quote_1795207217527",
+        "customerId": "cust_quote_test",
+        "street": "Consolidated Commercial Dock, Pune Primary Hub",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "SHIPPING"
+      },
+      "billingAddress": {
+        "id": "addr_quote_b_1795207217527",
+        "customerId": "cust_quote_test",
+        "street": "Consolidated Commercial Dock, Pune Primary Hub",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "BILLING"
+      },
+      "id": "ord_1795207217532_tkh",
+      "orderNumber": "BVL-2026-1080",
+      "createdAt": "2026-11-20T20:40:17.532Z",
+      "updatedAt": "2026-11-20T20:40:17.532Z",
+      "isGstInvoiceGenerated": true,
+      "invoiceNumber": "BVL/INV/26-27/0170",
+      "awbNumber": "SR-PNQ-36075190",
+      "courierPartner": "SHIPROCKET",
+      "courierStatus": "IN_TRANSIT"
+    },
+    {
+      "customerId": "cust_guest",
+      "customerName": "Test Patron",
+      "customerEmail": "test.patron@domain.com",
+      "customerPhone": "",
+      "status": "PROCESSING",
+      "currency": "INR",
+      "subtotal": 10000,
+      "discountAmount": 0,
+      "taxAmount": 1800,
+      "shippingFee": 0,
+      "totalAmount": 11800,
+      "paymentGateway": "RAZORPAY",
+      "paymentId": "pay_rzp_1795207217429",
+      "paymentStatus": "PAID",
+      "items": [
+        {
+          "productId": "prod-m-belt-01",
+          "productName": "The Rajputana Bridle Belt",
+          "sku": "BVL-MEN-BLT-01",
+          "category": "men",
+          "quantity": 1,
+          "unitPrice": 10000,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "hsnCode": "4203",
+          "gstRate": 0.18,
+          "taxAmount": 1800,
+          "lineTotal": 11800
+        }
+      ],
+      "shippingAddress": {
+        "id": "addr_temp",
+        "street": "Koregaon Park Boulevard",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "SHIPPING"
+      },
+      "id": "ord_1795207217436_ckq",
+      "orderNumber": "BVL-2026-1079",
+      "createdAt": "2026-11-20T20:40:17.436Z",
+      "updatedAt": "2026-11-20T20:40:17.436Z",
+      "isGstInvoiceGenerated": true,
+      "invoiceNumber": "BVL/INV/26-27/0169",
+      "awbNumber": "SR-PNQ-31329928",
+      "courierPartner": "SHIPROCKET",
+      "courierStatus": "IN_TRANSIT"
+    },
+    {
+      "customerId": "cust_quote_test",
+      "customerName": "Enterprise Client",
+      "customerEmail": "corp@client.com",
+      "customerPhone": "",
+      "status": "PROCESSING",
+      "currency": "INR",
+      "subtotal": 28900,
+      "discountAmount": 0,
+      "taxAmount": 5202,
+      "shippingFee": 0,
+      "totalAmount": 34102,
+      "paymentGateway": "RAZORPAY",
+      "paymentId": "quote_pay_1795207143446",
+      "paymentStatus": "PAID",
+      "items": [
+        {
+          "id": "item_quote_1795207143446_0",
+          "orderId": "",
+          "productId": "prod-t-brf-01",
+          "productName": "The Viceroy Diplomat Briefcase",
+          "sku": "BVL-TRV-BRF-01",
+          "category": "travell",
+          "quantity": 1,
+          "unitPrice": 28900,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "hsnCode": "4202",
+          "gstRate": 0.18,
+          "taxAmount": 5202,
+          "lineTotal": 34102
+        }
+      ],
+      "shippingAddress": {
+        "id": "addr_quote_1795207143446",
+        "customerId": "cust_quote_test",
+        "street": "Consolidated Commercial Dock, Pune Primary Hub",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "SHIPPING"
+      },
+      "billingAddress": {
+        "id": "addr_quote_b_1795207143446",
+        "customerId": "cust_quote_test",
+        "street": "Consolidated Commercial Dock, Pune Primary Hub",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "BILLING"
+      },
+      "id": "ord_1795207143449_23z",
+      "orderNumber": "BVL-2026-1078",
+      "createdAt": "2026-11-20T20:39:03.449Z",
+      "updatedAt": "2026-11-20T20:39:03.449Z",
+      "isGstInvoiceGenerated": true,
+      "invoiceNumber": "BVL/INV/26-27/0168",
+      "awbNumber": "SR-PNQ-51583843",
+      "courierPartner": "SHIPROCKET",
+      "courierStatus": "IN_TRANSIT"
+    },
+    {
+      "customerId": "cust_guest",
+      "customerName": "Test Patron",
+      "customerEmail": "test.patron@domain.com",
+      "customerPhone": "",
+      "status": "PROCESSING",
+      "currency": "INR",
+      "subtotal": 10000,
+      "discountAmount": 0,
+      "taxAmount": 1800,
+      "shippingFee": 0,
+      "totalAmount": 11800,
+      "paymentGateway": "RAZORPAY",
+      "paymentId": "pay_rzp_1795207143409",
+      "paymentStatus": "PAID",
+      "items": [
+        {
+          "productId": "prod-m-belt-01",
+          "productName": "The Rajputana Bridle Belt",
+          "sku": "BVL-MEN-BLT-01",
+          "category": "men",
+          "quantity": 1,
+          "unitPrice": 10000,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "hsnCode": "4203",
+          "gstRate": 0.18,
+          "taxAmount": 1800,
+          "lineTotal": 11800
+        }
+      ],
+      "shippingAddress": {
+        "id": "addr_temp",
+        "street": "Koregaon Park Boulevard",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "SHIPPING"
+      },
+      "id": "ord_1795207143416_7uk",
+      "orderNumber": "BVL-2026-1077",
+      "createdAt": "2026-11-20T20:39:03.417Z",
+      "updatedAt": "2026-11-20T20:39:03.417Z",
+      "isGstInvoiceGenerated": true,
+      "invoiceNumber": "BVL/INV/26-27/0167",
+      "awbNumber": "SR-PNQ-99027852",
+      "courierPartner": "SHIPROCKET",
+      "courierStatus": "IN_TRANSIT"
+    },
+    {
+      "customerId": "cust_quote_test",
+      "customerName": "Enterprise Client",
+      "customerEmail": "corp@client.com",
+      "customerPhone": "",
+      "status": "PROCESSING",
+      "currency": "INR",
+      "subtotal": 28900,
+      "discountAmount": 0,
+      "taxAmount": 5202,
+      "shippingFee": 0,
+      "totalAmount": 34102,
+      "paymentGateway": "RAZORPAY",
+      "paymentId": "quote_pay_1795207077307",
+      "paymentStatus": "PAID",
+      "items": [
+        {
+          "id": "item_quote_1795207077307_0",
+          "orderId": "",
+          "productId": "prod-t-brf-01",
+          "productName": "The Viceroy Diplomat Briefcase",
+          "sku": "BVL-TRV-BRF-01",
+          "category": "travell",
+          "quantity": 1,
+          "unitPrice": 28900,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "hsnCode": "4202",
+          "gstRate": 0.18,
+          "taxAmount": 5202,
+          "lineTotal": 34102
+        }
+      ],
+      "shippingAddress": {
+        "id": "addr_quote_1795207077307",
+        "customerId": "cust_quote_test",
+        "street": "Consolidated Commercial Dock, Pune Primary Hub",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "SHIPPING"
+      },
+      "billingAddress": {
+        "id": "addr_quote_b_1795207077307",
+        "customerId": "cust_quote_test",
+        "street": "Consolidated Commercial Dock, Pune Primary Hub",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "BILLING"
+      },
+      "id": "ord_1795207077312_0f1",
+      "orderNumber": "BVL-2026-1076",
+      "createdAt": "2026-11-20T20:37:57.312Z",
+      "updatedAt": "2026-11-20T20:37:57.312Z",
+      "isGstInvoiceGenerated": true,
+      "invoiceNumber": "BVL/INV/26-27/0166",
+      "awbNumber": "SR-PNQ-36487674",
+      "courierPartner": "SHIPROCKET",
+      "courierStatus": "IN_TRANSIT"
+    },
+    {
+      "customerId": "cust_guest",
+      "customerName": "Test Patron",
+      "customerEmail": "test.patron@domain.com",
+      "customerPhone": "",
+      "status": "PROCESSING",
+      "currency": "INR",
+      "subtotal": 10000,
+      "discountAmount": 0,
+      "taxAmount": 1800,
+      "shippingFee": 0,
+      "totalAmount": 11800,
+      "paymentGateway": "RAZORPAY",
+      "paymentId": "pay_rzp_1795207077272",
+      "paymentStatus": "PAID",
+      "items": [
+        {
+          "productId": "prod-m-belt-01",
+          "productName": "The Rajputana Bridle Belt",
+          "sku": "BVL-MEN-BLT-01",
+          "category": "men",
+          "quantity": 1,
+          "unitPrice": 10000,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "hsnCode": "4203",
+          "gstRate": 0.18,
+          "taxAmount": 1800,
+          "lineTotal": 11800
+        }
+      ],
+      "shippingAddress": {
+        "id": "addr_temp",
+        "street": "Koregaon Park Boulevard",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "SHIPPING"
+      },
+      "id": "ord_1795207077278_l7p",
+      "orderNumber": "BVL-2026-1075",
+      "createdAt": "2026-11-20T20:37:57.278Z",
+      "updatedAt": "2026-11-20T20:37:57.278Z",
+      "isGstInvoiceGenerated": true,
+      "invoiceNumber": "BVL/INV/26-27/0165",
+      "awbNumber": "SR-PNQ-27150840",
+      "courierPartner": "SHIPROCKET",
+      "courierStatus": "IN_TRANSIT"
+    },
+    {
+      "customerId": "cust_quote_test",
+      "customerName": "Enterprise Client",
+      "customerEmail": "corp@client.com",
+      "customerPhone": "",
+      "status": "PROCESSING",
+      "currency": "INR",
+      "subtotal": 28900,
+      "discountAmount": 0,
+      "taxAmount": 5202,
+      "shippingFee": 0,
+      "totalAmount": 34102,
+      "paymentGateway": "RAZORPAY",
+      "paymentId": "quote_pay_1795207008476",
+      "paymentStatus": "PAID",
+      "items": [
+        {
+          "id": "item_quote_1795207008476_0",
+          "orderId": "",
+          "productId": "prod-t-brf-01",
+          "productName": "The Viceroy Diplomat Briefcase",
+          "sku": "BVL-TRV-BRF-01",
+          "category": "travell",
+          "quantity": 1,
+          "unitPrice": 28900,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "hsnCode": "4202",
+          "gstRate": 0.18,
+          "taxAmount": 5202,
+          "lineTotal": 34102
+        }
+      ],
+      "shippingAddress": {
+        "id": "addr_quote_1795207008476",
+        "customerId": "cust_quote_test",
+        "street": "Consolidated Commercial Dock, Pune Primary Hub",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "SHIPPING"
+      },
+      "billingAddress": {
+        "id": "addr_quote_b_1795207008476",
+        "customerId": "cust_quote_test",
+        "street": "Consolidated Commercial Dock, Pune Primary Hub",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "BILLING"
+      },
+      "id": "ord_1795207008479_wls",
+      "orderNumber": "BVL-2026-1074",
+      "createdAt": "2026-11-20T20:36:48.479Z",
+      "updatedAt": "2026-11-20T20:36:48.479Z",
+      "isGstInvoiceGenerated": true,
+      "invoiceNumber": "BVL/INV/26-27/0164",
+      "awbNumber": "SR-PNQ-15066431",
+      "courierPartner": "SHIPROCKET",
+      "courierStatus": "IN_TRANSIT"
+    },
+    {
+      "customerId": "cust_guest",
+      "customerName": "Test Patron",
+      "customerEmail": "test.patron@domain.com",
+      "customerPhone": "",
+      "status": "PROCESSING",
+      "currency": "INR",
+      "subtotal": 10000,
+      "discountAmount": 0,
+      "taxAmount": 1800,
+      "shippingFee": 0,
+      "totalAmount": 11800,
+      "paymentGateway": "RAZORPAY",
+      "paymentId": "pay_rzp_1795207008449",
+      "paymentStatus": "PAID",
+      "items": [
+        {
+          "productId": "prod-m-belt-01",
+          "productName": "The Rajputana Bridle Belt",
+          "sku": "BVL-MEN-BLT-01",
+          "category": "men",
+          "quantity": 1,
+          "unitPrice": 10000,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "hsnCode": "4203",
+          "gstRate": 0.18,
+          "taxAmount": 1800,
+          "lineTotal": 11800
+        }
+      ],
+      "shippingAddress": {
+        "id": "addr_temp",
+        "street": "Koregaon Park Boulevard",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "SHIPPING"
+      },
+      "id": "ord_1795207008454_48a",
+      "orderNumber": "BVL-2026-1073",
+      "createdAt": "2026-11-20T20:36:48.454Z",
+      "updatedAt": "2026-11-20T20:36:48.454Z",
+      "isGstInvoiceGenerated": true,
+      "invoiceNumber": "BVL/INV/26-27/0163",
+      "awbNumber": "SR-PNQ-90163818",
+      "courierPartner": "SHIPROCKET",
+      "courierStatus": "IN_TRANSIT"
+    },
+    {
+      "customerId": "cust_quote_test",
+      "customerName": "Enterprise Client",
+      "customerEmail": "corp@client.com",
+      "customerPhone": "",
+      "status": "PROCESSING",
+      "currency": "INR",
+      "subtotal": 28900,
+      "discountAmount": 0,
+      "taxAmount": 5202,
+      "shippingFee": 0,
+      "totalAmount": 34102,
+      "paymentGateway": "RAZORPAY",
+      "paymentId": "quote_pay_1795206889199",
+      "paymentStatus": "PAID",
+      "items": [
+        {
+          "id": "item_quote_1795206889199_0",
+          "orderId": "",
+          "productId": "prod-t-brf-01",
+          "productName": "The Viceroy Diplomat Briefcase",
+          "sku": "BVL-TRV-BRF-01",
+          "category": "travell",
+          "quantity": 1,
+          "unitPrice": 28900,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "hsnCode": "4202",
+          "gstRate": 0.18,
+          "taxAmount": 5202,
+          "lineTotal": 34102
+        }
+      ],
+      "shippingAddress": {
+        "id": "addr_quote_1795206889199",
+        "customerId": "cust_quote_test",
+        "street": "Consolidated Commercial Dock, Pune Primary Hub",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "SHIPPING"
+      },
+      "billingAddress": {
+        "id": "addr_quote_b_1795206889199",
+        "customerId": "cust_quote_test",
+        "street": "Consolidated Commercial Dock, Pune Primary Hub",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "BILLING"
+      },
+      "id": "ord_1795206889203_diu",
+      "orderNumber": "BVL-2026-1072",
+      "createdAt": "2026-11-20T20:34:49.203Z",
+      "updatedAt": "2026-11-20T20:34:49.203Z",
+      "isGstInvoiceGenerated": true,
+      "invoiceNumber": "BVL/INV/26-27/0162",
+      "awbNumber": "SR-PNQ-14453294",
+      "courierPartner": "SHIPROCKET",
+      "courierStatus": "IN_TRANSIT"
+    },
+    {
+      "customerId": "cust_guest",
+      "customerName": "Test Patron",
+      "customerEmail": "test.patron@domain.com",
+      "customerPhone": "",
+      "status": "PROCESSING",
+      "currency": "INR",
+      "subtotal": 10000,
+      "discountAmount": 0,
+      "taxAmount": 1800,
+      "shippingFee": 0,
+      "totalAmount": 11800,
+      "paymentGateway": "RAZORPAY",
+      "paymentId": "pay_rzp_1795206889161",
+      "paymentStatus": "PAID",
+      "items": [
+        {
+          "productId": "prod-m-belt-01",
+          "productName": "The Rajputana Bridle Belt",
+          "sku": "BVL-MEN-BLT-01",
+          "category": "men",
+          "quantity": 1,
+          "unitPrice": 10000,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "hsnCode": "4203",
+          "gstRate": 0.18,
+          "taxAmount": 1800,
+          "lineTotal": 11800
+        }
+      ],
+      "shippingAddress": {
+        "id": "addr_temp",
+        "street": "Koregaon Park Boulevard",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "SHIPPING"
+      },
+      "id": "ord_1795206889166_mep",
+      "orderNumber": "BVL-2026-1071",
+      "createdAt": "2026-11-20T20:34:49.166Z",
+      "updatedAt": "2026-11-20T20:34:49.166Z",
+      "isGstInvoiceGenerated": true,
+      "invoiceNumber": "BVL/INV/26-27/0161",
+      "awbNumber": "SR-PNQ-36042739",
+      "courierPartner": "SHIPROCKET",
+      "courierStatus": "IN_TRANSIT"
+    },
+    {
+      "customerId": "cust_quote_test",
+      "customerName": "Enterprise Client",
+      "customerEmail": "corp@client.com",
+      "customerPhone": "",
+      "status": "PROCESSING",
+      "currency": "INR",
+      "subtotal": 28900,
+      "discountAmount": 0,
+      "taxAmount": 5202,
+      "shippingFee": 0,
+      "totalAmount": 34102,
+      "paymentGateway": "RAZORPAY",
+      "paymentId": "quote_pay_1795206856636",
+      "paymentStatus": "PAID",
+      "items": [
+        {
+          "id": "item_quote_1795206856636_0",
+          "orderId": "",
+          "productId": "prod-t-brf-01",
+          "productName": "The Viceroy Diplomat Briefcase",
+          "sku": "BVL-TRV-BRF-01",
+          "category": "travell",
+          "quantity": 1,
+          "unitPrice": 28900,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "hsnCode": "4202",
+          "gstRate": 0.18,
+          "taxAmount": 5202,
+          "lineTotal": 34102
+        }
+      ],
+      "shippingAddress": {
+        "id": "addr_quote_1795206856636",
+        "customerId": "cust_quote_test",
+        "street": "Consolidated Commercial Dock, Pune Primary Hub",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "SHIPPING"
+      },
+      "billingAddress": {
+        "id": "addr_quote_b_1795206856636",
+        "customerId": "cust_quote_test",
+        "street": "Consolidated Commercial Dock, Pune Primary Hub",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "BILLING"
+      },
+      "id": "ord_1795206856640_cnp",
+      "orderNumber": "BVL-2026-1070",
+      "createdAt": "2026-11-20T20:34:16.640Z",
+      "updatedAt": "2026-11-20T20:34:16.640Z",
+      "isGstInvoiceGenerated": true,
+      "invoiceNumber": "BVL/INV/26-27/0160",
+      "awbNumber": "SR-PNQ-47418096",
+      "courierPartner": "SHIPROCKET",
+      "courierStatus": "IN_TRANSIT"
+    },
+    {
+      "customerId": "cust_guest",
+      "customerName": "Test Patron",
+      "customerEmail": "test.patron@domain.com",
+      "customerPhone": "",
+      "status": "PROCESSING",
+      "currency": "INR",
+      "subtotal": 10000,
+      "discountAmount": 0,
+      "taxAmount": 1800,
+      "shippingFee": 0,
+      "totalAmount": 11800,
+      "paymentGateway": "RAZORPAY",
+      "paymentId": "pay_rzp_1795206856609",
+      "paymentStatus": "PAID",
+      "items": [
+        {
+          "productId": "prod-m-belt-01",
+          "productName": "The Rajputana Bridle Belt",
+          "sku": "BVL-MEN-BLT-01",
+          "category": "men",
+          "quantity": 1,
+          "unitPrice": 10000,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "hsnCode": "4203",
+          "gstRate": 0.18,
+          "taxAmount": 1800,
+          "lineTotal": 11800
+        }
+      ],
+      "shippingAddress": {
+        "id": "addr_temp",
+        "street": "Koregaon Park Boulevard",
+        "city": "Pune",
+        "state": "Maharashtra",
+        "pincode": "411001",
+        "country": "India",
+        "isDefault": true,
+        "addressType": "SHIPPING"
+      },
+      "id": "ord_1795206856613_sgf",
+      "orderNumber": "BVL-2026-1069",
+      "createdAt": "2026-11-20T20:34:16.613Z",
+      "updatedAt": "2026-11-20T20:34:16.613Z",
+      "isGstInvoiceGenerated": true,
+      "invoiceNumber": "BVL/INV/26-27/0159",
+      "awbNumber": "SR-PNQ-47690233",
+      "courierPartner": "SHIPROCKET",
+      "courierStatus": "IN_TRANSIT"
+    },
     {
       "customerId": "cust_quote_test",
       "customerName": "Enterprise Client",
@@ -5225,6 +5909,186 @@
       "status": "ACTIVE",
       "claimCount": 0,
       "createdAt": "2026-11-19T14:22:26.670Z"
+    },
+    {
+      "id": "war_1795206856613_uys",
+      "customerId": "cust_guest",
+      "customerName": "Test Patron",
+      "orderId": "ord_1795206856613_sgf",
+      "productId": "prod-m-belt-01",
+      "productName": "The Rajputana Bridle Belt",
+      "hardwareSerial": "BVL-BRASS-53599",
+      "warrantyPeriodYears": 2,
+      "startDate": "2026-11-20T20:34:16.613Z",
+      "expiryDate": "2028-11-19T20:34:16.613Z",
+      "status": "ACTIVE",
+      "claimCount": 0,
+      "createdAt": "2026-11-20T20:34:16.613Z"
+    },
+    {
+      "id": "war_1795206856640_meo",
+      "customerId": "cust_quote_test",
+      "customerName": "Enterprise Client",
+      "orderId": "ord_1795206856640_cnp",
+      "productId": "prod-t-brf-01",
+      "productName": "The Viceroy Diplomat Briefcase",
+      "hardwareSerial": "BVL-BRASS-64802",
+      "warrantyPeriodYears": 2,
+      "startDate": "2026-11-20T20:34:16.640Z",
+      "expiryDate": "2028-11-19T20:34:16.640Z",
+      "status": "ACTIVE",
+      "claimCount": 0,
+      "createdAt": "2026-11-20T20:34:16.640Z"
+    },
+    {
+      "id": "war_1795206889166_ja2",
+      "customerId": "cust_guest",
+      "customerName": "Test Patron",
+      "orderId": "ord_1795206889166_mep",
+      "productId": "prod-m-belt-01",
+      "productName": "The Rajputana Bridle Belt",
+      "hardwareSerial": "BVL-BRASS-59790",
+      "warrantyPeriodYears": 2,
+      "startDate": "2026-11-20T20:34:49.166Z",
+      "expiryDate": "2028-11-19T20:34:49.166Z",
+      "status": "ACTIVE",
+      "claimCount": 0,
+      "createdAt": "2026-11-20T20:34:49.166Z"
+    },
+    {
+      "id": "war_1795206889203_o3t",
+      "customerId": "cust_quote_test",
+      "customerName": "Enterprise Client",
+      "orderId": "ord_1795206889203_diu",
+      "productId": "prod-t-brf-01",
+      "productName": "The Viceroy Diplomat Briefcase",
+      "hardwareSerial": "BVL-BRASS-39038",
+      "warrantyPeriodYears": 2,
+      "startDate": "2026-11-20T20:34:49.203Z",
+      "expiryDate": "2028-11-19T20:34:49.203Z",
+      "status": "ACTIVE",
+      "claimCount": 0,
+      "createdAt": "2026-11-20T20:34:49.203Z"
+    },
+    {
+      "id": "war_1795207008455_m9y",
+      "customerId": "cust_guest",
+      "customerName": "Test Patron",
+      "orderId": "ord_1795207008454_48a",
+      "productId": "prod-m-belt-01",
+      "productName": "The Rajputana Bridle Belt",
+      "hardwareSerial": "BVL-BRASS-77280",
+      "warrantyPeriodYears": 2,
+      "startDate": "2026-11-20T20:36:48.455Z",
+      "expiryDate": "2028-11-19T20:36:48.455Z",
+      "status": "ACTIVE",
+      "claimCount": 0,
+      "createdAt": "2026-11-20T20:36:48.455Z"
+    },
+    {
+      "id": "war_1795207008479_t0w",
+      "customerId": "cust_quote_test",
+      "customerName": "Enterprise Client",
+      "orderId": "ord_1795207008479_wls",
+      "productId": "prod-t-brf-01",
+      "productName": "The Viceroy Diplomat Briefcase",
+      "hardwareSerial": "BVL-BRASS-32532",
+      "warrantyPeriodYears": 2,
+      "startDate": "2026-11-20T20:36:48.479Z",
+      "expiryDate": "2028-11-19T20:36:48.479Z",
+      "status": "ACTIVE",
+      "claimCount": 0,
+      "createdAt": "2026-11-20T20:36:48.479Z"
+    },
+    {
+      "id": "war_1795207077278_kvl",
+      "customerId": "cust_guest",
+      "customerName": "Test Patron",
+      "orderId": "ord_1795207077278_l7p",
+      "productId": "prod-m-belt-01",
+      "productName": "The Rajputana Bridle Belt",
+      "hardwareSerial": "BVL-BRASS-18895",
+      "warrantyPeriodYears": 2,
+      "startDate": "2026-11-20T20:37:57.278Z",
+      "expiryDate": "2028-11-19T20:37:57.278Z",
+      "status": "ACTIVE",
+      "claimCount": 0,
+      "createdAt": "2026-11-20T20:37:57.278Z"
+    },
+    {
+      "id": "war_1795207077312_6bt",
+      "customerId": "cust_quote_test",
+      "customerName": "Enterprise Client",
+      "orderId": "ord_1795207077312_0f1",
+      "productId": "prod-t-brf-01",
+      "productName": "The Viceroy Diplomat Briefcase",
+      "hardwareSerial": "BVL-BRASS-14350",
+      "warrantyPeriodYears": 2,
+      "startDate": "2026-11-20T20:37:57.312Z",
+      "expiryDate": "2028-11-19T20:37:57.312Z",
+      "status": "ACTIVE",
+      "claimCount": 0,
+      "createdAt": "2026-11-20T20:37:57.312Z"
+    },
+    {
+      "id": "war_1795207143417_a06",
+      "customerId": "cust_guest",
+      "customerName": "Test Patron",
+      "orderId": "ord_1795207143416_7uk",
+      "productId": "prod-m-belt-01",
+      "productName": "The Rajputana Bridle Belt",
+      "hardwareSerial": "BVL-BRASS-85144",
+      "warrantyPeriodYears": 2,
+      "startDate": "2026-11-20T20:39:03.417Z",
+      "expiryDate": "2028-11-19T20:39:03.417Z",
+      "status": "ACTIVE",
+      "claimCount": 0,
+      "createdAt": "2026-11-20T20:39:03.417Z"
+    },
+    {
+      "id": "war_1795207143449_8p8",
+      "customerId": "cust_quote_test",
+      "customerName": "Enterprise Client",
+      "orderId": "ord_1795207143449_23z",
+      "productId": "prod-t-brf-01",
+      "productName": "The Viceroy Diplomat Briefcase",
+      "hardwareSerial": "BVL-BRASS-53659",
+      "warrantyPeriodYears": 2,
+      "startDate": "2026-11-20T20:39:03.449Z",
+      "expiryDate": "2028-11-19T20:39:03.449Z",
+      "status": "ACTIVE",
+      "claimCount": 0,
+      "createdAt": "2026-11-20T20:39:03.449Z"
+    },
+    {
+      "id": "war_1795207217436_uq6",
+      "customerId": "cust_guest",
+      "customerName": "Test Patron",
+      "orderId": "ord_1795207217436_ckq",
+      "productId": "prod-m-belt-01",
+      "productName": "The Rajputana Bridle Belt",
+      "hardwareSerial": "BVL-BRASS-53688",
+      "warrantyPeriodYears": 2,
+      "startDate": "2026-11-20T20:40:17.436Z",
+      "expiryDate": "2028-11-19T20:40:17.436Z",
+      "status": "ACTIVE",
+      "claimCount": 0,
+      "createdAt": "2026-11-20T20:40:17.436Z"
+    },
+    {
+      "id": "war_1795207217532_pod",
+      "customerId": "cust_quote_test",
+      "customerName": "Enterprise Client",
+      "orderId": "ord_1795207217532_tkh",
+      "productId": "prod-t-brf-01",
+      "productName": "The Viceroy Diplomat Briefcase",
+      "hardwareSerial": "BVL-BRASS-45954",
+      "warrantyPeriodYears": 2,
+      "startDate": "2026-11-20T20:40:17.532Z",
+      "expiryDate": "2028-11-19T20:40:17.532Z",
+      "status": "ACTIVE",
+      "claimCount": 0,
+      "createdAt": "2026-11-20T20:40:17.532Z"
     }
   ],
   "careKitDispatches": [
@@ -5972,6 +6836,138 @@
       "kitType": "ORGANIC_BEESWAX_BALM_BRUSH",
       "dispatchDate": "2026-11-19T14:22:26.671Z",
       "awbNumber": "SR-PNQ-CARE-442092",
+      "courier": "SHIPROCKET",
+      "status": "DISPATCHED",
+      "digitalGuideSent": true
+    },
+    {
+      "id": "ck_1795206856613_yg1",
+      "customerId": "cust_guest",
+      "orderId": "ord_1795206856613_sgf",
+      "kitType": "ORGANIC_BEESWAX_BALM_BRUSH",
+      "dispatchDate": "2026-11-20T20:34:16.613Z",
+      "awbNumber": "SR-PNQ-CARE-321336",
+      "courier": "SHIPROCKET",
+      "status": "DISPATCHED",
+      "digitalGuideSent": true
+    },
+    {
+      "id": "ck_1795206856640_eap",
+      "customerId": "cust_quote_test",
+      "orderId": "ord_1795206856640_cnp",
+      "kitType": "ORGANIC_BEESWAX_BALM_BRUSH",
+      "dispatchDate": "2026-11-20T20:34:16.640Z",
+      "awbNumber": "SR-PNQ-CARE-394357",
+      "courier": "SHIPROCKET",
+      "status": "DISPATCHED",
+      "digitalGuideSent": true
+    },
+    {
+      "id": "ck_1795206889166_940",
+      "customerId": "cust_guest",
+      "orderId": "ord_1795206889166_mep",
+      "kitType": "ORGANIC_BEESWAX_BALM_BRUSH",
+      "dispatchDate": "2026-11-20T20:34:49.166Z",
+      "awbNumber": "SR-PNQ-CARE-199045",
+      "courier": "SHIPROCKET",
+      "status": "DISPATCHED",
+      "digitalGuideSent": true
+    },
+    {
+      "id": "ck_1795206889203_3a0",
+      "customerId": "cust_quote_test",
+      "orderId": "ord_1795206889203_diu",
+      "kitType": "ORGANIC_BEESWAX_BALM_BRUSH",
+      "dispatchDate": "2026-11-20T20:34:49.203Z",
+      "awbNumber": "SR-PNQ-CARE-623332",
+      "courier": "SHIPROCKET",
+      "status": "DISPATCHED",
+      "digitalGuideSent": true
+    },
+    {
+      "id": "ck_1795207008455_8ac",
+      "customerId": "cust_guest",
+      "orderId": "ord_1795207008454_48a",
+      "kitType": "ORGANIC_BEESWAX_BALM_BRUSH",
+      "dispatchDate": "2026-11-20T20:36:48.455Z",
+      "awbNumber": "SR-PNQ-CARE-983451",
+      "courier": "SHIPROCKET",
+      "status": "DISPATCHED",
+      "digitalGuideSent": true
+    },
+    {
+      "id": "ck_1795207008479_69s",
+      "customerId": "cust_quote_test",
+      "orderId": "ord_1795207008479_wls",
+      "kitType": "ORGANIC_BEESWAX_BALM_BRUSH",
+      "dispatchDate": "2026-11-20T20:36:48.479Z",
+      "awbNumber": "SR-PNQ-CARE-334660",
+      "courier": "SHIPROCKET",
+      "status": "DISPATCHED",
+      "digitalGuideSent": true
+    },
+    {
+      "id": "ck_1795207077278_p54",
+      "customerId": "cust_guest",
+      "orderId": "ord_1795207077278_l7p",
+      "kitType": "ORGANIC_BEESWAX_BALM_BRUSH",
+      "dispatchDate": "2026-11-20T20:37:57.278Z",
+      "awbNumber": "SR-PNQ-CARE-990727",
+      "courier": "SHIPROCKET",
+      "status": "DISPATCHED",
+      "digitalGuideSent": true
+    },
+    {
+      "id": "ck_1795207077312_usz",
+      "customerId": "cust_quote_test",
+      "orderId": "ord_1795207077312_0f1",
+      "kitType": "ORGANIC_BEESWAX_BALM_BRUSH",
+      "dispatchDate": "2026-11-20T20:37:57.312Z",
+      "awbNumber": "SR-PNQ-CARE-306925",
+      "courier": "SHIPROCKET",
+      "status": "DISPATCHED",
+      "digitalGuideSent": true
+    },
+    {
+      "id": "ck_1795207143417_66l",
+      "customerId": "cust_guest",
+      "orderId": "ord_1795207143416_7uk",
+      "kitType": "ORGANIC_BEESWAX_BALM_BRUSH",
+      "dispatchDate": "2026-11-20T20:39:03.417Z",
+      "awbNumber": "SR-PNQ-CARE-108837",
+      "courier": "SHIPROCKET",
+      "status": "DISPATCHED",
+      "digitalGuideSent": true
+    },
+    {
+      "id": "ck_1795207143449_scs",
+      "customerId": "cust_quote_test",
+      "orderId": "ord_1795207143449_23z",
+      "kitType": "ORGANIC_BEESWAX_BALM_BRUSH",
+      "dispatchDate": "2026-11-20T20:39:03.449Z",
+      "awbNumber": "SR-PNQ-CARE-466489",
+      "courier": "SHIPROCKET",
+      "status": "DISPATCHED",
+      "digitalGuideSent": true
+    },
+    {
+      "id": "ck_1795207217436_q4m",
+      "customerId": "cust_guest",
+      "orderId": "ord_1795207217436_ckq",
+      "kitType": "ORGANIC_BEESWAX_BALM_BRUSH",
+      "dispatchDate": "2026-11-20T20:40:17.436Z",
+      "awbNumber": "SR-PNQ-CARE-336151",
+      "courier": "SHIPROCKET",
+      "status": "DISPATCHED",
+      "digitalGuideSent": true
+    },
+    {
+      "id": "ck_1795207217532_eji",
+      "customerId": "cust_quote_test",
+      "orderId": "ord_1795207217532_tkh",
+      "kitType": "ORGANIC_BEESWAX_BALM_BRUSH",
+      "dispatchDate": "2026-11-20T20:40:17.532Z",
+      "awbNumber": "SR-PNQ-CARE-881147",
       "courier": "SHIPROCKET",
       "status": "DISPATCHED",
       "digitalGuideSent": true
@@ -6914,6 +7910,150 @@
       "lastActiveAt": "2026-11-19T14:02:26.749Z",
       "abandonedAt": "2026-11-19T14:22:26.750Z",
       "lastRecoveryTriggerAt": "2026-11-19T14:22:26.758Z"
+    },
+    {
+      "id": "cart_1795206856706_mc82",
+      "email": "idle.shopper@test.com",
+      "items": [
+        {
+          "productId": "prod-m-wal-01",
+          "productName": "The Bifold Heirloom Folio",
+          "sku": "BVL-MEN-WAL-01",
+          "unitPrice": 3800,
+          "quantity": 1,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "imageUrl": ""
+        }
+      ],
+      "subtotal": 3800,
+      "currency": "INR",
+      "isAbandoned": true,
+      "recoveryStage": "EMAIL_SENT",
+      "recoveryAttempts": 1,
+      "checkoutUrl": "/?resume=cart_1795206856706_mc82&token=fhZ0U3K5Ig0Xl4brLb_aUPYuamEmb7uL7H4xczAI8Ww",
+      "lastActiveAt": "2026-11-20T20:14:16.715Z",
+      "abandonedAt": "2026-11-20T20:34:16.716Z",
+      "lastRecoveryTriggerAt": "2026-11-20T20:34:16.725Z"
+    },
+    {
+      "id": "cart_1795206889274_7f7k",
+      "email": "idle.shopper@test.com",
+      "items": [
+        {
+          "productId": "prod-m-wal-01",
+          "productName": "The Bifold Heirloom Folio",
+          "sku": "BVL-MEN-WAL-01",
+          "unitPrice": 3800,
+          "quantity": 1,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "imageUrl": ""
+        }
+      ],
+      "subtotal": 3800,
+      "currency": "INR",
+      "isAbandoned": true,
+      "recoveryStage": "EMAIL_SENT",
+      "recoveryAttempts": 1,
+      "checkoutUrl": "/?resume=cart_1795206889274_7f7k&token=JNAn_-eO6y5rfVByPCnl6Xf6XehoHSU8NypwFA9Fc6E",
+      "lastActiveAt": "2026-11-20T20:14:49.283Z",
+      "abandonedAt": "2026-11-20T20:34:49.284Z",
+      "lastRecoveryTriggerAt": "2026-11-20T20:34:49.292Z"
+    },
+    {
+      "id": "cart_1795207008546_m8fb",
+      "email": "idle.shopper@test.com",
+      "items": [
+        {
+          "productId": "prod-m-wal-01",
+          "productName": "The Bifold Heirloom Folio",
+          "sku": "BVL-MEN-WAL-01",
+          "unitPrice": 3800,
+          "quantity": 1,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "imageUrl": ""
+        }
+      ],
+      "subtotal": 3800,
+      "currency": "INR",
+      "isAbandoned": true,
+      "recoveryStage": "EMAIL_SENT",
+      "recoveryAttempts": 1,
+      "checkoutUrl": "/?resume=cart_1795207008546_m8fb&token=ik4ION3gmqJLNtdy0jKhs8ifPF9Hl6SwIs_KxElN8NQ",
+      "lastActiveAt": "2026-11-20T20:16:48.555Z",
+      "abandonedAt": "2026-11-20T20:36:48.555Z",
+      "lastRecoveryTriggerAt": "2026-11-20T20:36:48.564Z"
+    },
+    {
+      "id": "cart_1795207077400_h471",
+      "email": "idle.shopper@test.com",
+      "items": [
+        {
+          "productId": "prod-m-wal-01",
+          "productName": "The Bifold Heirloom Folio",
+          "sku": "BVL-MEN-WAL-01",
+          "unitPrice": 3800,
+          "quantity": 1,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "imageUrl": ""
+        }
+      ],
+      "subtotal": 3800,
+      "currency": "INR",
+      "isAbandoned": true,
+      "recoveryStage": "EMAIL_SENT",
+      "recoveryAttempts": 1,
+      "checkoutUrl": "/?resume=cart_1795207077400_h471&token=CxPMwwuY_3HtYCwNA6t8u3wx9hFeAxgYBXKDu8CHb4U",
+      "lastActiveAt": "2026-11-20T20:17:57.415Z",
+      "abandonedAt": "2026-11-20T20:37:57.416Z",
+      "lastRecoveryTriggerAt": "2026-11-20T20:37:57.429Z"
+    },
+    {
+      "id": "cart_1795207143625_cxs9",
+      "email": "idle.shopper@test.com",
+      "items": [
+        {
+          "productId": "prod-m-wal-01",
+          "productName": "The Bifold Heirloom Folio",
+          "sku": "BVL-MEN-WAL-01",
+          "unitPrice": 3800,
+          "quantity": 1,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "imageUrl": ""
+        }
+      ],
+      "subtotal": 3800,
+      "currency": "INR",
+      "isAbandoned": true,
+      "recoveryStage": "EMAIL_SENT",
+      "recoveryAttempts": 1,
+      "checkoutUrl": "/?resume=cart_1795207143625_cxs9&token=vGHTdrjA3ZXpqQ_ul-4omVPWcb8fQK4aIwogAgdvQRA",
+      "lastActiveAt": "2026-11-20T20:19:03.641Z",
+      "abandonedAt": "2026-11-20T20:39:03.641Z",
+      "lastRecoveryTriggerAt": "2026-11-20T20:39:03.651Z"
+    },
+    {
+      "id": "cart_1795207217738_tfci",
+      "email": "idle.shopper@test.com",
+      "items": [
+        {
+          "productId": "prod-m-wal-01",
+          "productName": "The Bifold Heirloom Folio",
+          "sku": "BVL-MEN-WAL-01",
+          "unitPrice": 3800,
+          "quantity": 1,
+          "leatherType": "VEGETABLE_TANNED_HERITAGE",
+          "imageUrl": ""
+        }
+      ],
+      "subtotal": 3800,
+      "currency": "INR",
+      "isAbandoned": true,
+      "recoveryStage": "EMAIL_SENT",
+      "recoveryAttempts": 1,
+      "checkoutUrl": "/?resume=cart_1795207217738_tfci&token=ohilN03K4U1K0BdLJyDfqLkwulbcTnRtsEHPIQMcQYU",
+      "lastActiveAt": "2026-11-20T20:20:17.751Z",
+      "abandonedAt": "2026-11-20T20:40:17.751Z",
+      "lastRecoveryTriggerAt": "2026-11-20T20:40:17.806Z"
     }
   ],
   "inventory": [
@@ -6927,7 +8067,7 @@
         "punePrimaryHub": 24,
         "mumbaiWarehouse": 48
       },
-      "safetyStock": 15,
+      "safetyStock": 7,
       "reorderPoint": 20,
       "unitCost": 1450,
       "sellingPrice": 4200,
@@ -7054,7 +8194,7 @@
       "materialName": "Sand-Cast Solid Antique Brass Push Locks & Rivets",
       "quantityPerUnit": 2,
       "unit": "PIECES",
-      "inventoryOnHand": 28,
+      "inventoryOnHand": 16,
       "vendorName": "Aligarh Precision Hardware Guild",
       "safetyStock": 20
     },
@@ -7064,7 +8204,7 @@
       "materialName": "Bonded Heavy Nylon Thread (Fil-Au-Chinois match)",
       "quantityPerUnit": 45,
       "unit": "METERS",
-      "inventoryOnHand": 540,
+      "inventoryOnHand": 270,
       "vendorName": "Vardhman Specialty Yarns",
       "safetyStock": 100
     },
@@ -7074,7 +8214,7 @@
       "materialName": "Organic Beeswax & Jojoba Conditioning Balm (50g jar)",
       "quantityPerUnit": 1,
       "unit": "GRAMS",
-      "inventoryOnHand": 264,
+      "inventoryOnHand": 252,
       "vendorName": "Himalayan Organic Apiaries",
       "safetyStock": 100
     }
@@ -8303,10 +9443,1411 @@
       "totalInvoiceAmount": 34102,
       "status": "ISSUED",
       "pdfUrl": "/api/erp/invoices/BVL-INV-26-27-0158.pdf"
+    },
+    {
+      "id": "inv_1795206856613_8wl",
+      "invoiceNumber": "BVL/INV/26-27/0159",
+      "orderId": "ord_1795206856613_sgf",
+      "customerId": "cust_guest",
+      "supplierGstin": "27AABCB1234F1Z8",
+      "invoiceDate": "2026-11-20T20:34:16.613Z",
+      "supplyState": "Maharashtra (Pune Primary Hub)",
+      "placeOfSupply": "Maharashtra",
+      "isInterState": false,
+      "taxableValue": 10000,
+      "cgstAmount": 900,
+      "sgstAmount": 900,
+      "igstAmount": 0,
+      "totalInvoiceAmount": 11800,
+      "status": "ISSUED",
+      "pdfUrl": "/api/erp/invoices/BVL-INV-26-27-0159.pdf"
+    },
+    {
+      "id": "inv_1795206856640_exv",
+      "invoiceNumber": "BVL/INV/26-27/0160",
+      "orderId": "ord_1795206856640_cnp",
+      "customerId": "cust_quote_test",
+      "supplierGstin": "27AABCB1234F1Z8",
+      "invoiceDate": "2026-11-20T20:34:16.640Z",
+      "supplyState": "Maharashtra (Pune Primary Hub)",
+      "placeOfSupply": "Maharashtra",
+      "isInterState": false,
+      "taxableValue": 28900,
+      "cgstAmount": 2601,
+      "sgstAmount": 2601,
+      "igstAmount": 0,
+      "totalInvoiceAmount": 34102,
+      "status": "ISSUED",
+      "pdfUrl": "/api/erp/invoices/BVL-INV-26-27-0160.pdf"
+    },
+    {
+      "id": "inv_1795206889167_2ik",
+      "invoiceNumber": "BVL/INV/26-27/0161",
+      "orderId": "ord_1795206889166_mep",
+      "customerId": "cust_guest",
+      "supplierGstin": "27AABCB1234F1Z8",
+      "invoiceDate": "2026-11-20T20:34:49.167Z",
+      "supplyState": "Maharashtra (Pune Primary Hub)",
+      "placeOfSupply": "Maharashtra",
+      "isInterState": false,
+      "taxableValue": 10000,
+      "cgstAmount": 900,
+      "sgstAmount": 900,
+      "igstAmount": 0,
+      "totalInvoiceAmount": 11800,
+      "status": "ISSUED",
+      "pdfUrl": "/api/erp/invoices/BVL-INV-26-27-0161.pdf"
+    },
+    {
+      "id": "inv_1795206889203_q2f",
+      "invoiceNumber": "BVL/INV/26-27/0162",
+      "orderId": "ord_1795206889203_diu",
+      "customerId": "cust_quote_test",
+      "supplierGstin": "27AABCB1234F1Z8",
+      "invoiceDate": "2026-11-20T20:34:49.203Z",
+      "supplyState": "Maharashtra (Pune Primary Hub)",
+      "placeOfSupply": "Maharashtra",
+      "isInterState": false,
+      "taxableValue": 28900,
+      "cgstAmount": 2601,
+      "sgstAmount": 2601,
+      "igstAmount": 0,
+      "totalInvoiceAmount": 34102,
+      "status": "ISSUED",
+      "pdfUrl": "/api/erp/invoices/BVL-INV-26-27-0162.pdf"
+    },
+    {
+      "id": "inv_1795207008455_ggh",
+      "invoiceNumber": "BVL/INV/26-27/0163",
+      "orderId": "ord_1795207008454_48a",
+      "customerId": "cust_guest",
+      "supplierGstin": "27AABCB1234F1Z8",
+      "invoiceDate": "2026-11-20T20:36:48.455Z",
+      "supplyState": "Maharashtra (Pune Primary Hub)",
+      "placeOfSupply": "Maharashtra",
+      "isInterState": false,
+      "taxableValue": 10000,
+      "cgstAmount": 900,
+      "sgstAmount": 900,
+      "igstAmount": 0,
+      "totalInvoiceAmount": 11800,
+      "status": "ISSUED",
+      "pdfUrl": "/api/erp/invoices/BVL-INV-26-27-0163.pdf"
+    },
+    {
+      "id": "inv_1795207008479_ucr",
+      "invoiceNumber": "BVL/INV/26-27/0164",
+      "orderId": "ord_1795207008479_wls",
+      "customerId": "cust_quote_test",
+      "supplierGstin": "27AABCB1234F1Z8",
+      "invoiceDate": "2026-11-20T20:36:48.479Z",
+      "supplyState": "Maharashtra (Pune Primary Hub)",
+      "placeOfSupply": "Maharashtra",
+      "isInterState": false,
+      "taxableValue": 28900,
+      "cgstAmount": 2601,
+      "sgstAmount": 2601,
+      "igstAmount": 0,
+      "totalInvoiceAmount": 34102,
+      "status": "ISSUED",
+      "pdfUrl": "/api/erp/invoices/BVL-INV-26-27-0164.pdf"
+    },
+    {
+      "id": "inv_1795207077278_zmd",
+      "invoiceNumber": "BVL/INV/26-27/0165",
+      "orderId": "ord_1795207077278_l7p",
+      "customerId": "cust_guest",
+      "supplierGstin": "27AABCB1234F1Z8",
+      "invoiceDate": "2026-11-20T20:37:57.278Z",
+      "supplyState": "Maharashtra (Pune Primary Hub)",
+      "placeOfSupply": "Maharashtra",
+      "isInterState": false,
+      "taxableValue": 10000,
+      "cgstAmount": 900,
+      "sgstAmount": 900,
+      "igstAmount": 0,
+      "totalInvoiceAmount": 11800,
+      "status": "ISSUED",
+      "pdfUrl": "/api/erp/invoices/BVL-INV-26-27-0165.pdf"
+    },
+    {
+      "id": "inv_1795207077312_cje",
+      "invoiceNumber": "BVL/INV/26-27/0166",
+      "orderId": "ord_1795207077312_0f1",
+      "customerId": "cust_quote_test",
+      "supplierGstin": "27AABCB1234F1Z8",
+      "invoiceDate": "2026-11-20T20:37:57.312Z",
+      "supplyState": "Maharashtra (Pune Primary Hub)",
+      "placeOfSupply": "Maharashtra",
+      "isInterState": false,
+      "taxableValue": 28900,
+      "cgstAmount": 2601,
+      "sgstAmount": 2601,
+      "igstAmount": 0,
+      "totalInvoiceAmount": 34102,
+      "status": "ISSUED",
+      "pdfUrl": "/api/erp/invoices/BVL-INV-26-27-0166.pdf"
+    },
+    {
+      "id": "inv_1795207143417_qrb",
+      "invoiceNumber": "BVL/INV/26-27/0167",
+      "orderId": "ord_1795207143416_7uk",
+      "customerId": "cust_guest",
+      "supplierGstin": "27AABCB1234F1Z8",
+      "invoiceDate": "2026-11-20T20:39:03.417Z",
+      "supplyState": "Maharashtra (Pune Primary Hub)",
+      "placeOfSupply": "Maharashtra",
+      "isInterState": false,
+      "taxableValue": 10000,
+      "cgstAmount": 900,
+      "sgstAmount": 900,
+      "igstAmount": 0,
+      "totalInvoiceAmount": 11800,
+      "status": "ISSUED",
+      "pdfUrl": "/api/erp/invoices/BVL-INV-26-27-0167.pdf"
+    },
+    {
+      "id": "inv_1795207143449_8iv",
+      "invoiceNumber": "BVL/INV/26-27/0168",
+      "orderId": "ord_1795207143449_23z",
+      "customerId": "cust_quote_test",
+      "supplierGstin": "27AABCB1234F1Z8",
+      "invoiceDate": "2026-11-20T20:39:03.449Z",
+      "supplyState": "Maharashtra (Pune Primary Hub)",
+      "placeOfSupply": "Maharashtra",
+      "isInterState": false,
+      "taxableValue": 28900,
+      "cgstAmount": 2601,
+      "sgstAmount": 2601,
+      "igstAmount": 0,
+      "totalInvoiceAmount": 34102,
+      "status": "ISSUED",
+      "pdfUrl": "/api/erp/invoices/BVL-INV-26-27-0168.pdf"
+    },
+    {
+      "id": "inv_1795207217436_3kv",
+      "invoiceNumber": "BVL/INV/26-27/0169",
+      "orderId": "ord_1795207217436_ckq",
+      "customerId": "cust_guest",
+      "supplierGstin": "27AABCB1234F1Z8",
+      "invoiceDate": "2026-11-20T20:40:17.436Z",
+      "supplyState": "Maharashtra (Pune Primary Hub)",
+      "placeOfSupply": "Maharashtra",
+      "isInterState": false,
+      "taxableValue": 10000,
+      "cgstAmount": 900,
+      "sgstAmount": 900,
+      "igstAmount": 0,
+      "totalInvoiceAmount": 11800,
+      "status": "ISSUED",
+      "pdfUrl": "/api/erp/invoices/BVL-INV-26-27-0169.pdf"
+    },
+    {
+      "id": "inv_1795207217532_h3n",
+      "invoiceNumber": "BVL/INV/26-27/0170",
+      "orderId": "ord_1795207217532_tkh",
+      "customerId": "cust_quote_test",
+      "supplierGstin": "27AABCB1234F1Z8",
+      "invoiceDate": "2026-11-20T20:40:17.532Z",
+      "supplyState": "Maharashtra (Pune Primary Hub)",
+      "placeOfSupply": "Maharashtra",
+      "isInterState": false,
+      "taxableValue": 28900,
+      "cgstAmount": 2601,
+      "sgstAmount": 2601,
+      "igstAmount": 0,
+      "totalInvoiceAmount": 34102,
+      "status": "ISSUED",
+      "pdfUrl": "/api/erp/invoices/BVL-INV-26-27-0170.pdf"
     }
   ],
   "gstCreditNotes": [],
   "auditLogs": [
+    {
+      "id": "audit_1795207221494_i5qao",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "REMOVE_ABANDONED_CART",
+      "category": "STORE_MANAGEMENT",
+      "details": "Removed abandoned checkout card cart_unrecoverable_test_1795207221466 (no email, invalid-phone, ₹4500) from recovery board",
+      "timestamp": "2026-11-20T20:40:21.494Z"
+    },
+    {
+      "id": "audit_1795207221482_w24dg",
+      "actorEmail": "vikram.singhania@heritagecrafts.in",
+      "action": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked vikram.singhania@heritagecrafts.in (role: PATRON) from DELETE /api/crm/abandoned-carts/cart_unrecoverable_test_1795207221466",
+      "timestamp": "2026-11-20T20:40:21.482Z",
+      "ipAddress": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "audit_1795207221460_41dpk",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Rajputana Bridle Belt (BVL-MEN-BLT-01) at punePrimaryHub: 24 -> 24 (Total: 72) | Safety Stock: 99 -> 7",
+      "timestamp": "2026-11-20T20:40:21.460Z"
+    },
+    {
+      "id": "audit_1795207221448_tgd0t",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "UPDATE_SAFETY_STOCK",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Updated safety stock threshold for The Rajputana Bridle Belt (BVL-MEN-BLT-01): 7 -> 99 pcs",
+      "timestamp": "2026-11-20T20:40:21.448Z"
+    },
+    {
+      "id": "audit_1795207221435_m5ffl",
+      "actorEmail": "vikram.singhania@heritagecrafts.in",
+      "action": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked vikram.singhania@heritagecrafts.in (role: PATRON) from PATCH /api/erp/inventory/BVL-MEN-BLT-01/safety-stock",
+      "timestamp": "2026-11-20T20:40:21.435Z",
+      "ipAddress": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "audit_1795207221423_0p8z4",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "DELETE_KNOWLEDGE_BASE",
+      "category": "STORE_MANAGEMENT",
+      "details": "Removed Knowledge Base presentation \"Saddle Stitching Atelier Film\" (kb_1795207221383_68vj)",
+      "timestamp": "2026-11-20T20:40:21.423Z"
+    },
+    {
+      "id": "audit_1795207221412_b33cf",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "UPDATE_KNOWLEDGE_BASE",
+      "category": "STORE_MANAGEMENT",
+      "details": "Updated Knowledge Base presentation \"Full-Grain Vegetable-Tanned Leather & Hide Anatomy\" (DECK)",
+      "timestamp": "2026-11-20T20:40:21.412Z"
+    },
+    {
+      "id": "audit_1795207221399_bk7rb",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "UPDATE_KNOWLEDGE_BASE",
+      "category": "STORE_MANAGEMENT",
+      "details": "Updated Knowledge Base presentation \"Full-Grain Vegetable-Tanned Leather & Hide Anatomy\" (DECK)",
+      "timestamp": "2026-11-20T20:40:21.399Z"
+    },
+    {
+      "id": "audit_1795207221384_gpt1x",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "UPLOAD_KNOWLEDGE_BASE",
+      "category": "STORE_MANAGEMENT",
+      "details": "Published Knowledge Base presentation \"Saddle Stitching Atelier Film\" (VIDEO)",
+      "timestamp": "2026-11-20T20:40:21.384Z"
+    },
+    {
+      "id": "audit_1795207221088_ghx7k",
+      "actorEmail": "anonymous",
+      "action": "RECAPTCHA_BLOCKED",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked CHECKOUT: action mismatch (got LOGIN)",
+      "timestamp": "2026-11-20T20:40:21.088Z"
+    },
+    {
+      "id": "audit_1795207221083_wlpyn",
+      "actorEmail": "anonymous",
+      "action": "RECAPTCHA_BLOCKED",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked CHECKOUT: missing reCAPTCHA Enterprise token",
+      "timestamp": "2026-11-20T20:40:21.083Z"
+    },
+    {
+      "id": "audit_1795207217910_3sszk",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at mumbaiWarehouse: 0 -> 22 (Total: 41)",
+      "timestamp": "2026-11-20T20:40:17.910Z"
+    },
+    {
+      "id": "audit_1795207217903_scouh",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at punePrimaryHub: 0 -> 19 (Total: 19)",
+      "timestamp": "2026-11-20T20:40:17.903Z"
+    },
+    {
+      "id": "audit_1795207217860_5znq6",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at mumbaiWarehouse: 22 -> 0 (Total: 0 - PRODUCT DEACTIVATED / OUT OF STOCK)",
+      "timestamp": "2026-11-20T20:40:17.860Z"
+    },
+    {
+      "id": "audit_1795207217854_g61rk",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at punePrimaryHub: 19 -> 0 (Total: 22)",
+      "timestamp": "2026-11-20T20:40:17.854Z"
+    },
+    {
+      "id": "audit_1795207217842_mchvu",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "REMOVE_PERMITTED_MANAGER",
+      "category": "AUTH_PERMISSION",
+      "details": "Removed User ID \"artisan.manager@bharatvarshcrafts.com\" from authorized Admin access list",
+      "timestamp": "2026-11-20T20:40:17.842Z"
+    },
+    {
+      "id": "audit_1795207217826_8ipkv",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADD_PERMITTED_MANAGER",
+      "category": "AUTH_PERMISSION",
+      "details": "Added/updated staff User ID \"artisan.manager@bharatvarshcrafts.com\" with role STORE_MANAGER",
+      "timestamp": "2026-11-20T20:40:17.826Z"
+    },
+    {
+      "id": "audit_1795207217806_4ynlz",
+      "actorEmail": "marketing_agent",
+      "action": "TRIGGER_CART_RECOVERY",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sent EMAIL cart recovery with 10% bespoke incentive to idle.shopper@test.com (Attempt #1)",
+      "timestamp": "2026-11-20T20:40:17.806Z"
+    },
+    {
+      "id": "audit_1795207217751_tgpgb",
+      "actorEmail": "system",
+      "action": "CHECKOUT_ABANDONED",
+      "category": "WEBHOOK_EVENT",
+      "details": "Abandoned checkout detected for idle.shopper@test.com (₹3800)",
+      "timestamp": "2026-11-20T20:40:17.751Z"
+    },
+    {
+      "id": "audit_1795207217731_ar5xl",
+      "actorEmail": "integrations",
+      "action": "ORDER_NOTIFICATION_DISPATCHED",
+      "category": "STORE_MANAGEMENT",
+      "details": "ERP Order BVL-2026-1080 notifications -> PatronEmail:SANDBOX_FALLBACK, SupportInvoice:SANDBOX_FALLBACK, WhatsApp:SANDBOX_FALLBACK",
+      "timestamp": "2026-11-20T20:40:17.731Z"
+    },
+    {
+      "id": "audit_1795207217719_e52cf",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Viceroy Diplomat Briefcase (BVL-TRV-BRF-01) at punePrimaryHub: 3 -> 4 (Total: 10)",
+      "timestamp": "2026-11-20T20:40:17.719Z"
+    },
+    {
+      "id": "audit_1795207217548_a6io2",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ERP_SALES_ORDER_PUSH",
+      "category": "STORE_MANAGEMENT",
+      "details": "CRM quote converted into ERP Sales Order BVL-2026-1080 (Deal: WHOLESALE_BULK, Amount: ₹34102)",
+      "timestamp": "2026-11-20T20:40:17.548Z"
+    },
+    {
+      "id": "audit_1795207217533_k2xyp",
+      "actorEmail": "system",
+      "action": "ORDER_CREATED",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sales order BVL-2026-1080 placed for ₹34102",
+      "timestamp": "2026-11-20T20:40:17.533Z"
+    },
+    {
+      "id": "audit_1795207217517_ktntb",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Rajputana Bridle Belt (BVL-MEN-BLT-01) at punePrimaryHub: 23 -> 24 (Total: 72)",
+      "timestamp": "2026-11-20T20:40:17.517Z"
+    },
+    {
+      "id": "audit_1795207217508_fsdzv",
+      "actorEmail": "webhook_gateway",
+      "action": "WEBHOOK_ORDER_PLACED",
+      "category": "WEBHOOK_EVENT",
+      "details": "Order BVL-2026-1079 ingested and pushed to ERP",
+      "timestamp": "2026-11-20T20:40:17.508Z"
+    },
+    {
+      "id": "audit_1795207217436_gf64e",
+      "actorEmail": "system",
+      "action": "ORDER_CREATED",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sales order BVL-2026-1079 placed for ₹11800",
+      "timestamp": "2026-11-20T20:40:17.436Z"
+    },
+    {
+      "id": "audit_1795207147497_2hlta",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "REMOVE_ABANDONED_CART",
+      "category": "STORE_MANAGEMENT",
+      "details": "Removed abandoned checkout card cart_unrecoverable_test_1795207147470 (no email, invalid-phone, ₹4500) from recovery board",
+      "timestamp": "2026-11-20T20:39:07.497Z"
+    },
+    {
+      "id": "audit_1795207147484_ibsdc",
+      "actorEmail": "vikram.singhania@heritagecrafts.in",
+      "action": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked vikram.singhania@heritagecrafts.in (role: PATRON) from DELETE /api/crm/abandoned-carts/cart_unrecoverable_test_1795207147470",
+      "timestamp": "2026-11-20T20:39:07.484Z",
+      "ipAddress": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "audit_1795207147464_22rfw",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Rajputana Bridle Belt (BVL-MEN-BLT-01) at punePrimaryHub: 24 -> 24 (Total: 72) | Safety Stock: 99 -> 7",
+      "timestamp": "2026-11-20T20:39:07.464Z"
+    },
+    {
+      "id": "audit_1795207147452_3guy2",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "UPDATE_SAFETY_STOCK",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Updated safety stock threshold for The Rajputana Bridle Belt (BVL-MEN-BLT-01): 7 -> 99 pcs",
+      "timestamp": "2026-11-20T20:39:07.452Z"
+    },
+    {
+      "id": "audit_1795207147439_0ehxl",
+      "actorEmail": "vikram.singhania@heritagecrafts.in",
+      "action": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked vikram.singhania@heritagecrafts.in (role: PATRON) from PATCH /api/erp/inventory/BVL-MEN-BLT-01/safety-stock",
+      "timestamp": "2026-11-20T20:39:07.439Z",
+      "ipAddress": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "audit_1795207147427_rituh",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "DELETE_KNOWLEDGE_BASE",
+      "category": "STORE_MANAGEMENT",
+      "details": "Removed Knowledge Base presentation \"Saddle Stitching Atelier Film\" (kb_1795207147383_juqk)",
+      "timestamp": "2026-11-20T20:39:07.427Z"
+    },
+    {
+      "id": "audit_1795207147411_u68x4",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "UPDATE_KNOWLEDGE_BASE",
+      "category": "STORE_MANAGEMENT",
+      "details": "Updated Knowledge Base presentation \"Full-Grain Vegetable-Tanned Leather & Hide Anatomy\" (DECK)",
+      "timestamp": "2026-11-20T20:39:07.411Z"
+    },
+    {
+      "id": "audit_1795207147398_uk58q",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "UPDATE_KNOWLEDGE_BASE",
+      "category": "STORE_MANAGEMENT",
+      "details": "Updated Knowledge Base presentation \"Full-Grain Vegetable-Tanned Leather & Hide Anatomy\" (DECK)",
+      "timestamp": "2026-11-20T20:39:07.398Z"
+    },
+    {
+      "id": "audit_1795207147383_hh8xp",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "UPLOAD_KNOWLEDGE_BASE",
+      "category": "STORE_MANAGEMENT",
+      "details": "Published Knowledge Base presentation \"Saddle Stitching Atelier Film\" (VIDEO)",
+      "timestamp": "2026-11-20T20:39:07.383Z"
+    },
+    {
+      "id": "audit_1795207147083_ljnha",
+      "actorEmail": "anonymous",
+      "action": "RECAPTCHA_BLOCKED",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked CHECKOUT: action mismatch (got LOGIN)",
+      "timestamp": "2026-11-20T20:39:07.083Z"
+    },
+    {
+      "id": "audit_1795207147079_np3xe",
+      "actorEmail": "anonymous",
+      "action": "RECAPTCHA_BLOCKED",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked CHECKOUT: missing reCAPTCHA Enterprise token",
+      "timestamp": "2026-11-20T20:39:07.079Z"
+    },
+    {
+      "id": "audit_1795207143807_3v7c0",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at mumbaiWarehouse: 0 -> 22 (Total: 41)",
+      "timestamp": "2026-11-20T20:39:03.807Z"
+    },
+    {
+      "id": "audit_1795207143752_e36z9",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at punePrimaryHub: 0 -> 19 (Total: 19)",
+      "timestamp": "2026-11-20T20:39:03.752Z"
+    },
+    {
+      "id": "audit_1795207143746_to8ol",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at mumbaiWarehouse: 22 -> 0 (Total: 0 - PRODUCT DEACTIVATED / OUT OF STOCK)",
+      "timestamp": "2026-11-20T20:39:03.746Z"
+    },
+    {
+      "id": "audit_1795207143737_uc8la",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at punePrimaryHub: 19 -> 0 (Total: 22)",
+      "timestamp": "2026-11-20T20:39:03.737Z"
+    },
+    {
+      "id": "audit_1795207143726_mk4sl",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "REMOVE_PERMITTED_MANAGER",
+      "category": "AUTH_PERMISSION",
+      "details": "Removed User ID \"artisan.manager@bharatvarshcrafts.com\" from authorized Admin access list",
+      "timestamp": "2026-11-20T20:39:03.726Z"
+    },
+    {
+      "id": "audit_1795207143714_st162",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADD_PERMITTED_MANAGER",
+      "category": "AUTH_PERMISSION",
+      "details": "Added/updated staff User ID \"artisan.manager@bharatvarshcrafts.com\" with role STORE_MANAGER",
+      "timestamp": "2026-11-20T20:39:03.714Z"
+    },
+    {
+      "id": "audit_1795207143651_6sbxv",
+      "actorEmail": "marketing_agent",
+      "action": "TRIGGER_CART_RECOVERY",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sent EMAIL cart recovery with 10% bespoke incentive to idle.shopper@test.com (Attempt #1)",
+      "timestamp": "2026-11-20T20:39:03.651Z"
+    },
+    {
+      "id": "audit_1795207143641_yrigg",
+      "actorEmail": "system",
+      "action": "CHECKOUT_ABANDONED",
+      "category": "WEBHOOK_EVENT",
+      "details": "Abandoned checkout detected for idle.shopper@test.com (₹3800)",
+      "timestamp": "2026-11-20T20:39:03.641Z"
+    },
+    {
+      "id": "audit_1795207143619_t355t",
+      "actorEmail": "integrations",
+      "action": "ORDER_NOTIFICATION_DISPATCHED",
+      "category": "STORE_MANAGEMENT",
+      "details": "ERP Order BVL-2026-1078 notifications -> PatronEmail:SANDBOX_FALLBACK, SupportInvoice:SANDBOX_FALLBACK, WhatsApp:SANDBOX_FALLBACK",
+      "timestamp": "2026-11-20T20:39:03.619Z"
+    },
+    {
+      "id": "audit_1795207143612_ewk5c",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Viceroy Diplomat Briefcase (BVL-TRV-BRF-01) at punePrimaryHub: 3 -> 4 (Total: 10)",
+      "timestamp": "2026-11-20T20:39:03.612Z"
+    },
+    {
+      "id": "audit_1795207143504_hom8t",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ERP_SALES_ORDER_PUSH",
+      "category": "STORE_MANAGEMENT",
+      "details": "CRM quote converted into ERP Sales Order BVL-2026-1078 (Deal: WHOLESALE_BULK, Amount: ₹34102)",
+      "timestamp": "2026-11-20T20:39:03.504Z"
+    },
+    {
+      "id": "audit_1795207143449_beb96",
+      "actorEmail": "system",
+      "action": "ORDER_CREATED",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sales order BVL-2026-1078 placed for ₹34102",
+      "timestamp": "2026-11-20T20:39:03.449Z"
+    },
+    {
+      "id": "audit_1795207143441_8fbmv",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Rajputana Bridle Belt (BVL-MEN-BLT-01) at punePrimaryHub: 23 -> 24 (Total: 72)",
+      "timestamp": "2026-11-20T20:39:03.441Z"
+    },
+    {
+      "id": "audit_1795207143433_5hsm1",
+      "actorEmail": "webhook_gateway",
+      "action": "WEBHOOK_ORDER_PLACED",
+      "category": "WEBHOOK_EVENT",
+      "details": "Order BVL-2026-1077 ingested and pushed to ERP",
+      "timestamp": "2026-11-20T20:39:03.433Z"
+    },
+    {
+      "id": "audit_1795207143417_frw6y",
+      "actorEmail": "system",
+      "action": "ORDER_CREATED",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sales order BVL-2026-1077 placed for ₹11800",
+      "timestamp": "2026-11-20T20:39:03.417Z"
+    },
+    {
+      "id": "audit_1795207081651_mhsvu",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "REMOVE_ABANDONED_CART",
+      "category": "STORE_MANAGEMENT",
+      "details": "Removed abandoned checkout card cart_unrecoverable_test_1795207081617 (no email, invalid-phone, ₹4500) from recovery board",
+      "timestamp": "2026-11-20T20:38:01.651Z"
+    },
+    {
+      "id": "audit_1795207081638_a1vu9",
+      "actorEmail": "vikram.singhania@heritagecrafts.in",
+      "action": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked vikram.singhania@heritagecrafts.in (role: PATRON) from DELETE /api/crm/abandoned-carts/cart_unrecoverable_test_1795207081617",
+      "timestamp": "2026-11-20T20:38:01.638Z",
+      "ipAddress": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "audit_1795207081608_gb58s",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Rajputana Bridle Belt (BVL-MEN-BLT-01) at punePrimaryHub: 24 -> 24 (Total: 72) | Safety Stock: 99 -> 7",
+      "timestamp": "2026-11-20T20:38:01.608Z"
+    },
+    {
+      "id": "audit_1795207081587_aioqf",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "UPDATE_SAFETY_STOCK",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Updated safety stock threshold for The Rajputana Bridle Belt (BVL-MEN-BLT-01): 7 -> 99 pcs",
+      "timestamp": "2026-11-20T20:38:01.587Z"
+    },
+    {
+      "id": "audit_1795207081576_l7s5m",
+      "actorEmail": "vikram.singhania@heritagecrafts.in",
+      "action": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked vikram.singhania@heritagecrafts.in (role: PATRON) from PATCH /api/erp/inventory/BVL-MEN-BLT-01/safety-stock",
+      "timestamp": "2026-11-20T20:38:01.576Z",
+      "ipAddress": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "audit_1795207081565_nctyy",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "DELETE_KNOWLEDGE_BASE",
+      "category": "STORE_MANAGEMENT",
+      "details": "Removed Knowledge Base presentation \"Saddle Stitching Atelier Film\" (kb_1795207081515_7bio)",
+      "timestamp": "2026-11-20T20:38:01.565Z"
+    },
+    {
+      "id": "audit_1795207081553_va5xh",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "UPDATE_KNOWLEDGE_BASE",
+      "category": "STORE_MANAGEMENT",
+      "details": "Updated Knowledge Base presentation \"Full-Grain Vegetable-Tanned Leather & Hide Anatomy\" (DECK)",
+      "timestamp": "2026-11-20T20:38:01.553Z"
+    },
+    {
+      "id": "audit_1795207081536_4dt97",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "UPDATE_KNOWLEDGE_BASE",
+      "category": "STORE_MANAGEMENT",
+      "details": "Updated Knowledge Base presentation \"Full-Grain Vegetable-Tanned Leather & Hide Anatomy\" (DECK)",
+      "timestamp": "2026-11-20T20:38:01.536Z"
+    },
+    {
+      "id": "audit_1795207081515_f55gv",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "UPLOAD_KNOWLEDGE_BASE",
+      "category": "STORE_MANAGEMENT",
+      "details": "Published Knowledge Base presentation \"Saddle Stitching Atelier Film\" (VIDEO)",
+      "timestamp": "2026-11-20T20:38:01.515Z"
+    },
+    {
+      "id": "audit_1795207081230_9w7sn",
+      "actorEmail": "anonymous",
+      "action": "RECAPTCHA_BLOCKED",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked CHECKOUT: action mismatch (got LOGIN)",
+      "timestamp": "2026-11-20T20:38:01.230Z"
+    },
+    {
+      "id": "audit_1795207081226_kbhs8",
+      "actorEmail": "anonymous",
+      "action": "RECAPTCHA_BLOCKED",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked CHECKOUT: missing reCAPTCHA Enterprise token",
+      "timestamp": "2026-11-20T20:38:01.226Z"
+    },
+    {
+      "id": "audit_1795207077496_xk2xn",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at mumbaiWarehouse: 0 -> 22 (Total: 41)",
+      "timestamp": "2026-11-20T20:37:57.496Z"
+    },
+    {
+      "id": "audit_1795207077489_nif9p",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at punePrimaryHub: 0 -> 19 (Total: 19)",
+      "timestamp": "2026-11-20T20:37:57.489Z"
+    },
+    {
+      "id": "audit_1795207077483_kygzn",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at mumbaiWarehouse: 22 -> 0 (Total: 0 - PRODUCT DEACTIVATED / OUT OF STOCK)",
+      "timestamp": "2026-11-20T20:37:57.483Z"
+    },
+    {
+      "id": "audit_1795207077479_he0zb",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at punePrimaryHub: 19 -> 0 (Total: 22)",
+      "timestamp": "2026-11-20T20:37:57.479Z"
+    },
+    {
+      "id": "audit_1795207077469_rxcar",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "REMOVE_PERMITTED_MANAGER",
+      "category": "AUTH_PERMISSION",
+      "details": "Removed User ID \"artisan.manager@bharatvarshcrafts.com\" from authorized Admin access list",
+      "timestamp": "2026-11-20T20:37:57.469Z"
+    },
+    {
+      "id": "audit_1795207077452_llylb",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADD_PERMITTED_MANAGER",
+      "category": "AUTH_PERMISSION",
+      "details": "Added/updated staff User ID \"artisan.manager@bharatvarshcrafts.com\" with role STORE_MANAGER",
+      "timestamp": "2026-11-20T20:37:57.452Z"
+    },
+    {
+      "id": "audit_1795207077429_asols",
+      "actorEmail": "marketing_agent",
+      "action": "TRIGGER_CART_RECOVERY",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sent EMAIL cart recovery with 10% bespoke incentive to idle.shopper@test.com (Attempt #1)",
+      "timestamp": "2026-11-20T20:37:57.429Z"
+    },
+    {
+      "id": "audit_1795207077416_3fgci",
+      "actorEmail": "system",
+      "action": "CHECKOUT_ABANDONED",
+      "category": "WEBHOOK_EVENT",
+      "details": "Abandoned checkout detected for idle.shopper@test.com (₹3800)",
+      "timestamp": "2026-11-20T20:37:57.416Z"
+    },
+    {
+      "id": "audit_1795207077392_51eks",
+      "actorEmail": "integrations",
+      "action": "ORDER_NOTIFICATION_DISPATCHED",
+      "category": "STORE_MANAGEMENT",
+      "details": "ERP Order BVL-2026-1076 notifications -> PatronEmail:SANDBOX_FALLBACK, SupportInvoice:SANDBOX_FALLBACK, WhatsApp:SANDBOX_FALLBACK",
+      "timestamp": "2026-11-20T20:37:57.392Z"
+    },
+    {
+      "id": "audit_1795207077383_zi6q6",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Viceroy Diplomat Briefcase (BVL-TRV-BRF-01) at punePrimaryHub: 3 -> 4 (Total: 10)",
+      "timestamp": "2026-11-20T20:37:57.383Z"
+    },
+    {
+      "id": "audit_1795207077327_yu12s",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ERP_SALES_ORDER_PUSH",
+      "category": "STORE_MANAGEMENT",
+      "details": "CRM quote converted into ERP Sales Order BVL-2026-1076 (Deal: WHOLESALE_BULK, Amount: ₹34102)",
+      "timestamp": "2026-11-20T20:37:57.327Z"
+    },
+    {
+      "id": "audit_1795207077312_381km",
+      "actorEmail": "system",
+      "action": "ORDER_CREATED",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sales order BVL-2026-1076 placed for ₹34102",
+      "timestamp": "2026-11-20T20:37:57.312Z"
+    },
+    {
+      "id": "audit_1795207077312_yvdkb",
+      "actorEmail": "system",
+      "action": "BOM_LOW_STOCK_ALERT",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Raw material low-stock alert: Sand-Cast Solid Antique Brass Push Locks & Rivets (BVL-TRV-BRF-01) fell to 20 PIECES (safety threshold: 20 PIECES).",
+      "timestamp": "2026-11-20T20:37:57.312Z"
+    },
+    {
+      "id": "audit_1795207077300_hb08p",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Rajputana Bridle Belt (BVL-MEN-BLT-01) at punePrimaryHub: 23 -> 24 (Total: 72)",
+      "timestamp": "2026-11-20T20:37:57.300Z"
+    },
+    {
+      "id": "audit_1795207077290_apkfe",
+      "actorEmail": "webhook_gateway",
+      "action": "WEBHOOK_ORDER_PLACED",
+      "category": "WEBHOOK_EVENT",
+      "details": "Order BVL-2026-1075 ingested and pushed to ERP",
+      "timestamp": "2026-11-20T20:37:57.290Z"
+    },
+    {
+      "id": "audit_1795207077279_gv52t",
+      "actorEmail": "system",
+      "action": "ORDER_CREATED",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sales order BVL-2026-1075 placed for ₹11800",
+      "timestamp": "2026-11-20T20:37:57.279Z"
+    },
+    {
+      "id": "audit_1795207011932_amx2o",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "REMOVE_ABANDONED_CART",
+      "category": "STORE_MANAGEMENT",
+      "details": "Removed abandoned checkout card cart_unrecoverable_test_1795207011903 (no email, invalid-phone, ₹4500) from recovery board",
+      "timestamp": "2026-11-20T20:36:51.932Z"
+    },
+    {
+      "id": "audit_1795207011921_t9gx5",
+      "actorEmail": "vikram.singhania@heritagecrafts.in",
+      "action": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked vikram.singhania@heritagecrafts.in (role: PATRON) from DELETE /api/crm/abandoned-carts/cart_unrecoverable_test_1795207011903",
+      "timestamp": "2026-11-20T20:36:51.921Z",
+      "ipAddress": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "audit_1795207011898_b893v",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Rajputana Bridle Belt (BVL-MEN-BLT-01) at punePrimaryHub: 24 -> 24 (Total: 72) | Safety Stock: 99 -> 7",
+      "timestamp": "2026-11-20T20:36:51.898Z"
+    },
+    {
+      "id": "audit_1795207011887_sfwtv",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "UPDATE_SAFETY_STOCK",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Updated safety stock threshold for The Rajputana Bridle Belt (BVL-MEN-BLT-01): 7 -> 99 pcs",
+      "timestamp": "2026-11-20T20:36:51.887Z"
+    },
+    {
+      "id": "audit_1795207011874_cpeft",
+      "actorEmail": "vikram.singhania@heritagecrafts.in",
+      "action": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked vikram.singhania@heritagecrafts.in (role: PATRON) from PATCH /api/erp/inventory/BVL-MEN-BLT-01/safety-stock",
+      "timestamp": "2026-11-20T20:36:51.874Z",
+      "ipAddress": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "audit_1795207011863_hcqpz",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "DELETE_KNOWLEDGE_BASE",
+      "category": "STORE_MANAGEMENT",
+      "details": "Removed Knowledge Base presentation \"Saddle Stitching Atelier Film\" (kb_1795207011819_5s8u)",
+      "timestamp": "2026-11-20T20:36:51.863Z"
+    },
+    {
+      "id": "audit_1795207011849_6wgbm",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "UPDATE_KNOWLEDGE_BASE",
+      "category": "STORE_MANAGEMENT",
+      "details": "Updated Knowledge Base presentation \"Full-Grain Vegetable-Tanned Leather & Hide Anatomy\" (DECK)",
+      "timestamp": "2026-11-20T20:36:51.850Z"
+    },
+    {
+      "id": "audit_1795207011836_qjtll",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "UPDATE_KNOWLEDGE_BASE",
+      "category": "STORE_MANAGEMENT",
+      "details": "Updated Knowledge Base presentation \"Full-Grain Vegetable-Tanned Leather & Hide Anatomy\" (DECK)",
+      "timestamp": "2026-11-20T20:36:51.836Z"
+    },
+    {
+      "id": "audit_1795207011819_pyhrq",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "UPLOAD_KNOWLEDGE_BASE",
+      "category": "STORE_MANAGEMENT",
+      "details": "Published Knowledge Base presentation \"Saddle Stitching Atelier Film\" (VIDEO)",
+      "timestamp": "2026-11-20T20:36:51.819Z"
+    },
+    {
+      "id": "audit_1795207011556_pm97w",
+      "actorEmail": "anonymous",
+      "action": "RECAPTCHA_BLOCKED",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked CHECKOUT: action mismatch (got LOGIN)",
+      "timestamp": "2026-11-20T20:36:51.556Z"
+    },
+    {
+      "id": "audit_1795207011552_8bzpy",
+      "actorEmail": "anonymous",
+      "action": "RECAPTCHA_BLOCKED",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked CHECKOUT: missing reCAPTCHA Enterprise token",
+      "timestamp": "2026-11-20T20:36:51.552Z"
+    },
+    {
+      "id": "audit_1795207008620_g7tly",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at mumbaiWarehouse: 0 -> 22 (Total: 41)",
+      "timestamp": "2026-11-20T20:36:48.620Z"
+    },
+    {
+      "id": "audit_1795207008616_anarz",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at punePrimaryHub: 0 -> 19 (Total: 19)",
+      "timestamp": "2026-11-20T20:36:48.616Z"
+    },
+    {
+      "id": "audit_1795207008612_xfdx7",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at mumbaiWarehouse: 22 -> 0 (Total: 0 - PRODUCT DEACTIVATED / OUT OF STOCK)",
+      "timestamp": "2026-11-20T20:36:48.612Z"
+    },
+    {
+      "id": "audit_1795207008607_7h0b9",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at punePrimaryHub: 19 -> 0 (Total: 22)",
+      "timestamp": "2026-11-20T20:36:48.607Z"
+    },
+    {
+      "id": "audit_1795207008598_83diq",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "REMOVE_PERMITTED_MANAGER",
+      "category": "AUTH_PERMISSION",
+      "details": "Removed User ID \"artisan.manager@bharatvarshcrafts.com\" from authorized Admin access list",
+      "timestamp": "2026-11-20T20:36:48.598Z"
+    },
+    {
+      "id": "audit_1795207008581_704z9",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADD_PERMITTED_MANAGER",
+      "category": "AUTH_PERMISSION",
+      "details": "Added/updated staff User ID \"artisan.manager@bharatvarshcrafts.com\" with role STORE_MANAGER",
+      "timestamp": "2026-11-20T20:36:48.581Z"
+    },
+    {
+      "id": "audit_1795207008564_0ps71",
+      "actorEmail": "marketing_agent",
+      "action": "TRIGGER_CART_RECOVERY",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sent EMAIL cart recovery with 10% bespoke incentive to idle.shopper@test.com (Attempt #1)",
+      "timestamp": "2026-11-20T20:36:48.564Z"
+    },
+    {
+      "id": "audit_1795207008555_abyvf",
+      "actorEmail": "system",
+      "action": "CHECKOUT_ABANDONED",
+      "category": "WEBHOOK_EVENT",
+      "details": "Abandoned checkout detected for idle.shopper@test.com (₹3800)",
+      "timestamp": "2026-11-20T20:36:48.555Z"
+    },
+    {
+      "id": "audit_1795207008541_d946l",
+      "actorEmail": "integrations",
+      "action": "ORDER_NOTIFICATION_DISPATCHED",
+      "category": "STORE_MANAGEMENT",
+      "details": "ERP Order BVL-2026-1074 notifications -> PatronEmail:SANDBOX_FALLBACK, SupportInvoice:SANDBOX_FALLBACK, WhatsApp:SANDBOX_FALLBACK",
+      "timestamp": "2026-11-20T20:36:48.541Z"
+    },
+    {
+      "id": "audit_1795207008535_of0yb",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Viceroy Diplomat Briefcase (BVL-TRV-BRF-01) at punePrimaryHub: 3 -> 4 (Total: 10)",
+      "timestamp": "2026-11-20T20:36:48.535Z"
+    },
+    {
+      "id": "audit_1795207008487_1ngz2",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ERP_SALES_ORDER_PUSH",
+      "category": "STORE_MANAGEMENT",
+      "details": "CRM quote converted into ERP Sales Order BVL-2026-1074 (Deal: WHOLESALE_BULK, Amount: ₹34102)",
+      "timestamp": "2026-11-20T20:36:48.487Z"
+    },
+    {
+      "id": "audit_1795207008480_p7ff3",
+      "actorEmail": "system",
+      "action": "ORDER_CREATED",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sales order BVL-2026-1074 placed for ₹34102",
+      "timestamp": "2026-11-20T20:36:48.480Z"
+    },
+    {
+      "id": "audit_1795207008471_j8sc1",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Rajputana Bridle Belt (BVL-MEN-BLT-01) at punePrimaryHub: 23 -> 24 (Total: 72)",
+      "timestamp": "2026-11-20T20:36:48.471Z"
+    },
+    {
+      "id": "audit_1795207008465_ijp43",
+      "actorEmail": "webhook_gateway",
+      "action": "WEBHOOK_ORDER_PLACED",
+      "category": "WEBHOOK_EVENT",
+      "details": "Order BVL-2026-1073 ingested and pushed to ERP",
+      "timestamp": "2026-11-20T20:36:48.465Z"
+    },
+    {
+      "id": "audit_1795207008455_wycm0",
+      "actorEmail": "system",
+      "action": "ORDER_CREATED",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sales order BVL-2026-1073 placed for ₹11800",
+      "timestamp": "2026-11-20T20:36:48.455Z"
+    },
+    {
+      "id": "audit_1795206892619_13zj6",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Rajputana Bridle Belt (BVL-MEN-BLT-01) at punePrimaryHub: 24 -> 24 (Total: 72) | Safety Stock: 99 -> 7",
+      "timestamp": "2026-11-20T20:34:52.619Z"
+    },
+    {
+      "id": "audit_1795206892603_8ys2r",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "UPDATE_SAFETY_STOCK",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Updated safety stock threshold for The Rajputana Bridle Belt (BVL-MEN-BLT-01): 15 -> 99 pcs",
+      "timestamp": "2026-11-20T20:34:52.603Z"
+    },
+    {
+      "id": "audit_1795206892592_k3xdt",
+      "actorEmail": "vikram.singhania@heritagecrafts.in",
+      "action": "UNAUTHORIZED_ADMIN_ATTEMPT",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked vikram.singhania@heritagecrafts.in (role: PATRON) from PATCH /api/erp/inventory/BVL-MEN-BLT-01/safety-stock",
+      "timestamp": "2026-11-20T20:34:52.592Z",
+      "ipAddress": "::ffff:127.0.0.1"
+    },
+    {
+      "id": "audit_1795206892575_03683",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "DELETE_KNOWLEDGE_BASE",
+      "category": "STORE_MANAGEMENT",
+      "details": "Removed Knowledge Base presentation \"Saddle Stitching Atelier Film\" (kb_1795206892536_6rkx)",
+      "timestamp": "2026-11-20T20:34:52.575Z"
+    },
+    {
+      "id": "audit_1795206892561_nv19y",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "UPDATE_KNOWLEDGE_BASE",
+      "category": "STORE_MANAGEMENT",
+      "details": "Updated Knowledge Base presentation \"Full-Grain Vegetable-Tanned Leather & Hide Anatomy\" (DECK)",
+      "timestamp": "2026-11-20T20:34:52.561Z"
+    },
+    {
+      "id": "audit_1795206892551_zrd4i",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "UPDATE_KNOWLEDGE_BASE",
+      "category": "STORE_MANAGEMENT",
+      "details": "Updated Knowledge Base presentation \"Full-Grain Vegetable-Tanned Leather & Hide Anatomy\" (DECK)",
+      "timestamp": "2026-11-20T20:34:52.551Z"
+    },
+    {
+      "id": "audit_1795206892536_6iguf",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "UPLOAD_KNOWLEDGE_BASE",
+      "category": "STORE_MANAGEMENT",
+      "details": "Published Knowledge Base presentation \"Saddle Stitching Atelier Film\" (VIDEO)",
+      "timestamp": "2026-11-20T20:34:52.536Z"
+    },
+    {
+      "id": "audit_1795206892261_5tumj",
+      "actorEmail": "anonymous",
+      "action": "RECAPTCHA_BLOCKED",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked CHECKOUT: action mismatch (got LOGIN)",
+      "timestamp": "2026-11-20T20:34:52.261Z"
+    },
+    {
+      "id": "audit_1795206892257_pjt7x",
+      "actorEmail": "anonymous",
+      "action": "RECAPTCHA_BLOCKED",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked CHECKOUT: missing reCAPTCHA Enterprise token",
+      "timestamp": "2026-11-20T20:34:52.257Z"
+    },
+    {
+      "id": "audit_1795206889345_71pzc",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at mumbaiWarehouse: 0 -> 22 (Total: 41)",
+      "timestamp": "2026-11-20T20:34:49.345Z"
+    },
+    {
+      "id": "audit_1795206889340_d2gje",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at punePrimaryHub: 0 -> 19 (Total: 19)",
+      "timestamp": "2026-11-20T20:34:49.340Z"
+    },
+    {
+      "id": "audit_1795206889336_7yxqf",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at mumbaiWarehouse: 22 -> 0 (Total: 0 - PRODUCT DEACTIVATED / OUT OF STOCK)",
+      "timestamp": "2026-11-20T20:34:49.336Z"
+    },
+    {
+      "id": "audit_1795206889331_xg2ti",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at punePrimaryHub: 19 -> 0 (Total: 22)",
+      "timestamp": "2026-11-20T20:34:49.331Z"
+    },
+    {
+      "id": "audit_1795206889320_rw61s",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "REMOVE_PERMITTED_MANAGER",
+      "category": "AUTH_PERMISSION",
+      "details": "Removed User ID \"artisan.manager@bharatvarshcrafts.com\" from authorized Admin access list",
+      "timestamp": "2026-11-20T20:34:49.320Z"
+    },
+    {
+      "id": "audit_1795206889308_fyfiq",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADD_PERMITTED_MANAGER",
+      "category": "AUTH_PERMISSION",
+      "details": "Added/updated staff User ID \"artisan.manager@bharatvarshcrafts.com\" with role STORE_MANAGER",
+      "timestamp": "2026-11-20T20:34:49.308Z"
+    },
+    {
+      "id": "audit_1795206889292_eq97i",
+      "actorEmail": "marketing_agent",
+      "action": "TRIGGER_CART_RECOVERY",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sent EMAIL cart recovery with 10% bespoke incentive to idle.shopper@test.com (Attempt #1)",
+      "timestamp": "2026-11-20T20:34:49.292Z"
+    },
+    {
+      "id": "audit_1795206889284_b3nzv",
+      "actorEmail": "system",
+      "action": "CHECKOUT_ABANDONED",
+      "category": "WEBHOOK_EVENT",
+      "details": "Abandoned checkout detected for idle.shopper@test.com (₹3800)",
+      "timestamp": "2026-11-20T20:34:49.284Z"
+    },
+    {
+      "id": "audit_1795206889269_7mylz",
+      "actorEmail": "integrations",
+      "action": "ORDER_NOTIFICATION_DISPATCHED",
+      "category": "STORE_MANAGEMENT",
+      "details": "ERP Order BVL-2026-1072 notifications -> PatronEmail:SANDBOX_FALLBACK, SupportInvoice:SANDBOX_FALLBACK, WhatsApp:SANDBOX_FALLBACK",
+      "timestamp": "2026-11-20T20:34:49.269Z"
+    },
+    {
+      "id": "audit_1795206889263_iw2ar",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Viceroy Diplomat Briefcase (BVL-TRV-BRF-01) at punePrimaryHub: 3 -> 4 (Total: 10)",
+      "timestamp": "2026-11-20T20:34:49.263Z"
+    },
+    {
+      "id": "audit_1795206889210_u0xp8",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ERP_SALES_ORDER_PUSH",
+      "category": "STORE_MANAGEMENT",
+      "details": "CRM quote converted into ERP Sales Order BVL-2026-1072 (Deal: WHOLESALE_BULK, Amount: ₹34102)",
+      "timestamp": "2026-11-20T20:34:49.210Z"
+    },
+    {
+      "id": "audit_1795206889203_teddq",
+      "actorEmail": "system",
+      "action": "ORDER_CREATED",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sales order BVL-2026-1072 placed for ₹34102",
+      "timestamp": "2026-11-20T20:34:49.203Z"
+    },
+    {
+      "id": "audit_1795206889194_cwj4e",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Rajputana Bridle Belt (BVL-MEN-BLT-01) at punePrimaryHub: 23 -> 24 (Total: 72)",
+      "timestamp": "2026-11-20T20:34:49.194Z"
+    },
+    {
+      "id": "audit_1795206889187_5bahl",
+      "actorEmail": "webhook_gateway",
+      "action": "WEBHOOK_ORDER_PLACED",
+      "category": "WEBHOOK_EVENT",
+      "details": "Order BVL-2026-1071 ingested and pushed to ERP",
+      "timestamp": "2026-11-20T20:34:49.187Z"
+    },
+    {
+      "id": "audit_1795206889167_m3qq4",
+      "actorEmail": "system",
+      "action": "ORDER_CREATED",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sales order BVL-2026-1071 placed for ₹11800",
+      "timestamp": "2026-11-20T20:34:49.167Z"
+    },
+    {
+      "id": "audit_1795206859808_xn15o",
+      "actorEmail": "anonymous",
+      "action": "RECAPTCHA_BLOCKED",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked CHECKOUT: action mismatch (got LOGIN)",
+      "timestamp": "2026-11-20T20:34:19.808Z"
+    },
+    {
+      "id": "audit_1795206859799_3rvrw",
+      "actorEmail": "anonymous",
+      "action": "RECAPTCHA_BLOCKED",
+      "category": "AUTH_PERMISSION",
+      "details": "Blocked CHECKOUT: missing reCAPTCHA Enterprise token",
+      "timestamp": "2026-11-20T20:34:19.799Z"
+    },
+    {
+      "id": "audit_1795206856777_z7468",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at mumbaiWarehouse: 0 -> 22 (Total: 41)",
+      "timestamp": "2026-11-20T20:34:16.777Z"
+    },
+    {
+      "id": "audit_1795206856773_8zfzo",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at punePrimaryHub: 0 -> 19 (Total: 19)",
+      "timestamp": "2026-11-20T20:34:16.773Z"
+    },
+    {
+      "id": "audit_1795206856769_ij17p",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at mumbaiWarehouse: 22 -> 0 (Total: 0 - PRODUCT DEACTIVATED / OUT OF STOCK)",
+      "timestamp": "2026-11-20T20:34:16.769Z"
+    },
+    {
+      "id": "audit_1795206856765_s05ax",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Padmavati Cinch Belt (BVL-WOM-BLT-01) at punePrimaryHub: 19 -> 0 (Total: 22)",
+      "timestamp": "2026-11-20T20:34:16.765Z"
+    },
+    {
+      "id": "audit_1795206856756_7dvyd",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "REMOVE_PERMITTED_MANAGER",
+      "category": "AUTH_PERMISSION",
+      "details": "Removed User ID \"artisan.manager@bharatvarshcrafts.com\" from authorized Admin access list",
+      "timestamp": "2026-11-20T20:34:16.756Z"
+    },
+    {
+      "id": "audit_1795206856748_ipff5",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADD_PERMITTED_MANAGER",
+      "category": "AUTH_PERMISSION",
+      "details": "Added/updated staff User ID \"artisan.manager@bharatvarshcrafts.com\" with role STORE_MANAGER",
+      "timestamp": "2026-11-20T20:34:16.748Z"
+    },
+    {
+      "id": "audit_1795206856725_566kj",
+      "actorEmail": "marketing_agent",
+      "action": "TRIGGER_CART_RECOVERY",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sent EMAIL cart recovery with 10% bespoke incentive to idle.shopper@test.com (Attempt #1)",
+      "timestamp": "2026-11-20T20:34:16.725Z"
+    },
+    {
+      "id": "audit_1795206856716_aek9y",
+      "actorEmail": "system",
+      "action": "CHECKOUT_ABANDONED",
+      "category": "WEBHOOK_EVENT",
+      "details": "Abandoned checkout detected for idle.shopper@test.com (₹3800)",
+      "timestamp": "2026-11-20T20:34:16.716Z"
+    },
+    {
+      "id": "audit_1795206856701_w0gl6",
+      "actorEmail": "integrations",
+      "action": "ORDER_NOTIFICATION_DISPATCHED",
+      "category": "STORE_MANAGEMENT",
+      "details": "ERP Order BVL-2026-1070 notifications -> PatronEmail:SANDBOX_FALLBACK, SupportInvoice:SANDBOX_FALLBACK, WhatsApp:SANDBOX_FALLBACK",
+      "timestamp": "2026-11-20T20:34:16.701Z"
+    },
+    {
+      "id": "audit_1795206856695_nh1r1",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Viceroy Diplomat Briefcase (BVL-TRV-BRF-01) at punePrimaryHub: 3 -> 4 (Total: 10)",
+      "timestamp": "2026-11-20T20:34:16.695Z"
+    },
+    {
+      "id": "audit_1795206856647_qvjgg",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ERP_SALES_ORDER_PUSH",
+      "category": "STORE_MANAGEMENT",
+      "details": "CRM quote converted into ERP Sales Order BVL-2026-1070 (Deal: WHOLESALE_BULK, Amount: ₹34102)",
+      "timestamp": "2026-11-20T20:34:16.648Z"
+    },
+    {
+      "id": "audit_1795206856640_1dvei",
+      "actorEmail": "system",
+      "action": "ORDER_CREATED",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sales order BVL-2026-1070 placed for ₹34102",
+      "timestamp": "2026-11-20T20:34:16.640Z"
+    },
+    {
+      "id": "audit_1795206856632_595ia",
+      "actorEmail": "sunilchain@gmail.com",
+      "action": "ADJUST_INVENTORY",
+      "category": "INVENTORY_ADJUSTMENT",
+      "details": "Adjusted The Rajputana Bridle Belt (BVL-MEN-BLT-01) at punePrimaryHub: 23 -> 24 (Total: 72)",
+      "timestamp": "2026-11-20T20:34:16.632Z"
+    },
+    {
+      "id": "audit_1795206856625_48wsg",
+      "actorEmail": "webhook_gateway",
+      "action": "WEBHOOK_ORDER_PLACED",
+      "category": "WEBHOOK_EVENT",
+      "details": "Order BVL-2026-1069 ingested and pushed to ERP",
+      "timestamp": "2026-11-20T20:34:16.625Z"
+    },
+    {
+      "id": "audit_1795206856614_rdz3q",
+      "actorEmail": "system",
+      "action": "ORDER_CREATED",
+      "category": "STORE_MANAGEMENT",
+      "details": "Sales order BVL-2026-1069 placed for ₹11800",
+      "timestamp": "2026-11-20T20:34:16.614Z"
+    },
+    {
+      "id": "audit_1795206207389_ivzbu",
+      "actorEmail": "daily_report_scheduler",
+      "action": "DAILY_ORDER_REPORT_SENT",
+      "category": "STORE_MANAGEMENT",
+      "details": "Dispatched Orders_2026-11-20.xlsx to support@bharatvarshcrafts.com (0 orders, ₹0, Mode: LIVE, Transport: smtpout.secureserver.net:465 (SMTPS))",
+      "timestamp": "2026-11-20T20:23:27.389Z"
+    },
     {
       "id": "audit_1795098149395_o4y7m",
       "actorEmail": "anonymous",
@@ -12646,7 +15187,7 @@
     ],
     "abandonmentThresholdMinutes": 15,
     "primaryHubCity": "Pune",
-    "updatedAt": "2026-11-19T14:22:26.794Z",
+    "updatedAt": "2026-11-20T20:40:17.842Z",
     "lastUpdatedBy": "sunilchain@gmail.com",
     "supplierGstin": "27AABCB1234F1Z8",
     "gstRatePercent": 18,
@@ -12692,7 +15233,13 @@
     "evt_test_1795047632005",
     "evt_test_1795064119419",
     "evt_test_1795091740779",
-    "evt_test_1795098146640"
+    "evt_test_1795098146640",
+    "evt_test_1795206856608",
+    "evt_test_1795206889160",
+    "evt_test_1795207008449",
+    "evt_test_1795207077271",
+    "evt_test_1795207143409",
+    "evt_test_1795207217428"
   ],
   "patronCredentials": {},
   "knowledgeBase": [
@@ -12702,8 +15249,8 @@
       "description": "How to distinguish full-grain heirloom hides from corrected-grain and split leathers, why natural bark tannins age into rich amber patina, and how we select every cut.",
       "category": "LEATHER_GUIDE",
       "fileType": "DECK",
-      "uploadedBy": "support@bharatvarshcrafts.com",
-      "uploadedAt": "2026-11-01T00:00:00Z",
+      "uploadedBy": "sunilchain@gmail.com",
+      "uploadedAt": "2026-11-20T20:40:21.411Z",
       "slides": [
         {
           "title": "01 · Full-Grain vs Top-Grain vs Split Leather",
@@ -12790,5 +15337,6 @@
         }
       ]
     }
-  ]
+  ],
+  "lastDailyReportDate": "2026-11-20"
 }

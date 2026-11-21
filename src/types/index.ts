@@ -433,9 +433,13 @@ export interface KnowledgeBaseEntry {
   category: 'LEATHER_GUIDE' | 'CARE_MANUAL' | 'CRAFT_DECK' | 'SUSTAINABILITY';
   fileUrl?: string;
   fileName?: string;
-  fileType: 'PDF' | 'PPTX' | 'PPT' | 'DECK';
+  fileType: 'PDF' | 'PPTX' | 'PPT' | 'VIDEO' | 'DECK';
   mimeType?: string;
   sizeBytes?: number;
+  videoUrl?: string;
+  videoFileName?: string;
+  videoMimeType?: string;
+  videoSizeBytes?: number;
   uploadedBy: string;
   uploadedAt: string;
   updatedAt?: string;

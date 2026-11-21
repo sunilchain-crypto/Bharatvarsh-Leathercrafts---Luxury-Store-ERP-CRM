@@ -2014,6 +2014,30 @@ class MySQLAdapter {
     }
   }
 
+  /**
+   * Explicitly hard-deletes a single abandoned cart row from bvl_carts
+   * when removed from the Abandoned Checkout Recovery Board.
+   */
+  public async deleteAbandonedCart(cartId: string, state: any): Promise<void> {
+    if (!this.isConnected()) return;
+
+    const conn = await this.pool!.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.query(`DELETE FROM bvl_carts WHERE id = ?`, [cartId]);
+      await this.syncStateWithConnection(conn, state);
+      await conn.commit();
+      this.lastError = null;
+      this.lastSyncAt = new Date().toISOString();
+    } catch (err: any) {
+      await conn.rollback().catch(() => {});
+      this.lastError = err.message;
+      throw new Error(`MySQL abandoned cart deletion failed: ${err.message}`);
+    } finally {
+      conn.release();
+    }
+  }
+
   public async saveStateSnapshot(state: any, connOverride?: mysql.PoolConnection): Promise<void> {
     if (!connOverride && !this.isConnected()) return;
 
